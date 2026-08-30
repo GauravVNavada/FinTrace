@@ -9,7 +9,7 @@ Status: active · 2026-08-30
 - Domain objects are typed and named with controlled enums.
 - Components are reusable and data-driven; product data does not live in presentational markup.
 - Business rules belong in the backend/domain layer, not React components.
-- Every reusable visual component belongs in `packages/ui/src`, with one component per focused file and explicit barrel exports.
+- Every reusable visual component belongs in `packages/ui/src/components`, with one component per focused file and explicit barrel exports. Global infrastructure such as `global.css`, `utils.ts`, and the Tailwind preset stays directly under `packages/ui/src`.
 - `packages/ui/src/global.css` is the single source for resets, typography, spacing, radii, shadows, semantic color tokens, and theme overrides. App stylesheets may contain only the import of this file.
 - Components and app markup use semantic Tailwind/shadcn tokens backed by CSS variables; literal color values, palette utilities such as `bg-slate-900`, and inline color styles are not allowed in reusable components or product screens.
 - Shared Tailwind configuration/presets must map semantic utilities to the UI package tokens. Product apps must not redefine the palette.
@@ -50,7 +50,7 @@ Any change to requirements, scope, schema, API, architecture, agent behavior, or
 
 The component boundary is architectural, not cosmetic. A UI change is incomplete until:
 
-- the component exists under `packages/ui/src/<component>.tsx` and is exported from the package entrypoint;
+- the component exists under `packages/ui/src/components/<component>.tsx` and is exported from the package entrypoint;
 - all supported variants for a primitive live in that primitive's file (for example, every Button variant lives in `button.tsx`);
 - the component has no literal color values and uses semantic tokens only;
 - the app imports the component from `@fintrace/ui` and does not recreate it locally;

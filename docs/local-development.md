@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20+
+- Node.js 24+
 - pnpm 9+
 - Python 3.12+ for `apps/api`
 - PostgreSQL 16+ for the persistent phase
@@ -44,12 +44,12 @@ Open the web app at `http://localhost:3000` or `http://127.0.0.1:3000`. The deve
 
 ## Database phase
 
-PostgreSQL migrations are defined in `apps/api/migrations/001_initial_schema.sql`, `002_controls_and_idempotency.sql`, and `003_exception_external_ids.sql`. If Docker is available, start the database with `docker compose up -d postgres`, then run `fintrace-migrate` and `fintrace-seed` from `apps/api`. Set `STORAGE_BACKEND=postgres` before starting Uvicorn to exercise the database repository. Application startup must not mutate schema; migrations run explicitly in CI/deployment.
+PostgreSQL migrations are defined in `apps/api/migrations/001_initial_schema.sql` through `004_workflow_persistence.sql`. Start the database with `docker compose up -d postgres`, then run `fintrace-migrate` and `fintrace-seed` from `apps/api`. The Compose database is published on host port `55432` to avoid colliding with a local PostgreSQL installation; use `postgresql://fintrace:fintrace@localhost:55432/fintrace`. Set `STORAGE_BACKEND=postgres` before starting Uvicorn to exercise durable workflow state. Application startup must not mutate schema; migrations run explicitly in CI/deployment.
 
-The repository includes `compose.yaml` for a local PostgreSQL 16 instance. This workstation does not currently have Docker installed, so the database-backed path is implemented but its live migration/seed check remains environment-dependent.
+The repository includes `compose.yaml` for a local PostgreSQL 16 instance. The Docker-backed migration, seed, readiness, canonical reads, investigation replay, evaluation replay, approval, and audit smoke checks have been run locally.
 
 ## Troubleshooting
 
 - If Next build output is stale, stop the dev server and rerun the build; do not delete source files.
 - If API imports fail, activate the `apps/api/.venv` environment and install the editable package.
-- If `STORAGE_BACKEND=demo`, the dashboard and remaining static screens show deterministic demo data by design. The PostgreSQL repository path currently covers canonical API reads; replacing the remaining frontend demo adapter is tracked separately in `docs/phase_scope.md`.
+- If `STORAGE_BACKEND=demo`, isolated local screens use deterministic demo data by design. For the full local path, run PostgreSQL and point `NEXT_PUBLIC_API_BASE_URL` at the API port.

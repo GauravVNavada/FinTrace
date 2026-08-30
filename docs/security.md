@@ -35,7 +35,7 @@ API -> audit log boundary
 
 ### Authentication
 
-The current API scaffold requires an organization context header for development only. Before deployment, replace it with verified session claims including subject, organization, role, issuer, audience, expiry, and revocation behavior. Never treat a browser-provided organization header as authentication.
+The API verifies HS256 bearer claims (`sub`, `organization_id`, `role`, `iss`, `aud`, `iat`, and `exp`) when a bearer token is provided. Set `AUTH_MODE=required` outside local development; in that mode a browser-provided organization header is never accepted as authentication. Production should place the signing key behind a secret manager and add issuer-side revocation/key rotation.
 
 ### Authorization
 
@@ -68,7 +68,7 @@ All current records are synthetic. A production implementation must classify PII
 
 ## 4. Security verification checklist
 
-- [ ] Authenticated request claims are verified.
+- [x] Authenticated request claims are verified when bearer authentication is used; required mode rejects header-only context.
 - [ ] Object-level tenant filter is present on every repository query.
 - [x] Approval thresholds are tested server-side.
 - [x] Replay with the same idempotency key is harmless.

@@ -1,10 +1,10 @@
 # FinTrace Data and API Contract
 
-Status: MVP contract draft; PostgreSQL repository path added · 2026-08-30
+Status: accepted MVP contract; PostgreSQL workflow persistence and verified bearer claims added · 2026-08-30
 
 ## Adapter rule
 
-The web application uses typed API clients for patterns, evaluations, and audit activity. The overview, exception, and run surfaces still retain the typed demo adapter until the corresponding backend read routes are complete. Components may consume domain objects from an adapter, but may not duplicate records or implement data normalization. Replacing a remaining adapter call with an API call should not require changing the UI component contracts.
+The web application uses typed API clients for dashboard summary, exception queue/detail, investigations, patterns, evaluations, and audit activity. The runs/settings surfaces are read-only product configuration views until their dedicated run-history contract is introduced. Components consume domain objects from client mapping functions and may not duplicate financial records or implement reconciliation logic.
 
 ## API envelope
 
@@ -68,7 +68,7 @@ GET  /api/v1/evaluation/latest
 
 ## Investigation contract
 
-The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, and computes the evidence score. The current demo adapter keeps the investigation result in process memory; persistence and tool-call audit events are implemented in the persistence/audit sprint.
+The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. The deterministic provider is the default local implementation.
 
 ## Caching and freshness
 
@@ -104,7 +104,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 **Auth:** `exception.read`  
 **Query:** `status`, `severity`, `type`, `assignee`, `cursor`, `limit` (maximum 100), and `q` (maximum 100 characters).  
 **Ordering:** severity rank, then `detected_at DESC`.  
-**Response:** `{ data: ExceptionSummary[], page: { next_cursor, has_more } }`.  
+**Response (current MVP):** `ExceptionSummary[]`. The implementation returns the bounded seeded queue directly; cursor pagination is the next compatibility-preserving API extension before production-scale queues.
 **Failure:** `INVALID_FILTER`, `TENANT_CONTEXT_REQUIRED`.
 
 ### `GET /api/v1/exceptions/{id}`
@@ -118,7 +118,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 **Auth:** `exception.read`  
 **Response:** canonical order, payments, settlements, invoices, refunds, inventory movements, and employee actions for one order.  
 **Authorization:** the authenticated organization is applied to every related read; unknown and cross-tenant lifecycles return the same `RESOURCE_NOT_FOUND` shape.  
-**Current implementation:** the development adapter reads the deterministic seed-42 dataset. The PostgreSQL repository replaces it in the persistence sprint.
+**Current implementation:** the development adapter reads the deterministic seed-42 dataset; PostgreSQL mode reads the organization-scoped seeded tables and applies the same contract.
 
 ### `POST /api/v1/exceptions/{id}/investigations`
 
@@ -136,7 +136,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 **Behavior:** creates one approval request if policy requires it; otherwise returns a simulated safe action only where explicitly allowlisted.  
 **Failure:** `ACTION_NOT_ALLOWED`, `APPROVAL_REQUIRED`, `INVALID_STATE`, `IDEMPOTENCY_CONFLICT`.
 
-**Current demo:** resolution and approval state is held by an in-process controls service. Development actor headers (`X-Actor-Id`, `X-Actor-Role`) are test-only context and must be replaced with verified identity claims before deployment.
+**Current implementation:** resolution and approval state is persisted through the repository contract in PostgreSQL mode. Bearer tokens signed with the configured HS256 secret carry `sub`, `organization_id`, `role`, `iss`, `aud`, `iat`, and `exp`. `X-Actor-*` headers are accepted only in development mode.
 
 ### `POST /api/v1/approvals/{id}/approve`
 
@@ -154,7 +154,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 
 **Auth:** `audit.read`.  
 **Query:** optional `resource_id`, maximum 128 characters.  
-**Behavior:** returns organization-scoped control/investigation events. The demo adapter stores these in memory; production storage is append-only PostgreSQL.
+**Behavior:** returns organization-scoped control/investigation events. The demo adapter stores these in process for isolated tests; PostgreSQL storage is append-only and durable.
 
 The development actor context supports `ANALYST`, `FINANCE_MANAGER`, `CONTROLLER`, and `AUDITOR` roles through test-only headers. Only roles with `audit.read` receive this resource; organization scope is applied before serialization.
 
@@ -210,6 +210,6 @@ The development actor context supports `ANALYST`, `FINANCE_MANAGER`, `CONTROLLER
 
 ## Storage selection and migrations
 
-The API uses the deterministic in-process repository by default. Set `STORAGE_BACKEND=postgres` and a `DATABASE_URL` using the PostgreSQL repository path. Apply migrations explicitly with `fintrace-migrate`; application startup never mutates schema. Seed canonical demo records with `fintrace-seed` after migrations are applied. The current PostgreSQL path covers canonical reads, exception reads, aggregate reads, lifecycle reads, and audit event writes; investigation and control state persistence remains a later increment.
+The API uses the deterministic in-process repository by default. Set `STORAGE_BACKEND=postgres` and a `DATABASE_URL` using the PostgreSQL repository path. Apply migrations explicitly with `fintrace-migrate`; application startup never mutates schema. Seed canonical demo records with `fintrace-seed` after migrations are applied. PostgreSQL mode covers canonical reads, exception reads, aggregate reads, lifecycle reads, investigation/evaluation/control persistence, idempotency replay, and audit writes. Set `AUTH_MODE=required` for deployment so tenant and actor scope must come from a verified bearer token.
 
 Breaking changes require `/api/v2` or an explicitly negotiated media type. Additive response fields are preferred. Clients must tolerate unknown response fields and must not infer authorization from omitted UI fields.

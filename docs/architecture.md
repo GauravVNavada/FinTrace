@@ -1,6 +1,6 @@
 # FinTrace Architecture
 
-Status: accepted for MVP foundation · 2026-08-30
+Status: accepted for MVP runtime · 2026-08-30
 
 ## Decision summary
 
@@ -44,7 +44,7 @@ Synthetic generator / source adapters
 
 ### Design-system ownership
 
-The complete shared UI boundary is `packages/ui/src`. It owns the component files, the public barrel, `cn`, shadcn-compatible variants, and `global.css`. Components are organized as focused files such as `button.tsx`, `card.tsx`, `badge.tsx`, `dropdown-menu.tsx`, and `progress.tsx`; a primitive's supported variants stay in its own file rather than being scattered across apps.
+The complete shared UI boundary is `packages/ui/src`. Reusable primitives live in its focused `components/` directory; the public barrel, `cn`, Tailwind preset, and `global.css` remain directly under `src`. Components are organized as focused files such as `components/button.tsx`, `components/card.tsx`, `components/badge.tsx`, and `components/progress.tsx`; a primitive's supported variants stay in its own file rather than being scattered across apps.
 
 `packages/ui/src/global.css` is the only source of global CSS and design tokens. It defines semantic CSS variables, base styles, accessibility states, and theme selectors. Tailwind semantic utilities map to those variables through the shared UI preset. Components never contain literal color values, palette utilities, or inline color styles. Product apps compose the primitives and may select a theme with a data attribute, but may not redefine tokens or create local primitive copies. The current inventory and verification evidence live in `docs/ui_component_inventory.md`.
 
@@ -52,7 +52,7 @@ Each app's `app/globals.css` must contain exactly one import of the UI package s
 
 `docs` owns the durable decisions. A change to product behavior must update the PRD and the relevant contract document in the same change.
 
-`apps/api` will own normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes as the backend phase is completed. The frontend should consume `/api/v1` only and never connect directly to a database.
+`apps/api` owns normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes. The frontend consumes `/api/v1` only and never connects directly to a database.
 
 ## Runtime and deployment
 
@@ -74,7 +74,7 @@ This architecture makes AI failure non-fatal. If an AI provider is unavailable, 
 
 | Component | Language/runtime | Framework | Database/storage | Important configuration |
 | --- | --- | --- | --- | --- |
-| `apps/web` | TypeScript, Node 20+ | Next.js App Router, React, Tailwind | API responses; typed demo adapter during foundation | `NEXT_PUBLIC_API_BASE_URL` in the API phase |
+| `apps/web` | TypeScript, Node 24+ | Next.js App Router, React, Tailwind | Typed API responses with deterministic fallback for isolated development | `NEXT_PUBLIC_API_BASE_URL`, organization/actor dev context |
 | `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ when `STORAGE_BACKEND=postgres`; demo adapter by default | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
 | `packages/ui` | TypeScript, React | Tailwind + shadcn-style primitives | None | Shared by web apps only |
 | Evaluation runner | Python 3.12+ | Plain Python modules | Synthetic CSV/JSON and hidden ground truth | deterministic seed and output path |
@@ -104,14 +104,17 @@ apps/
 packages/
 └── ui/
     └── src/
+        ├── components/      # focused reusable shadcn-style primitives
+        │   ├── button.tsx   # all Button variants and sizes
+        │   ├── card.tsx     # Card family
+        │   └── ...          # every current reusable primitive
         ├── global.css       # tokens, themes, reset, shared global styles
-        ├── button.tsx       # all Button variants and sizes
-        ├── card.tsx          # Card family
-        ├── ...              # every reusable shadcn primitive
+        ├── tailwind.preset.ts
+        ├── utils.ts
         └── index.ts         # public exports only
 ```
 
-The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, Sprint 3 investigation routes, Sprint 4 controls/audit routes, and Sprint 5 graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical, exception, aggregate, lifecycle, and audit paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Investigation results, control state, evaluation reports, and durable idempotency still require their own persistence increment before production deployment.
+The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default for tests. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical reads and all durable workflow paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
 
 ## Request-to-data path
 
@@ -134,6 +137,6 @@ Database, provider, and external source calls require explicit timeouts. Retries
 | Stage | Web | API | Storage | Evidence required |
 | --- | --- | --- | --- | --- |
 | Local foundation | Next dev server | optional FastAPI scaffold | in-memory demo adapter | browser smoke check |
-| Local P0 | Next dev server | Uvicorn | local PostgreSQL | `fintrace-migrate`, `fintrace-seed`, seed/reconcile/evaluate |
+| Local P0 | Next dev server | Uvicorn | local PostgreSQL | `fintrace-migrate`, `fintrace-seed`, lifecycle/investigation/control/evaluation/audit smoke |
 | Staging | Node deployment | containerized API | managed PostgreSQL | migration and security checks |
 | Production candidate | immutable build | separately deployable API | encrypted PostgreSQL + backups | load, auth, tenant, recovery tests |

@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import cast
 from uuid import uuid4
 
 from app.domain.lifecycle import CanonicalLifecycle, LifecycleNotFoundError
@@ -22,8 +23,14 @@ class DemoRepository:
     """
 
     def __init__(self) -> None:
+        self.supports_workflow_persistence = True
         self._dataset = generate_dataset(GeneratorConfig(orders=1000, seed=42, anomaly_rate=0.30))
         self._audit_events: list[dict[str, str]] = []
+        self._idempotency: dict[tuple[str, str], dict[str, object]] = {}
+        self._investigations: dict[tuple[str, str], dict[str, object]] = {}
+        self._evaluations: dict[str, dict[str, object]] = {}
+        self._resolution_requests: dict[tuple[str, str], dict[str, object]] = {}
+        self._approval_decisions: dict[tuple[str, str], list[dict[str, str]]] = {}
         self._flagship_lifecycle = CanonicalLifecycle(
             order={
                 "organization_id": "ORG-001",
@@ -186,6 +193,67 @@ class DemoRepository:
 
     def related_exceptions(self, organization_id: str, order_id: str) -> list[ExceptionSummary]:
         return [item for item in self.list_exceptions(organization_id) if item.order_id == order_id]
+
+    def get_idempotency(self, organization_id: str, idempotency_key: str) -> dict[str, object] | None:
+        record = self._idempotency.get((organization_id, idempotency_key))
+        return dict(record) if record else None
+
+    def put_idempotency(self, organization_id: str, actor_id: str, idempotency_key: str, request_hash: str, response_status: int, response_body: dict[str, object]) -> None:
+        self._idempotency.setdefault((organization_id, idempotency_key), {
+            "actor_id": actor_id,
+            "request_hash": request_hash,
+            "response_status": response_status,
+            "response_body": dict(response_body),
+        })
+
+    def save_investigation(self, organization_id: str, response: dict[str, object]) -> None:
+        key = (organization_id, str(response["investigation_id"]))
+        self._investigations[key] = dict(response)
+
+    def get_investigation(self, organization_id: str, investigation_id: str) -> dict[str, object] | None:
+        response = self._investigations.get((organization_id, investigation_id))
+        return dict(response) if response else None
+
+    def get_investigation_tool_calls(self, organization_id: str, investigation_id: str) -> list[dict[str, object]]:
+        response = self.get_investigation(organization_id, investigation_id)
+        return list(cast(list[dict[str, object]], response.get("tool_calls", []))) if response else []
+
+    def save_evaluation(self, organization_id: str, response: dict[str, object]) -> None:
+        self._evaluations[organization_id] = dict(response)
+
+    def get_latest_evaluation(self, organization_id: str) -> dict[str, object] | None:
+        response = self._evaluations.get(organization_id)
+        return dict(response) if response else None
+
+    def save_resolution_request(self, organization_id: str, response: dict[str, object]) -> None:
+        self._resolution_requests[(organization_id, str(response["request_id"]))] = {
+            **response,
+            "approver_ids": [],
+        }
+
+    def get_resolution_request(self, organization_id: str, request_id: str) -> dict[str, object] | None:
+        response = self._resolution_requests.get((organization_id, request_id))
+        return dict(response) if response else None
+
+    def update_resolution_request(self, organization_id: str, response: dict[str, object]) -> None:
+        current = self._resolution_requests.get((organization_id, str(response["request_id"])), {})
+        self._resolution_requests[(organization_id, str(response["request_id"]))] = {
+            **response,
+            "approver_ids": list(cast(list[str], current.get("approver_ids", []))),
+        }
+
+    def save_approval_decision(self, organization_id: str, request_id: str, actor_id: str, decision: str, approval_id: str, decided_at: str) -> bool:
+        key = (organization_id, request_id)
+        request = self._resolution_requests.get(key)
+        if request is None:
+            return False
+        approver_ids = list(cast(list[str], request.get("approver_ids", [])))
+        if actor_id in approver_ids:
+            return False
+        approver_ids.append(actor_id)
+        request["approver_ids"] = approver_ids
+        self._approval_decisions.setdefault(key, []).append({"actor_id": actor_id, "decision": decision, "approval_id": approval_id, "decided_at": decided_at})
+        return True
 
 
 demo_repository = DemoRepository()

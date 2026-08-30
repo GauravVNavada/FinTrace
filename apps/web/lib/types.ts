@@ -10,7 +10,10 @@ export type ExceptionType =
   | "ERP_AMOUNT_MISMATCH"
   | "SETTLEMENT_TIMING"
   | "MANUAL_WORKFLOW_ANOMALY"
-  | "REFUND_WITHOUT_ERP_REVERSAL";
+  | "REFUND_WITHOUT_ERP_REVERSAL"
+  | "PARTIAL_REFUND_MISMATCH"
+  | "SETTLEMENT_FEE_VARIANCE"
+  | "AMBIGUOUS_ASSOCIATION";
 
 export interface Metric {
   label: string;
@@ -53,7 +56,7 @@ export interface EvidenceItem {
 }
 
 export interface Investigation {
-  status: "SUPPORTED" | "UNRESOLVED";
+  status: "SUPPORTED" | "UNRESOLVED" | "FAILED";
   rootCause: string;
   rootCauseCode: string;
   summary: string;
@@ -135,5 +138,45 @@ export interface ApiEvaluation {
     throughput_per_second: number;
     unresolved_exceptions: number;
   };
+  created_at: string;
+}
+
+export interface ApiDashboardSummary {
+  organization_id: string;
+  reconciliation_run_id: string;
+  lifecycle_count: number;
+  auto_reconciled_count: number;
+  exception_count: number;
+  open_exposure: number | string;
+  requires_review_count: number;
+  generated_at: string;
+}
+
+export interface ApiExceptionSummary {
+  id: string;
+  organization_id: string;
+  order_id: string;
+  type: ExceptionType;
+  severity: Severity;
+  status: ExceptionStatus;
+  financial_exposure: number | string;
+  currency: string;
+  detected_at: string;
+  rules_triggered: string[];
+}
+
+export interface ApiInvestigation {
+  investigation_id: string;
+  exception_id: string;
+  status: "SUPPORTED" | "UNRESOLVED" | "FAILED";
+  root_cause_code: string | null;
+  summary: string;
+  supporting_evidence: { source: string; record_id?: string | null; fact: string }[];
+  contradictory_evidence: { source: string; record_id?: string | null; fact: string }[];
+  missing_evidence: string[];
+  recommended_action_code: string | null;
+  requires_human_review: boolean;
+  evidence_score: number;
+  tool_calls: { name: string; target: string; status: string; duration_ms: number }[];
   created_at: string;
 }

@@ -80,7 +80,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
-| UI-001 | Centralize reusable components | Every reusable component used by an app exists under `packages/ui/src`, is exported publicly, and is imported by the app from `@fintrace/ui`. |
+| UI-001 | Centralize reusable components | Every reusable component used by an app exists under `packages/ui/src/components`, is exported publicly, and is imported by the app from `@fintrace/ui`. |
 | UI-002 | Keep primitive variants together | Each primitive file contains all supported variants, sizes, and states for that primitive; app code does not fork variants. |
 | UI-003 | Centralize global styling | `packages/ui/src/global.css` owns reset, typography, semantic tokens, themes, and shared global utilities; each app `globals.css` contains exactly one import and no declarations. |
 | UI-004 | Prohibit hardcoded colors | Components and app markup contain no literal color values, palette utility classes, or inline color styles; Tailwind utilities resolve through semantic CSS variables. |

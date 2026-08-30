@@ -1,6 +1,6 @@
 # FinTrace API
 
-FastAPI service boundary for FinTrace. This service is intentionally small while the persistence phase is being implemented.
+FastAPI service boundary for FinTrace. Deterministic financial rules remain in application services; PostgreSQL is an explicit repository implementation and application startup never runs migrations.
 
 ## Current routes
 
@@ -28,12 +28,12 @@ copy .env.example .env
 uvicorn app.main:app --reload --port 8000
 ```
 
-Development requests currently require `X-Organization-Id`; control requests may also use `X-Actor-Id` and `X-Actor-Role`. These are temporary development boundaries, not an authentication system. Before deployment they must be replaced with verified session claims and object-level authorization.
+Development requests may use `X-Organization-Id`, `X-Actor-Id`, and `X-Actor-Role` only while `AUTH_MODE=development`. Bearer tokens with verified HS256 claims are supported; set `AUTH_MODE=required` before deployment to reject header-only context.
 
 ## Design rules
 
 - Routes depend on typed schemas and application repositories.
 - Repositories require organization scope.
-- Demo repository is read-only.
+- Demo repository is deterministic and process-local; PostgreSQL is the durable runtime.
 - No route accepts organization scope from a request body.
-- PostgreSQL persistence, verified auth claims, and durable audit writes remain later work. Sprint 3 investigation and Sprint 4 control/idempotency/audit behavior is intentionally in-process for the demo adapter.
+- Migration 004 persists investigation/evaluation/control workflow snapshots, idempotency responses, and ordered tool calls. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.

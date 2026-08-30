@@ -16,11 +16,11 @@ Read first:
 - the complete current apps/web and packages/ui source tree
 
 Goal
-Implement one centralized, reusable shadcn-style component system under packages/ui/src. The web app must compose that system; it must not own duplicate primitives, palette definitions, or global CSS.
+Implement one centralized, reusable shadcn-style component system under packages/ui/src/components. The web app must compose that system; it must not own duplicate primitives, palette definitions, or global CSS. Keep shared global infrastructure such as packages/ui/src/global.css, packages/ui/src/index.ts, packages/ui/src/utils.ts, and packages/ui/src/tailwind.preset.ts directly under packages/ui/src.
 
 Non-negotiable rules
-1. Every reusable UI component used by any app belongs in packages/ui/src.
-2. Create one focused file per primitive: button.tsx, card.tsx, badge.tsx, progress.tsx, dropdown-menu.tsx, input.tsx, select.tsx, dialog.tsx, table.tsx, tabs.tsx, tooltip.tsx, separator.tsx, skeleton.tsx, alert.tsx, and any other component the current product actually uses. Do not create components merely to inflate the inventory.
+1. Every reusable UI component used by any app belongs in packages/ui/src/components.
+2. Create one focused file per primitive under packages/ui/src/components: button.tsx, card.tsx, badge.tsx, progress.tsx, dropdown-menu.tsx, input.tsx, select.tsx, dialog.tsx, table.tsx, tabs.tsx, tooltip.tsx, separator.tsx, skeleton.tsx, alert.tsx, and any other component the current product actually uses. Do not create components merely to inflate the inventory.
 3. If a primitive has multiple variants or sizes, keep every variant, size, and state in that primitive's one file using cva or the equivalent shadcn pattern. Do not split Button variants into app files.
 4. Export every public component and utility from packages/ui/src/index.ts (or the package's public barrel). Apps import components only through @fintrace/ui.
 5. Add packages/ui/src/global.css. It is the single source of resets, typography, semantic CSS variables, themes, focus states, shared utility classes, and global styles.

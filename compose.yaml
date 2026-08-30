@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: fintrace
       POSTGRES_PASSWORD: fintrace
     ports:
-      - "5432:5432"
+      - "55432:5432"
     volumes:
       - fintrace-postgres-data:/var/lib/postgresql/data
     healthcheck:

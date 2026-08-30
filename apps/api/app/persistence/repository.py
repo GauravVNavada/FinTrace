@@ -3,6 +3,8 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
+from psycopg.types.json import Json
+
 from app.domain.lifecycle import CanonicalLifecycle, LifecycleNotFoundError
 from app.domain.schemas import (
     DashboardSummary,
@@ -19,6 +21,7 @@ class PostgresRepository:
 
     def __init__(self, database_url: str) -> None:
         self._database_url = database_url
+        self.supports_workflow_persistence = True
 
     def _organization_uuid(self, conn: Any, organization_id: str) -> UUID | None:
         row = conn.execute(
@@ -65,7 +68,7 @@ class PostgresRepository:
                 organization_id=organization_id,
                 reconciliation_run_id=str(run["run_key"]) if run else "",
                 lifecycle_count=int(run["lifecycle_count"]) if run else 0,
-                auto_reconciled_count=0,
+                auto_reconciled_count=max((int(run["lifecycle_count"]) if run else 0) - int(exception_row["exception_count"]), 0),
                 exception_count=int(exception_row["exception_count"]),
                 open_exposure=Decimal(int(exception_row["exposure"])) / Decimal(100),
                 requires_review_count=int(exception_row["review_count"]),
@@ -79,9 +82,9 @@ class PostgresRepository:
                 return []
             rows = conn.execute(
                 """
-                SELECT source_exception_id, organization_id, o.source_order_id, exception_type,
-                       severity, status, financial_exposure_minor, currency, detected_at,
-                       rules_triggered
+                SELECT source_exception_id, e.organization_id, o.source_order_id, exception_type,
+                       e.severity, e.status, e.financial_exposure_minor, e.currency, e.detected_at,
+                       e.rules_triggered
                 FROM exceptions e
                 JOIN orders o ON o.id = e.order_id AND o.organization_id = e.organization_id
                 WHERE e.organization_id = %s
@@ -210,7 +213,7 @@ class PostgresRepository:
             rows = conn.execute(
                 f"""
                 SELECT id::text AS event_id, actor_id, action, resource_id,
-                       correlation_id, created_at::text AS created_at
+                       correlation_id, created_at
                 FROM audit_events
                 WHERE organization_id = %s AND {predicate}
                 ORDER BY created_at DESC
@@ -225,10 +228,226 @@ class PostgresRepository:
                     "action": str(row["action"]),
                     "resource_id": str(row["resource_id"] or ""),
                     "correlation_id": str(row["correlation_id"]),
-                    "created_at": str(row["created_at"]),
+                    "created_at": row["created_at"].isoformat() if hasattr(row["created_at"], "isoformat") else str(row["created_at"]),
                 }
                 for row in rows
             ]
+
+    def get_idempotency(self, organization_id: str, idempotency_key: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                """
+                SELECT actor_id, request_hash, response_status, response_body
+                FROM idempotency_keys
+                WHERE organization_id = %s AND idempotency_key = %s
+                """,
+                (org_uuid, idempotency_key),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def put_idempotency(self, organization_id: str, actor_id: str, idempotency_key: str, request_hash: str, response_status: int, response_body: dict[str, Any]) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            conn.execute(
+                """
+                INSERT INTO idempotency_keys
+                  (organization_id, actor_id, idempotency_key, request_hash, response_status, response_body)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (organization_id, idempotency_key) DO NOTHING
+                """,
+                (org_uuid, actor_id, idempotency_key, request_hash, response_status, Json(response_body)),
+            )
+
+    def save_investigation(self, organization_id: str, response: dict[str, Any]) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            exception = conn.execute(
+                "SELECT id FROM exceptions WHERE organization_id = %s AND source_exception_id = %s",
+                (org_uuid, response["exception_id"]),
+            ).fetchone()
+            if exception is None:
+                return
+            conn.execute(
+                """
+                INSERT INTO investigations
+                  (organization_id, source_investigation_id, exception_id, status, response, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (organization_id, source_investigation_id) DO UPDATE
+                  SET status = EXCLUDED.status, response = EXCLUDED.response
+                """,
+                (org_uuid, response["investigation_id"], exception["id"], response["status"], Json(response), response["created_at"]),
+            )
+            investigation = conn.execute(
+                "SELECT id FROM investigations WHERE organization_id = %s AND source_investigation_id = %s",
+                (org_uuid, response["investigation_id"]),
+            ).fetchone()
+            conn.execute("DELETE FROM investigation_tool_calls WHERE organization_id = %s AND investigation_id = %s", (org_uuid, investigation["id"]))
+            for sequence_no, call in enumerate(response.get("tool_calls", []), start=1):
+                conn.execute(
+                    """
+                    INSERT INTO investigation_tool_calls
+                      (organization_id, investigation_id, sequence_no, name, payload)
+                    VALUES (%s, %s, %s, %s, %s)
+                    """,
+                    (org_uuid, investigation["id"], sequence_no, call["name"], Json(call)),
+                )
+
+    def get_investigation(self, organization_id: str, investigation_id: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                "SELECT response FROM investigations WHERE organization_id = %s AND source_investigation_id = %s",
+                (org_uuid, investigation_id),
+            ).fetchone()
+            return dict(row["response"]) if row else None
+
+    def get_investigation_tool_calls(self, organization_id: str, investigation_id: str) -> list[dict[str, Any]]:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return []
+            rows = conn.execute(
+                """
+                SELECT tc.payload
+                FROM investigation_tool_calls tc
+                JOIN investigations i ON i.id = tc.investigation_id AND i.organization_id = tc.organization_id
+                WHERE tc.organization_id = %s AND i.source_investigation_id = %s
+                ORDER BY tc.sequence_no
+                """,
+                (org_uuid, investigation_id),
+            ).fetchall()
+            return [dict(row["payload"]) for row in rows]
+
+    def save_evaluation(self, organization_id: str, response: dict[str, Any]) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            conn.execute(
+                """
+                INSERT INTO evaluation_runs
+                  (organization_id, source_evaluation_id, response, created_at)
+                VALUES (%s, %s, %s, %s)
+                ON CONFLICT (organization_id, source_evaluation_id) DO UPDATE SET response = EXCLUDED.response
+                """,
+                (org_uuid, response["evaluation_id"], Json(response), response["created_at"]),
+            )
+
+    def get_latest_evaluation(self, organization_id: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                """
+                SELECT response FROM evaluation_runs
+                WHERE organization_id = %s
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (org_uuid,),
+            ).fetchone()
+            return dict(row["response"]) if row else None
+
+    def save_resolution_request(self, organization_id: str, response: dict[str, Any]) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            exception = conn.execute(
+                "SELECT id FROM exceptions WHERE organization_id = %s AND source_exception_id = %s",
+                (org_uuid, response["exception_id"]),
+            ).fetchone()
+            if exception is None:
+                return
+            exposure_minor = int(Decimal(str(response["financial_exposure"])) * 100)
+            conn.execute(
+                """
+                INSERT INTO approval_requests
+                  (organization_id, source_request_id, exception_id, action_code, status,
+                   financial_exposure_minor, currency, required_capability, required_approvals,
+                   approvals_received, requester_actor_id, created_at, updated_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT DO NOTHING
+                """,
+                (org_uuid, response["request_id"], exception["id"], response["action_code"], response["status"], exposure_minor,
+                 response["currency"], response["required_capability"], response["required_approvals"], response["approvals_received"],
+                 response["requester_id"], response["created_at"], response["created_at"]),
+            )
+
+    def get_resolution_request(self, organization_id: str, request_id: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                """
+                SELECT ar.source_request_id, e.source_exception_id, ar.action_code, ar.status,
+                       ar.financial_exposure_minor, ar.currency, ar.required_capability,
+                       ar.required_approvals, ar.approvals_received, ar.requester_actor_id, ar.created_at
+                FROM approval_requests ar
+                JOIN exceptions e ON e.id = ar.exception_id AND e.organization_id = ar.organization_id
+                WHERE ar.organization_id = %s AND ar.source_request_id = %s
+                """,
+                (org_uuid, request_id),
+            ).fetchone()
+            if row is None:
+                return None
+            decisions = conn.execute(
+                "SELECT actor_id FROM approval_decisions ad JOIN approval_requests ar ON ar.id = ad.approval_request_id AND ar.organization_id = ad.organization_id WHERE ad.organization_id = %s AND ar.source_request_id = %s ORDER BY ad.created_at",
+                (org_uuid, request_id),
+            ).fetchall()
+            return {
+                "request_id": row["source_request_id"], "exception_id": row["source_exception_id"],
+                "action_code": row["action_code"], "status": row["status"],
+                "financial_exposure": Decimal(int(row["financial_exposure_minor"])) / Decimal(100),
+                "currency": row["currency"], "required_capability": row["required_capability"],
+                "required_approvals": row["required_approvals"], "approvals_received": row["approvals_received"],
+                "requester_id": row["requester_actor_id"], "created_at": row["created_at"],
+                "approver_ids": [str(decision["actor_id"]) for decision in decisions],
+            }
+
+    def update_resolution_request(self, organization_id: str, response: dict[str, Any]) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            conn.execute(
+                "UPDATE approval_requests SET status = %s, approvals_received = %s, updated_at = now() WHERE organization_id = %s AND source_request_id = %s",
+                (response["status"], response["approvals_received"], org_uuid, response["request_id"]),
+            )
+
+    def save_approval_decision(self, organization_id: str, request_id: str, actor_id: str, decision: str, approval_id: str, decided_at: str) -> bool:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return False
+            request = conn.execute(
+                "SELECT id FROM approval_requests WHERE organization_id = %s AND source_request_id = %s FOR UPDATE",
+                (org_uuid, request_id),
+            ).fetchone()
+            if request is None:
+                return False
+            inserted = conn.execute(
+                """
+                INSERT INTO approval_decisions
+                  (organization_id, approval_request_id, source_approval_id, actor_id, decision, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (organization_id, approval_request_id, actor_id) DO NOTHING
+                RETURNING id
+                """,
+                (org_uuid, request["id"], approval_id, actor_id, decision, decided_at),
+            ).fetchone()
+            return inserted is not None
 
     @staticmethod
     def _rows(conn: Any, query: str, params: tuple[Any, ...], organization_id: str) -> list[dict[str, Any]]:

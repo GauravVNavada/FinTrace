@@ -40,7 +40,7 @@ Open `http://localhost:3000`.
 
 ## Honest limitations
 
-- The runtime adapter and control/audit stores are in memory until PostgreSQL is provisioned.
-- Development actor and organization headers are not authentication; verified identity claims are required before deployment.
+- The demo adapter is process-local by design; the documented full path uses Docker PostgreSQL for durable controls, investigations, evaluations, idempotency, and audit records.
+- Development actor and organization headers are accepted only in `AUTH_MODE=development`; set `AUTH_MODE=required` to use verified bearer claims.
 - The default provider is deterministic `stub`; no external AI provider is contacted.
 - All records are synthetic and no real financial or personal information is included.

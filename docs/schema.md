@@ -1,6 +1,6 @@
 # FinTrace Schema
 
-Status: accepted for MVP foundation; PostgreSQL integration increment in progress · 2026-08-30
+Status: accepted for MVP; PostgreSQL workflow persistence migration 004 applied and verified · 2026-08-30
 
 ## Canonical lifecycle
 
@@ -34,6 +34,9 @@ Every business-scoped record includes `organization_id`. IDs are immutable exter
 | Idempotency key | id, organization_id, actor_id, request_hash, response, expires_at | one response per organization/key |
 | Approval request | id, organization_id, exception_id, action, status, threshold, requester, created_at | has approval decisions |
 | Approval decision | id, organization_id, approval_request_id, actor_id, decision, created_at | one decision per actor/request |
+| Investigation | id, organization_id, source_investigation_id, exception_id, status, response, created_at | one durable structured result per public investigation ID |
+| Investigation tool call | id, organization_id, investigation_id, sequence_no, name, payload, created_at | ordered, organization-scoped read-only evidence calls |
+| Evaluation run | id, organization_id, source_evaluation_id, response, created_at | latest public benchmark result per organization |
 
 ## Reconciliation status
 
@@ -78,6 +81,10 @@ Investigation output is strict and uses controlled codes. The evidence score is 
 ## Controlled taxonomies
 
 Root cause codes include `SETTLEMENT_TIMING`, `SETTLEMENT_FEE_VARIANCE`, `SETTLEMENT_MISSING`, `DUPLICATE_PAYMENT`, `ERP_INVOICE_MISSING`, `ERP_AMOUNT_MISMATCH`, `INCOMPLETE_REFUND_WORKFLOW`, `INVENTORY_REVERSAL_MISSING`, `ERP_REVERSAL_MISSING`, `REFERENCE_MAPPING_FAILURE`, `PARTIAL_REFUND_MISMATCH`, `DATA_QUALITY_ERROR`, `AMBIGUOUS_ASSOCIATION`, and `UNKNOWN`.
+
+## Workflow persistence
+
+Migration `004_workflow_persistence.sql` adds durable JSONB response snapshots for investigations and evaluations, ordered tool-call records, public identifiers for approval requests/decisions, and organization-scoped foreign keys. Consequential response replay is backed by `idempotency_keys`; the stored request hash must match before a previous response is returned. The JSONB snapshot is a projection of validated API models, not an authority for monetary arithmetic or authorization.
 
 ## Change policy
 
@@ -132,4 +139,4 @@ Migrations are version-controlled and forward-compatible. Required changes follo
 
 The repository contract must make `organization_id` a required argument, not an optional filter. Tests must include two organizations with identical source IDs and assert that reads, writes, investigation tools, aggregates, and audit history cannot cross the boundary.
 
-Sprint 3 uses the canonical lifecycle records and an in-process investigation/audit adapter. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002, while the demo runtime keeps equivalent control state in memory until PostgreSQL is provisioned. Migration 003 adds stable public exception IDs. The PostgreSQL repository now supports canonical lifecycle, exception, aggregate, and audit reads/writes when `STORAGE_BACKEND=postgres`; investigation results, control state, and their durable idempotency records remain the next persistence increment. This temporary boundary must not be treated as production durability.
+Sprint 3 uses canonical lifecycle records and bounded investigation tools. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002; migration 003 adds stable public exception IDs; migration 004 adds durable investigations, ordered tool calls, evaluations, and public workflow identifiers. The PostgreSQL repository supports canonical lifecycle, exception, aggregate, audit, investigation, evaluation, and control reads/writes when `STORAGE_BACKEND=postgres`. The demo runtime keeps an equivalent process-local contract for isolated tests.

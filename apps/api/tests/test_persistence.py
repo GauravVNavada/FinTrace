@@ -10,4 +10,5 @@ def test_migrations_are_discovered_in_version_order() -> None:
         "001_initial_schema.sql",
         "002_controls_and_idempotency.sql",
         "003_exception_external_ids.sql",
+        "004_workflow_persistence.sql",
     ]

@@ -33,6 +33,50 @@ class LifecycleRepository(Protocol):
     def related_exceptions(self, organization_id: str, order_id: str) -> list[ExceptionSummary]: ...
 
 
+class WorkflowRepository(LifecycleRepository, Protocol):
+    """Durable workflow contract shared by the demo and PostgreSQL stores."""
+
+    supports_workflow_persistence: bool
+
+    def get_idempotency(self, organization_id: str, idempotency_key: str) -> dict[str, Any] | None: ...
+
+    def put_idempotency(
+        self,
+        organization_id: str,
+        actor_id: str,
+        idempotency_key: str,
+        request_hash: str,
+        response_status: int,
+        response_body: dict[str, Any],
+    ) -> None: ...
+
+    def save_investigation(self, organization_id: str, response: dict[str, Any]) -> None: ...
+
+    def get_investigation(self, organization_id: str, investigation_id: str) -> dict[str, Any] | None: ...
+
+    def get_investigation_tool_calls(self, organization_id: str, investigation_id: str) -> list[dict[str, Any]]: ...
+
+    def save_evaluation(self, organization_id: str, response: dict[str, Any]) -> None: ...
+
+    def get_latest_evaluation(self, organization_id: str) -> dict[str, Any] | None: ...
+
+    def save_resolution_request(self, organization_id: str, response: dict[str, Any]) -> None: ...
+
+    def get_resolution_request(self, organization_id: str, request_id: str) -> dict[str, Any] | None: ...
+
+    def update_resolution_request(self, organization_id: str, response: dict[str, Any]) -> None: ...
+
+    def save_approval_decision(
+        self,
+        organization_id: str,
+        request_id: str,
+        actor_id: str,
+        decision: str,
+        approval_id: str,
+        decided_at: str,
+    ) -> bool: ...
+
+
 def as_json_record(record: dict[str, Any]) -> dict[str, Any]:
     """Return a detached record so repository callers cannot mutate storage state."""
     return dict(record)

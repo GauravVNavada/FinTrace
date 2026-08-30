@@ -20,7 +20,7 @@ router = APIRouter()
 repository = get_repository()
 graph_service = LifecycleGraphService(repository)
 pattern_service = PatternService(repository)
-evaluation_service = EvaluationService()
+evaluation_service = EvaluationService(repository)
 
 
 @router.get("/exceptions/{exception_id}/graph", response_model=LifecycleGraph)

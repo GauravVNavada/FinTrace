@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 
 const root = resolve(fileURLToPath(new URL("../", import.meta.url)));
 const uiSource = join(root, "packages", "ui", "src");
+const uiComponents = join(uiSource, "components");
 const webSource = join(root, "apps", "web");
 const requiredPrimitives = ["alert", "badge", "button", "card", "input", "progress", "select", "separator", "skeleton", "table"];
 const forbiddenColors = /#[0-9a-f]{3,8}\b|\b(?:rgb|hsl)a?\s*\(|\b(?:bg|text|border|ring|from|to|via)-(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|white|black)(?:-[0-9]+|\/|\b)/i;
@@ -18,10 +19,10 @@ if (!/^@import\s+["'][^"']+["'];$/.test(globals) || globals.split(/\r?\n/).lengt
 
 const uiFiles = await filesUnder(uiSource);
 for (const primitive of requiredPrimitives) {
-  const path = join(uiSource, `${primitive}.tsx`);
-  if (!uiFiles.includes(path)) fail(`Missing shared primitive: packages/ui/src/${primitive}.tsx`);
+  const path = join(uiComponents, `${primitive}.tsx`);
+  if (!uiFiles.includes(path)) fail(`Missing shared primitive: packages/ui/src/components/${primitive}.tsx`);
   const barrel = await readFile(join(uiSource, "index.ts"), "utf8");
-  if (!barrel.includes(`./${primitive}`)) fail(`Primitive is not exported from packages/ui/src/index.ts: ${primitive}`);
+  if (!barrel.includes(`./components/${primitive}`)) fail(`Primitive is not exported from packages/ui/src/index.ts: ${primitive}`);
 }
 
 const uiScanFiles = uiFiles.filter(path => !path.endsWith("global.css") && !path.endsWith("tailwind.preset.ts") && !requiredPrimitives.some(primitive => path.endsWith(`${primitive}.tsx`)));

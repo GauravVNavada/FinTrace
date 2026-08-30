@@ -5,11 +5,51 @@ import Link from "next/link";
 import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, ChevronRight, CircleAlert, Clock3, Download, ExternalLink, Filter, LockKeyhole, MoreHorizontal, Play, RefreshCw, ShieldCheck, Sparkles, TrendingUp } from "lucide-react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Progress, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn } from "@fintrace/ui";
 import { appConfig, exceptionItems, formatCurrency, healthBreakdown, metrics, patterns, recentRuns } from "../lib/data";
+import { fetchExceptions } from "../lib/api-client";
 import type { ExceptionItem, Metric } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./status-badge";
 
 const bars = [38, 44, 40, 54, 48, 62, 58, 76, 64, 72, 82, 68, 86, 78, 94, 88, 100, 92, 74, 80, 68, 70, 61, 66, 59, 55, 58, 51, 48, 44];
 const healthTone: Record<string, string> = { success: "bg-success", warning: "bg-warning", destructive: "bg-destructive", muted: "bg-muted-foreground" };
+
+const exceptionLabels: Record<string, string> = {
+  REFUND_WITHOUT_INVENTORY_RETURN: "Refund without inventory return",
+  MISSING_SETTLEMENT: "Missing settlement",
+  DUPLICATE_PAYMENT: "Duplicate payment",
+  ERP_INVOICE_MISSING: "ERP invoice missing",
+  ERP_AMOUNT_MISMATCH: "ERP amount mismatch",
+  SETTLEMENT_TIMING: "Settlement timing difference",
+  MANUAL_WORKFLOW_ANOMALY: "Manual workflow anomaly",
+  REFUND_WITHOUT_ERP_REVERSAL: "Refund without ERP reversal"
+};
+
+function mapException(item: import("../lib/types").ApiExceptionSummary): ExceptionItem {
+  return {
+    id: item.id,
+    orderId: item.order_id,
+    type: item.type,
+    label: exceptionLabels[item.type] ?? item.type.replaceAll("_", " "),
+    severity: item.severity,
+    status: item.status,
+    exposure: Number(item.financial_exposure),
+    currency: "INR",
+    detectedAt: new Date(item.detected_at).toLocaleString(),
+    summary: `${item.rules_triggered.length} deterministic rule${item.rules_triggered.length === 1 ? "" : "s"} triggered.`,
+    source: "Deterministic reconciliation",
+    ruleCount: item.rules_triggered.length,
+    assignee: "Unassigned"
+  };
+}
+
+function useExceptionItems(fallback: ExceptionItem[]) {
+  const [items, setItems] = React.useState(fallback);
+  React.useEffect(() => {
+    let active = true;
+    fetchExceptions().then(response => { if (active) setItems(response.map(mapException)); }).catch(() => undefined);
+    return () => { active = false; };
+  }, []);
+  return items;
+}
 
 export function PageHeading({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: React.ReactNode }) {
   return <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground"><span>{eyebrow}</span><span className="h-1 w-1 rounded-full bg-border" />{appConfig.batchName}</div><h1 className="text-[28px] font-bold tracking-[-0.03em] text-foreground">{title}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p></div><div className="flex items-center gap-2">{children}</div></div>;
@@ -29,7 +69,8 @@ function ThroughputCard() {
 }
 
 function ExceptionQueue({ items = exceptionItems, compact = false }: { items?: ExceptionItem[]; compact?: boolean }) {
-  return <Card><CardHeader className="flex-row items-center justify-between"><div><CardTitle>{compact ? "Priority exceptions" : "Exception queue"}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{compact ? "The incidents requiring attention first" : "All unresolved lifecycle breaks in this run"}</p></div><div className="flex items-center gap-2"><Button variant="outline" size="icon" className="hidden sm:inline-flex" aria-label="Filter exceptions"><Filter className="h-3.5 w-3.5" /></Button><Button asChild variant="link" size="sm"><Link href="/exceptions">View all <ChevronRight className="h-3.5 w-3.5" /></Link></Button></div></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Exception</TableHead><TableHead>Severity</TableHead><TableHead>Status</TableHead><TableHead>Exposure</TableHead><TableHead>Detected</TableHead><TableHead /></TableRow></TableHeader><TableBody>{items.slice(0, compact ? 4 : 10).map(item => <TableRow key={item.id}><TableCell><Link href={`/exceptions/${item.id}`} className="group block"><div className="flex items-center gap-2"><span className="font-mono text-[10px] text-muted-foreground">{item.id}</span><span className="text-xs font-semibold text-foreground group-hover:text-primary">{item.label}</span></div><div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>{item.orderId}</span><span>·</span><span>{item.source}</span></div></Link></TableCell><TableCell><SeverityBadge severity={item.severity} /></TableCell><TableCell><StatusBadge status={item.status} /></TableCell><TableCell className="text-xs font-semibold text-foreground">{formatCurrency(item.exposure)}</TableCell><TableCell className="text-xs text-muted-foreground">{item.detectedAt}</TableCell><TableCell className="text-right"><Button asChild variant="ghost" size="icon" aria-label={`Open ${item.id}`}><Link href={`/exceptions/${item.id}`}><ChevronRight className="h-4 w-4" /></Link></Button></TableCell></TableRow>)}</TableBody></Table></CardContent></Card>;
+  const liveItems = useExceptionItems(items);
+  return <Card><CardHeader className="flex-row items-center justify-between"><div><CardTitle>{compact ? "Priority exceptions" : "Exception queue"}</CardTitle><p className="mt-1 text-xs text-muted-foreground">{compact ? "The incidents requiring attention first" : "All unresolved lifecycle breaks in this run"}</p></div><div className="flex items-center gap-2"><Button variant="outline" size="icon" className="hidden sm:inline-flex" aria-label="Filter exceptions"><Filter className="h-3.5 w-3.5" /></Button><Button asChild variant="link" size="sm"><Link href="/exceptions">View all <ChevronRight className="h-3.5 w-3.5" /></Link></Button></div></CardHeader><CardContent className="p-0"><Table><TableHeader><TableRow className="bg-muted/50"><TableHead>Exception</TableHead><TableHead>Severity</TableHead><TableHead>Status</TableHead><TableHead>Exposure</TableHead><TableHead>Detected</TableHead><TableHead /></TableRow></TableHeader><TableBody>{liveItems.slice(0, compact ? 4 : 10).map(item => <TableRow key={item.id}><TableCell><Link href={`/exceptions/${item.id}`} className="group block"><div className="flex items-center gap-2"><span className="font-mono text-[10px] text-muted-foreground">{item.id}</span><span className="text-xs font-semibold text-foreground group-hover:text-primary">{item.label}</span></div><div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground"><span>{item.orderId}</span><span>·</span><span>{item.source}</span></div></Link></TableCell><TableCell><SeverityBadge severity={item.severity} /></TableCell><TableCell><StatusBadge status={item.status} /></TableCell><TableCell className="text-xs font-semibold text-foreground">{formatCurrency(item.exposure)}</TableCell><TableCell className="text-xs text-muted-foreground">{item.detectedAt}</TableCell><TableCell className="text-right"><Button asChild variant="ghost" size="icon" aria-label={`Open ${item.id}`}><Link href={`/exceptions/${item.id}`}><ChevronRight className="h-4 w-4" /></Link></Button></TableCell></TableRow>)}</TableBody></Table></CardContent></Card>;
 }
 
 export function Overview() {
@@ -40,8 +81,9 @@ export function ExceptionsPage() {
   const [query, setQuery] = React.useState("");
   const [severity, setSeverity] = React.useState("ALL");
   const [status, setStatus] = React.useState("ALL");
-  const filtered = exceptionItems.filter(item => `${item.id} ${item.orderId} ${item.label}`.toLowerCase().includes(query.toLowerCase()) && (severity === "ALL" || item.severity === severity) && (status === "ALL" || item.status === status));
-  return <><PageHeading eyebrow="Exceptions" title="Exception queue" description="Investigate the lifecycle breaks that deterministic reconciliation could not safely close."><Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />Export queue</Button></PageHeading><div className="mb-4 flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row"><div className="relative flex-1"><Filter className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} aria-label="Search exception queue" placeholder="Search exception ID, order or type" className="bg-muted/50 pl-9 text-xs" /></div><Select aria-label="Filter by severity" value={severity} onChange={event => setSeverity(event.target.value)} className="sm:w-40"><option value="ALL">All severity</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></Select><Select aria-label="Filter by status" value={status} onChange={event => setStatus(event.target.value)} className="sm:w-40"><option value="ALL">All status</option><option value="OPEN">Open</option><option value="IN_REVIEW">In review</option><option value="ESCALATED">Escalated</option><option value="RESOLVED">Resolved</option></Select></div><Card><CardContent className="p-0"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{filtered.length}</span> visible in demo queue</div><div className="flex items-center gap-2 text-[11px] text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />Sorted by severity and age</div></div><ExceptionTable items={filtered} /></CardContent></Card></>;
+  const liveItems = useExceptionItems(exceptionItems);
+  const filtered = liveItems.filter(item => `${item.id} ${item.orderId} ${item.label}`.toLowerCase().includes(query.toLowerCase()) && (severity === "ALL" || item.severity === severity) && (status === "ALL" || item.status === status));
+  return <><PageHeading eyebrow="Exceptions" title="Exception queue" description="Investigate the lifecycle breaks that deterministic reconciliation could not safely close."><Button variant="outline" size="sm"><Download className="h-3.5 w-3.5" />Export queue</Button></PageHeading><div className="mb-4 flex flex-col gap-2 rounded-xl border border-border bg-card p-3 sm:flex-row"><div className="relative flex-1"><Filter className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" /><Input value={query} onChange={event => setQuery(event.target.value)} aria-label="Search exception queue" placeholder="Search exception ID, order or type" className="bg-muted/50 pl-9 text-xs" /></div><Select aria-label="Filter by severity" value={severity} onChange={event => setSeverity(event.target.value)} className="sm:w-40"><option value="ALL">All severity</option><option value="HIGH">High</option><option value="MEDIUM">Medium</option><option value="LOW">Low</option></Select><Select aria-label="Filter by status" value={status} onChange={event => setStatus(event.target.value)} className="sm:w-40"><option value="ALL">All status</option><option value="OPEN">Open</option><option value="IN_REVIEW">In review</option><option value="ESCALATED">Escalated</option><option value="RESOLVED">Resolved</option></Select></div><Card><CardContent className="p-0"><div className="flex items-center justify-between border-b border-border px-5 py-4"><div className="text-xs text-muted-foreground"><span className="font-semibold text-foreground">{filtered.length}</span> visible in current queue</div><div className="flex items-center gap-2 text-[11px] text-muted-foreground"><Clock3 className="h-3.5 w-3.5" />Sorted by severity and age</div></div><ExceptionTable items={filtered} /></CardContent></Card></>;
 }
 
 function ExceptionTable({ items }: { items: ExceptionItem[] }) {

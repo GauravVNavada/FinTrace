@@ -1,5 +1,8 @@
+import json
 from datetime import UTC, datetime
+from hashlib import sha256
 from threading import RLock
+from typing import Any
 from uuid import uuid4
 
 from pydantic import ValidationError
@@ -28,7 +31,7 @@ class IdempotencyConflictError(ValueError):
 
 class InvestigationService:
     def __init__(self, repository: LifecycleRepository, provider: AIClient) -> None:
-        self._repository = repository
+        self._repository: Any = repository
         self._provider = provider
         self._tools = EvidenceToolRegistry(repository)
         self._lock = RLock()
@@ -40,6 +43,13 @@ class InvestigationService:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
         key = (organization_id, idempotency_key)
         with self._lock:
+            if self._durable:
+                previous = self._repository.get_idempotency(organization_id, idempotency_key)
+                request_hash = self._request_hash(exception_id)
+                if previous is not None:
+                    if previous["request_hash"] != request_hash:
+                        raise IdempotencyConflictError("Idempotency-Key was already used for another exception")
+                    return InvestigationResponse.model_validate(previous["response_body"])
             previous = self._idempotency.get(key)
             if previous is not None:
                 previous_exception_id, response = previous
@@ -55,16 +65,37 @@ class InvestigationService:
             self._repository.record_audit_event(organization_id, "INVESTIGATION_RESULT_VALIDATED", response.investigation_id)
             self._idempotency[key] = (exception_id, response)
             self._results[response.investigation_id] = (organization_id, response)
+            if self._durable:
+                body = response.model_dump(mode="json")
+                self._repository.save_investigation(organization_id, body)
+                self._repository.put_idempotency(organization_id, "system", idempotency_key, self._request_hash(exception_id), 200 if response.status != InvestigationStatus.FAILED else 503, body)
             return response
 
     def get(self, organization_id: str, investigation_id: str) -> InvestigationResponse:
+        if self._durable:
+            response = self._repository.get_investigation(organization_id, investigation_id)
+            if response is not None:
+                return InvestigationResponse.model_validate(response)
         result = self._results.get(investigation_id)
         if result is None or result[0] != organization_id:
             raise InvestigationNotFoundError(investigation_id)
         return result[1]
 
     def get_tool_calls(self, organization_id: str, investigation_id: str) -> list[ToolCall]:
+        if self._durable:
+            response = self._repository.get_investigation(organization_id, investigation_id)
+            if response is None:
+                raise InvestigationNotFoundError(investigation_id)
+            return [ToolCall.model_validate(call) for call in self._repository.get_investigation_tool_calls(organization_id, investigation_id)]
         return self.get(organization_id, investigation_id).tool_calls
+
+    @property
+    def _durable(self) -> bool:
+        return getattr(self._repository, "supports_workflow_persistence", False) is True
+
+    @staticmethod
+    def _request_hash(exception_id: str) -> str:
+        return sha256(json.dumps({"exception_id": exception_id}, sort_keys=True).encode()).hexdigest()
 
     def _investigate(self, organization_id: str, exception: ExceptionSummary) -> InvestigationResponse:
         try:

@@ -2,7 +2,7 @@
 
 FinTrace is a lifecycle-aware financial operations console for investigating exceptions across POS, payments, settlements, ERP, refunds, inventory, and employee activity.
 
-This repository contains the FinTrace MVP foundation: a polished web experience and a FastAPI service boundary. Patterns, evaluations, and audit activity now use typed API clients; the remaining overview/exception/run surfaces retain a typed demo adapter so the interface can be reviewed without a live database or an AI provider. The adapter boundary is intentionally explicit: production data should arrive through the versioned API described in [`docs/data_api.md`](docs/data_api.md).
+This repository contains the FinTrace MVP: a polished web experience and FastAPI service boundary. Dashboard summary, exception queue/detail, investigations, patterns, evaluations, and audit activity use typed API clients; the runs/settings surfaces remain intentionally read-only configuration views. PostgreSQL mode provides durable workflow persistence, while the deterministic demo adapter remains available for isolated tests.
 
 ## Product boundary
 
@@ -16,7 +16,7 @@ FinTrace follows one core rule: code calculates; AI interprets.
 
 ## Run locally
 
-Requirements: Node.js 20+, pnpm 9+. Python 3.12+ is required for the API; Docker is required for the optional local PostgreSQL path.
+Requirements: Node.js 24+, pnpm 9+. Python 3.12+ is required for the API; Docker provides the local PostgreSQL runtime.
 
 ```bash
 pnpm install
@@ -25,7 +25,7 @@ pnpm dev
 
 Open `http://localhost:3000`.
 
-The default API storage backend is the deterministic in-process demo adapter. To exercise PostgreSQL locally, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. See [`docs/local-development.md`](docs/local-development.md).
+The default API storage backend is the deterministic in-process demo adapter. For the full local path, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. The Compose database uses host port `55432` so it does not collide with a local PostgreSQL service. See [`docs/local-development.md`](docs/local-development.md).
 
 Validation commands:
 
@@ -73,6 +73,6 @@ docs           Source-of-truth product and engineering documentation
 - [`docs/review_protocol.md`](docs/review_protocol.md) — read-only audit protocol for repository reviews.
 - [`docs/demo_script.md`](docs/demo_script.md) — reproducible benchmark and five-minute product walkthrough.
 
-## Known limitation
+## Release boundary
 
-The current increment is foundation-first. It makes the product flow and API contracts concrete, includes a read-only FastAPI investigation flow, deterministic simulator/reconciliation/evaluation modules, derived lifecycle graphs, recurring pattern signals, and a reproducible demo script. Demo interactions, graph source data, evaluation reports, investigation state, and audit events are in memory. PostgreSQL-backed repositories, authenticated identity claims, persistent audit writes, and a real AI provider remain later implementation phases and are documented rather than implied as complete.
+The MVP uses synthetic data, deterministic reconciliation, a safe stub provider, and simulated approvals. PostgreSQL workflow state and verified bearer claims are implemented. Production still needs deployment-grade identity/key rotation, rate limiting, CSP/HSTS, managed backups, dependency auditing, secret scanning, and a configured external AI provider if AI-assisted interpretation is desired.
