@@ -21,8 +21,8 @@ try {
   & $evaluator --orders $Orders --seed $Seed --anomaly-rate $AnomalyRate
   Write-Output ""
   Write-Output "Start the API separately with:"
-  Write-Output "  .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000"
-  Write-Output "Then open the web app at http://localhost:3000."
+  Write-Output "  .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8001"
+  Write-Output "Then open the web app at http://localhost:3002."
 } finally {
   Pop-Location
 }

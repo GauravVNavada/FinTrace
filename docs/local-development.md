@@ -28,12 +28,12 @@ python -m venv .venv
 # Windows: .venv\\Scripts\\Activate.ps1
 pip install -e ".[dev]"
 copy .env.example .env
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 The current scaffold exposes `/health`, dashboard/exception/lifecycle reads, investigation routes, controls/audit routes, and analytics routes. Development requests require `X-Organization-Id`; this is intentionally temporary and must be replaced with verified authentication claims before deployment. `AI_PROVIDER=stub` is the safe deterministic default; no external provider is called locally.
 
-Open the web app at `http://localhost:3000` or `http://127.0.0.1:3000`. The development API default allows both loopback origins; production deployments must set an explicit `ALLOWED_ORIGINS` value.
+Open the web app at `http://localhost:3000`, `http://127.0.0.1:3000`, `http://localhost:3002`, or `http://127.0.0.1:3002`. The development API default allows these loopback origins; production deployments must set an explicit `ALLOWED_ORIGINS` value. The web client defaults to `http://127.0.0.1:8001` for the local API.
 
 ## Environment rules
 
@@ -51,5 +51,6 @@ The repository includes `compose.yaml` for a local PostgreSQL 16 instance. The D
 ## Troubleshooting
 
 - If Next build output is stale, stop the dev server and rerun the build; do not delete source files.
+- Do not run `pnpm dev` and `pnpm build` concurrently for `apps/web`; both use `.next`, and the production build can replace the dev stylesheet manifest. If the UI appears as unstyled HTML after a build, stop and restart the web dev server.
 - If API imports fail, activate the `apps/api/.venv` environment and install the editable package.
 - If `STORAGE_BACKEND=demo`, isolated local screens use deterministic demo data by design. For the full local path, run PostgreSQL and point `NEXT_PUBLIC_API_BASE_URL` at the API port.

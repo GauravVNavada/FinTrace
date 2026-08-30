@@ -7,6 +7,7 @@ export const appConfig = {
   batchName: "August close · Run 024",
   lastSynced: "30 Aug 2026, 14:32 IST",
   currency: "INR" as const,
+  benchmark: { orders: 1000, seed: 42, anomalyRate: 0.30 },
   unresolvedExceptions: 56,
   actor: { name: "Aarav Mehta", firstName: "Aarav", initials: "AM", role: "Finance analyst" }
 };

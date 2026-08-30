@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3000` (or `http://127.0.0.1:3002` when using the alternate local web port).
 
 The default API storage backend is the deterministic in-process demo adapter. For the full local path, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. The Compose database uses host port `55432` so it does not collide with a local PostgreSQL service. See [`docs/local-development.md`](docs/local-development.md).
 

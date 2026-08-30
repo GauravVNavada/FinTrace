@@ -18,16 +18,16 @@ Terminal 1:
 
 ```powershell
 cd apps/api
-.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8001
 ```
 
 Terminal 2:
 
 ```powershell
-pnpm dev
+pnpm --filter @fintrace/web dev -- --port 3002
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3002`.
 
 ## Five-minute walkthrough
 

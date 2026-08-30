@@ -86,6 +86,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | UI-004 | Prohibit hardcoded colors | Components and app markup contain no literal color values, palette utility classes, or inline color styles; Tailwind utilities resolve through semantic CSS variables. |
 | UI-005 | Support multi-app themes | Theme differences are represented by namespaced selectors/tokens in the shared global stylesheet; apps select a theme without defining a second palette. |
 | UI-006 | Verify component usage | The component inventory has no unused duplicate primitives, every exported primitive is either route-used or covered by an explicit component test, and static import/style scans are part of the quality gate. |
+| UI-007 | Make visible controls actionable | Export controls download the current scoped data, run controls call the bounded idempotent evaluation contract, navigation/filter controls reach the relevant screen/state, and informational controls expose an honest local state rather than silently doing nothing. |
 
 Current evidence for UI-001 through UI-006 is maintained in [`ui_component_inventory.md`](ui_component_inventory.md) and enforced by `pnpm check:ui-architecture`.
 
@@ -98,6 +99,7 @@ Current evidence for UI-001 through UI-006 is maintained in [`ui_component_inven
 5. AI provider failure leaves deterministic evidence and manual review available.
 6. Repeated resolution request with the same idempotency key creates one workflow effect.
 7. Analyst and Finance Manager cannot approve a high-value request; an authorized Controller can approve it exactly once.
+8. Export actions produce a CSV of the current screen's scoped data; run/evaluation actions report their API result and disable duplicate submissions while pending.
 
 ## 6. Traceability
 

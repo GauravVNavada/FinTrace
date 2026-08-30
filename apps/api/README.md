@@ -25,7 +25,7 @@ python -m venv .venv
 # Windows: .venv\\Scripts\\Activate.ps1
 pip install -e ".[dev]"
 copy .env.example .env
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8001
 ```
 
 Development requests may use `X-Organization-Id`, `X-Actor-Id`, and `X-Actor-Role` only while `AUTH_MODE=development`. Bearer tokens with verified HS256 claims are supported; set `AUTH_MODE=required` before deployment to reject header-only context.

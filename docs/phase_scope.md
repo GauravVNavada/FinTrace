@@ -11,6 +11,7 @@ Status: active delivery plan · 2026-08-30
 - [x] Reusable shadcn-style primitives: Button, Card, Badge, Progress.
 - [x] Documentation set and decision log.
 - [x] Centralized `packages/ui/src/components` component inventory, semantic token stylesheet, and app stylesheet import gate.
+- [x] Functional UI actions for exports, evaluation/reconciliation runs, derived graph loading, queue search navigation, and header/help states.
 
 ## Phase 1 — P0 backend vertical slice (complete for MVP)
 
@@ -133,6 +134,7 @@ Sprint 5 acceptance criteria:
 - [x] `scripts/demo.ps1` reproduces generation and benchmark evaluation with a documented seed, output path, and expected result shape.
 - [x] Automated API tests, static checks, production build, live API smoke tests, and browser route smoke tests pass.
 - [x] Known limitations and the distinction between demo/in-process behavior and production requirements are recorded in the PRD, architecture, API, testing, and demo documents.
+- [x] Visible export and run controls have a verified outcome or an explicit honest unavailable state; they are not inert placeholder buttons.
 
 ## Review gates
 

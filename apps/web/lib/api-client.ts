@@ -1,6 +1,6 @@
-import type { ApiAuditEvent, ApiDashboardSummary, ApiEvaluation, ApiExceptionSummary, ApiPattern } from "./types";
+import type { ApiAuditEvent, ApiDashboardSummary, ApiEvaluation, ApiExceptionSummary, ApiLifecycleGraph, ApiPattern, ApiResolutionRequest, EvaluationRunRequest, ResolutionActionCode } from "./types";
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8000";
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
 const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "ORG-001";
 const actorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
 const actorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "CONTROLLER";
@@ -61,8 +61,16 @@ export function fetchLifecycle(orderId: string) {
   return get(`/api/v1/lifecycles/${encodeURIComponent(orderId)}`);
 }
 
+export function fetchExceptionGraph(exceptionId: string) {
+  return get<ApiLifecycleGraph>(`/api/v1/exceptions/${encodeURIComponent(exceptionId)}/graph`);
+}
+
 export function startInvestigation(exceptionId: string, idempotencyKey: string) {
   return post<import("./types").ApiInvestigation>(`/api/v1/exceptions/${encodeURIComponent(exceptionId)}/investigations`, {}, idempotencyKey);
+}
+
+export function requestResolution(exceptionId: string, actionCode: ResolutionActionCode, idempotencyKey: string) {
+  return post<ApiResolutionRequest>(`/api/v1/exceptions/${encodeURIComponent(exceptionId)}/resolution-request`, { action_code: actionCode }, idempotencyKey);
 }
 
 export function fetchPatterns(limit = 20) {
@@ -71,6 +79,10 @@ export function fetchPatterns(limit = 20) {
 
 export function fetchLatestEvaluation() {
   return get<ApiEvaluation>("/api/v1/evaluation/latest");
+}
+
+export function runEvaluation(request: EvaluationRunRequest, idempotencyKey: string) {
+  return post<ApiEvaluation>("/api/v1/evaluation/run", request, idempotencyKey);
 }
 
 export function fetchAuditEvents() {

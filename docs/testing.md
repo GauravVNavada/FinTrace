@@ -59,6 +59,7 @@ Each test uses an isolated organization and database transaction. Tests must inc
 - Responsive layout at narrow, tablet, and desktop viewports.
 - Filter behavior and filtered-empty state.
 - Investigation result and AI-failure state.
+- CSV export actions, evaluation/run API actions, derived graph loading, queue search navigation, and header/help state changes.
 - No status meaning communicated by color alone.
 
 ## AI regression tests

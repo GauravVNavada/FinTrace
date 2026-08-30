@@ -141,6 +141,35 @@ export interface ApiEvaluation {
   created_at: string;
 }
 
+export interface ApiLifecycleGraph {
+  exception_id: string;
+  organization_id: string;
+  nodes: { id: string; entity_type: string; label: string; state: "CONFIRMED" | "MISSING"; amount_minor?: number | null }[];
+  edges: { source: string; target: string; relationship: string }[];
+}
+
+export type ResolutionActionCode = "REQUEST_INVENTORY_VERIFICATION" | "REQUEST_ERP_INVOICE_CORRECTION" | "REQUEST_SETTLEMENT_REVIEW" | "REQUEST_REFUND_REVIEW" | "MARK_AS_TIMING_DIFFERENCE" | "MARK_AS_EXPECTED_FEE_VARIANCE" | "ESCALATE_TO_FINANCE_MANAGER" | "ESCALATE_TO_CONTROLLER" | "CLOSE_AS_RESOLVED";
+
+export interface ApiResolutionRequest {
+  request_id: string;
+  exception_id: string;
+  action_code: ResolutionActionCode;
+  status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  financial_exposure: number | string;
+  currency: string;
+  required_capability: string;
+  required_approvals: number;
+  approvals_received: number;
+  requester_id: string;
+  created_at: string;
+}
+
+export interface EvaluationRunRequest {
+  orders: number;
+  seed: number;
+  anomaly_rate: number;
+}
+
 export interface ApiDashboardSummary {
   organization_id: string;
   reconciliation_run_id: string;

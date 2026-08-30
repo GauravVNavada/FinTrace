@@ -5,6 +5,7 @@ import { AlertCircle, CircleAlert, Loader2, ShieldCheck } from "lucide-react";
 import { Alert, Badge, Button, Card, CardContent } from "@fintrace/ui";
 import { patterns as demoPatterns, formatCurrency } from "../lib/data";
 import { fetchPatterns } from "../lib/api-client";
+import { downloadCsv } from "../lib/export";
 import type { ApiPattern, Pattern } from "../lib/types";
 import { PageHeading } from "./dashboard";
 import { SeverityBadge } from "./status-badge";
@@ -29,6 +30,7 @@ export function PatternsPage() {
   const [items, setItems] = React.useState<Pattern[]>(demoPatterns);
   const [loading, setLoading] = React.useState(true);
   const [apiUnavailable, setApiUnavailable] = React.useState(false);
+  const [exported, setExported] = React.useState(false);
 
   React.useEffect(() => {
     fetchPatterns()
@@ -37,10 +39,16 @@ export function PatternsPage() {
       .finally(() => setLoading(false));
   }, []);
 
+  function exportPatterns() {
+    downloadCsv("fintrace-patterns.csv", ["Pattern ID", "Title", "Severity", "Incidents", "Exposure", "Location", "Observation", "Suggested control"], items.map(pattern => [pattern.id, pattern.title, pattern.severity, pattern.incidents, pattern.exposure, pattern.location, pattern.description, pattern.control]));
+    setExported(true);
+  }
+
   return <>
     <PageHeading eyebrow="Patterns" title="Recurring operational signals" description="Clusters of related exceptions can point to a control gap. They are signals for review, not proof of causation.">
-      <Button variant="outline" size="sm">Export patterns</Button>
+      <Button variant="outline" size="sm" onClick={exportPatterns} disabled={loading || items.length === 0}>Export patterns</Button>
     </PageHeading>
+    {exported && <Alert variant="info" className="mb-4 text-xs" aria-live="polite">Patterns downloaded as CSV.</Alert>}
     {apiUnavailable && <Alert variant="warning" className="mb-4 flex items-center gap-2 text-xs"><AlertCircle className="h-4 w-4" />API unavailable — showing the typed demo snapshot.</Alert>}
     {loading && <div role="status" className="mb-4 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Loading deterministic pattern signals…</div>}
     <div className="mb-5 grid gap-4 sm:grid-cols-3"><Card><CardContent className="p-4"><div className="text-[11px] text-muted-foreground">Active patterns</div><div className="mt-2 text-xl font-bold text-foreground">{items.length}</div><div className="mt-1 text-[11px] text-muted-foreground">Derived from canonical exceptions</div></CardContent></Card><Card><CardContent className="p-4"><div className="text-[11px] text-muted-foreground">Associated exposure</div><div className="mt-2 text-xl font-bold text-foreground">{formatCurrency(items.reduce((total, item) => total + item.exposure, 0))}</div><div className="mt-1 text-[11px] text-muted-foreground">Across returned pattern members</div></CardContent></Card><Card><CardContent className="p-4"><div className="text-[11px] text-muted-foreground">Highest concentration</div><div className="mt-2 text-xl font-bold text-foreground">{items[0]?.location ?? "—"}</div><div className="mt-1 text-[11px] text-muted-foreground">Sorted by incident count</div></CardContent></Card></div>

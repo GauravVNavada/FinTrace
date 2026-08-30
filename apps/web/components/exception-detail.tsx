@@ -4,15 +4,29 @@ import * as React from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, FileText, Info, LockKeyhole, MoreHorizontal, Play, ShieldCheck, Sparkles, UserRound, X } from "lucide-react";
 import { Alert, Badge, Button, Card, CardContent, CardHeader, CardTitle, Progress, cn } from "@fintrace/ui";
-import { fetchException, startInvestigation } from "../lib/api-client";
+import { fetchException, fetchExceptionGraph, requestResolution, startInvestigation } from "../lib/api-client";
+import { downloadCsv } from "../lib/export";
 import { appConfig, exceptionDetails, formatCurrency } from "../lib/data";
-import type { ApiExceptionSummary, ApiInvestigation, ExceptionDetail as ExceptionDetailType, Investigation, LifecycleRecord } from "../lib/types";
+import type { ApiExceptionSummary, ApiInvestigation, ExceptionDetail as ExceptionDetailType, Investigation, LifecycleRecord, ResolutionActionCode } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./status-badge";
 
 const lifecycleStyles: Record<LifecycleRecord["status"], { icon: React.ReactNode; marker: string; surface: string }> = {
   confirmed: { icon: <Check className="h-3 w-3" />, marker: "bg-success/10 text-success", surface: "border-border bg-muted/30" },
   missing: { icon: <X className="h-3 w-3" />, marker: "bg-destructive/10 text-destructive", surface: "border-destructive/20 bg-destructive/5" },
   warning: { icon: <Info className="h-3 w-3" />, marker: "bg-warning/15 text-warning-foreground", surface: "border-warning/30 bg-warning/5" }
+};
+
+const reviewActionByType: Partial<Record<ExceptionDetailType["type"], ResolutionActionCode>> = {
+  REFUND_WITHOUT_INVENTORY_RETURN: "REQUEST_INVENTORY_VERIFICATION",
+  REFUND_WITHOUT_ERP_REVERSAL: "REQUEST_ERP_INVOICE_CORRECTION",
+  MISSING_SETTLEMENT: "REQUEST_SETTLEMENT_REVIEW",
+  SETTLEMENT_TIMING: "MARK_AS_TIMING_DIFFERENCE",
+  SETTLEMENT_FEE_VARIANCE: "MARK_AS_EXPECTED_FEE_VARIANCE",
+  ERP_INVOICE_MISSING: "REQUEST_ERP_INVOICE_CORRECTION",
+  ERP_AMOUNT_MISMATCH: "REQUEST_ERP_INVOICE_CORRECTION",
+  DUPLICATE_PAYMENT: "REQUEST_REFUND_REVIEW",
+  AMBIGUOUS_ASSOCIATION: "ESCALATE_TO_CONTROLLER",
+  MANUAL_WORKFLOW_ANOMALY: "ESCALATE_TO_FINANCE_MANAGER"
 };
 
 export function ExceptionDetail({ id }: { id: string }) {
@@ -22,6 +36,13 @@ export function ExceptionDetail({ id }: { id: string }) {
   const [investigating, setInvestigating] = React.useState(false);
   const [investigationError, setInvestigationError] = React.useState<string | null>(null);
   const [requested, setRequested] = React.useState(false);
+  const [requesting, setRequesting] = React.useState(false);
+  const [requestError, setRequestError] = React.useState<string | null>(null);
+  const [moreOpen, setMoreOpen] = React.useState(false);
+  const [graphVisible, setGraphVisible] = React.useState(false);
+  const [graphLoading, setGraphLoading] = React.useState(false);
+  const [graphError, setGraphError] = React.useState<string | null>(null);
+  const [graph, setGraph] = React.useState<import("../lib/types").ApiLifecycleGraph | null>(null);
   React.useEffect(() => { fetchException(id).then(apiException => setException(mapApiException(apiException, fallback))).catch(() => undefined); }, [id, fallback]);
   async function investigate() {
     setInvestigating(true); setInvestigationError(null);
@@ -29,7 +50,29 @@ export function ExceptionDetail({ id }: { id: string }) {
     catch { setInvestigationError("The investigation service is unavailable. Deterministic evidence remains available for manual review."); }
     finally { setInvestigating(false); }
   }
-  return <><div className="mb-5 flex items-center gap-2 text-xs text-muted-foreground"><Link href="/exceptions" className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" />Exceptions</Link><span>/</span><span>{exception.id}</span></div><div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="mb-2 flex flex-wrap items-center gap-2"><span className="font-mono text-[11px] font-semibold text-muted-foreground">{exception.id}</span><SeverityBadge severity={exception.severity} /><StatusBadge status={requested ? "IN_REVIEW" : exception.status} /></div><h1 className="text-[26px] font-bold tracking-[-0.03em] text-foreground">{exception.label}</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">{exception.summary}</p></div><div className="flex items-center gap-2"><Button variant="outline" size="sm"><MoreHorizontal className="h-3.5 w-3.5" />More</Button><Button size="sm" onClick={() => setRequested(true)} disabled={requested}>{requested ? <><Check className="h-3.5 w-3.5" />Review requested</> : <><Play className="h-3.5 w-3.5" />Request review</>}</Button></div></div><div className="mb-5 grid gap-4 sm:grid-cols-3"><SummaryCard label="Financial exposure" value={formatCurrency(exception.exposure)} detail="Requires controlled review" tone="destructive" /><SummaryCard label="Lifecycle" value={exception.orderId} detail={`${exception.ruleCount} deterministic rules triggered`} /><SummaryCard label="Policy owner" value={exception.policy.owner} detail={exception.policy.state} /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,.75fr)]"><div className="space-y-5"><LifecycleCard exception={exception} /><TimelineCard exception={exception} /><AuditCard exception={exception} /></div><div className="space-y-5"><Card className="border-border"><CardHeader className="border-b border-border bg-muted/30"><div className="flex items-center gap-2"><div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/10 text-accent"><Sparkles className="h-4 w-4" /></div><div><CardTitle>Evidence investigation</CardTitle><p className="mt-1 text-xs text-muted-foreground">Bounded, read-only AI analysis</p></div></div></CardHeader><CardContent className="p-5">{investigationError && <Alert variant="destructive" className="mb-4">{investigationError}</Alert>}{!investigation ? <div><div className="rounded-lg border border-accent/20 bg-accent/5 p-4"><div className="flex gap-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-accent" /><p className="text-xs leading-5 text-muted-foreground">FinTrace will inspect only relevant, organization-scoped evidence using six approved read-only tools. No financial action will be taken.</p></div></div><Button className="mt-4 w-full" onClick={investigate} disabled={investigating}><Sparkles className="h-3.5 w-3.5" />{investigating ? "Investigating…" : "Investigate exception"}</Button><div className="mt-3 text-center text-[10px] text-muted-foreground">Typical investigation time · under 3 seconds</div></div> : <InvestigationResult investigation={investigation} />}</CardContent></Card><PolicyCard exception={exception} /><SimilarIncidents /></div></div></>;
+  async function requestReview() {
+    setRequesting(true); setRequestError(null);
+    try { await requestResolution(id, reviewActionByType[exception.type] ?? "REQUEST_REFUND_REVIEW", `review-${id}-${Date.now()}`); setRequested(true); }
+    catch { setRequestError("The review request could not be recorded. Check that the API is available and try again."); }
+    finally { setRequesting(false); }
+  }
+  async function viewGraph() {
+    if (graph) { setGraphVisible(value => !value); return; }
+    setGraphLoading(true); setGraphError(null);
+    try { setGraph(await fetchExceptionGraph(id)); setGraphVisible(true); }
+    catch { setGraphError("The lifecycle graph could not be loaded. The canonical lifecycle remains available below."); }
+    finally { setGraphLoading(false); }
+  }
+  function copyExceptionId() {
+    const clipboard = navigator.clipboard;
+    if (!clipboard) { setMoreOpen(false); return; }
+    clipboard.writeText(exception.id).then(() => setMoreOpen(false)).catch(() => undefined);
+  }
+  function exportEvidence() {
+    downloadCsv(`fintrace-${exception.id}-evidence.csv`, ["Source", "Record ID", "Fact"], exception.investigation.supportingEvidence.map(item => [item.source, item.recordId ?? "", item.fact]));
+    setMoreOpen(false);
+  }
+  return <><div className="mb-5 flex items-center gap-2 text-xs text-muted-foreground"><Link href="/exceptions" className="flex items-center gap-1 font-semibold text-muted-foreground hover:text-foreground"><ArrowLeft className="h-3.5 w-3.5" />Exceptions</Link><span>/</span><span>{exception.id}</span></div>{requestError && <Alert variant="destructive" className="mb-4 text-xs">{requestError}</Alert>}<div className="mb-6 flex flex-col justify-between gap-4 lg:flex-row lg:items-start"><div><div className="mb-2 flex flex-wrap items-center gap-2"><span className="font-mono text-[11px] font-semibold text-muted-foreground">{exception.id}</span><SeverityBadge severity={exception.severity} /><StatusBadge status={requested ? "IN_REVIEW" : exception.status} /></div><h1 className="text-[26px] font-bold tracking-[-0.03em] text-foreground">{exception.label}</h1><p className="mt-2 max-w-3xl text-sm text-muted-foreground">{exception.summary}</p></div><div className="relative flex items-center gap-2"><Button variant="outline" size="sm" onClick={() => setMoreOpen(value => !value)} aria-expanded={moreOpen}><MoreHorizontal className="h-3.5 w-3.5" />More</Button>{moreOpen && <div role="menu" className="absolute right-0 top-10 z-10 w-48 rounded-lg border border-border bg-card p-1 shadow-lg"><Button variant="ghost" size="sm" className="w-full justify-start" onClick={copyExceptionId}>Copy exception ID</Button><Button variant="ghost" size="sm" className="w-full justify-start" onClick={exportEvidence}>Export evidence</Button><Button asChild variant="ghost" size="sm" className="w-full justify-start"><Link href="/patterns">Review patterns</Link></Button></div>}<Button size="sm" onClick={requestReview} disabled={requested || requesting}>{requesting ? <><Play className="h-3.5 w-3.5 animate-pulse" />Requesting…</> : requested ? <><Check className="h-3.5 w-3.5" />Review requested</> : <><Play className="h-3.5 w-3.5" />Request review</>}</Button></div></div><div className="mb-5 grid gap-4 sm:grid-cols-3"><SummaryCard label="Financial exposure" value={formatCurrency(exception.exposure)} detail="Requires controlled review" tone="destructive" /><SummaryCard label="Lifecycle" value={exception.orderId} detail={`${exception.ruleCount} deterministic rules triggered`} /><SummaryCard label="Policy owner" value={exception.policy.owner} detail={exception.policy.state} /></div><div className="grid gap-5 xl:grid-cols-[minmax(0,1.25fr)_minmax(360px,.75fr)]"><div className="space-y-5"><LifecycleCard exception={exception} graphVisible={graphVisible} graphLoading={graphLoading} graphError={graphError} graph={graph} onViewGraph={viewGraph} /><TimelineCard exception={exception} /><AuditCard exception={exception} /></div><div className="space-y-5"><Card className="border-border"><CardHeader className="border-b border-border bg-muted/30"><div className="flex items-center gap-2"><div className="flex h-7 w-7 items-center justify-center rounded-md bg-accent/10 text-accent"><Sparkles className="h-4 w-4" /></div><div><CardTitle>Evidence investigation</CardTitle><p className="mt-1 text-xs text-muted-foreground">Bounded, read-only AI analysis</p></div></div></CardHeader><CardContent className="p-5">{investigationError && <Alert variant="destructive" className="mb-4">{investigationError}</Alert>}{!investigation ? <div><div className="rounded-lg border border-accent/20 bg-accent/5 p-4"><div className="flex gap-3"><LockKeyhole className="mt-0.5 h-4 w-4 shrink-0 text-accent" /><p className="text-xs leading-5 text-muted-foreground">FinTrace will inspect only relevant, organization-scoped evidence using six approved read-only tools. No financial action will be taken.</p></div></div><Button className="mt-4 w-full" onClick={investigate} disabled={investigating}><Sparkles className="h-3.5 w-3.5" />{investigating ? "Investigating…" : "Investigate exception"}</Button><div className="mt-3 text-center text-[10px] text-muted-foreground">Typical investigation time · under 3 seconds</div></div> : <InvestigationResult investigation={investigation} />}</CardContent></Card><PolicyCard exception={exception} /><SimilarIncidents /></div></div></>;
 }
 
 function mapApiException(item: ApiExceptionSummary, fallback: ExceptionDetailType): ExceptionDetailType {
@@ -44,8 +87,8 @@ function SummaryCard({ label, value, detail, tone }: { label: string; value: str
   return <Card><CardContent className="p-4"><div className="text-[11px] font-medium text-muted-foreground">{label}</div><div className="mt-2 text-xl font-bold tracking-tight text-foreground">{value}</div><div className={cn("mt-1 text-[11px]", tone === "destructive" ? "text-destructive" : "text-muted-foreground")}>{detail}</div></CardContent></Card>;
 }
 
-function LifecycleCard({ exception }: { exception: ExceptionDetailType }) {
-  return <Card><CardHeader className="flex-row items-center justify-between"><div><CardTitle>Transaction lifecycle</CardTitle><p className="mt-1 text-xs text-muted-foreground">Canonical records connected to {exception.orderId}</p></div><Button variant="link" size="sm">View graph <ArrowRight className="h-3.5 w-3.5" /></Button></CardHeader><CardContent><div className="grid gap-2 sm:grid-cols-2">{exception.lifecycle.map(record => { const style = lifecycleStyles[record.status]; return <div key={`${record.source}-${record.id}`} className={cn("rounded-lg border p-3", style.surface)}><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><span className={cn("flex h-5 w-5 items-center justify-center rounded-full", style.marker)}>{style.icon}</span><span className="text-xs font-semibold text-foreground">{record.source}</span></div><span className="font-mono text-[10px] text-muted-foreground">{record.id}</span></div>{record.amount && <div className="mt-3 text-sm font-bold text-foreground">{record.amount}</div>}<div className="mt-1 text-[11px] text-muted-foreground">{record.detail}</div></div>; })}</div></CardContent></Card>;
+function LifecycleCard({ exception, graphVisible, graphLoading, graphError, graph, onViewGraph }: { exception: ExceptionDetailType; graphVisible: boolean; graphLoading: boolean; graphError: string | null; graph: import("../lib/types").ApiLifecycleGraph | null; onViewGraph: () => void }) {
+  return <Card><CardHeader className="flex-row items-center justify-between"><div><CardTitle>Transaction lifecycle</CardTitle><p className="mt-1 text-xs text-muted-foreground">Canonical records connected to {exception.orderId}</p></div><Button variant="link" size="sm" onClick={onViewGraph} disabled={graphLoading}>{graphLoading ? "Loading graph…" : graphVisible ? "Hide graph" : "View graph"} <ArrowRight className="h-3.5 w-3.5" /></Button></CardHeader><CardContent><div className="grid gap-2 sm:grid-cols-2">{exception.lifecycle.map(record => { const style = lifecycleStyles[record.status]; return <div key={`${record.source}-${record.id}`} className={cn("rounded-lg border p-3", style.surface)}><div className="flex items-center justify-between gap-2"><div className="flex items-center gap-2"><span className={cn("flex h-5 w-5 items-center justify-center rounded-full", style.marker)}>{style.icon}</span><span className="text-xs font-semibold text-foreground">{record.source}</span></div><span className="font-mono text-[10px] text-muted-foreground">{record.id}</span></div>{record.amount && <div className="mt-3 text-sm font-bold text-foreground">{record.amount}</div>}<div className="mt-1 text-[11px] text-muted-foreground">{record.detail}</div></div>; })}</div>{graphError && <Alert variant="warning" className="mt-4 text-xs">{graphError}</Alert>}{graphVisible && graph && <div className="mt-4 rounded-lg border border-border bg-muted/30 p-4"><div className="mb-3 flex items-center justify-between"><div className="text-xs font-semibold text-foreground">Derived event graph</div><div className="text-[10px] text-muted-foreground">{graph.nodes.length} nodes · {graph.edges.length} links</div></div><div className="grid gap-2 sm:grid-cols-2">{graph.nodes.map(node => <div key={node.id} className={cn("rounded-md border px-3 py-2", node.state === "MISSING" ? "border-destructive/30 bg-destructive/5" : "border-border bg-card")}><div className="flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-foreground">{node.label}</span><span className={cn("font-mono text-[9px]", node.state === "MISSING" ? "text-destructive" : "text-muted-foreground")}>{node.state}</span></div><div className="mt-1 font-mono text-[10px] text-muted-foreground">{node.id}</div></div>)}</div><div className="mt-3 space-y-1 border-t border-border pt-3">{graph.edges.map(edge => <div key={`${edge.source}-${edge.target}-${edge.relationship}`} className="font-mono text-[9px] text-muted-foreground">{edge.source} → {edge.target} · {edge.relationship}</div>)}</div></div>}</CardContent></Card>;
 }
 
 function TimelineCard({ exception }: { exception: ExceptionDetailType }) {

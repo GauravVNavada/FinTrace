@@ -36,6 +36,7 @@ Authenticated workspace
 3. Health and throughput show system state without implying live production monitoring.
 4. Priority exceptions link to the canonical detail view.
 5. Pattern cards show correlation signals and a recommended control.
+6. Export report downloads the current summary as a CSV; Run reconciliation invokes the bounded deterministic evaluation contract and reports completion or failure in place.
 
 Empty state: “No unresolved exceptions. All lifecycles reconciled for this batch.”  
 Failure state: “Dashboard unavailable. Try again. Existing run history remains available.”
@@ -46,7 +47,8 @@ Failure state: “Dashboard unavailable. Try again. Existing run history remains
 2. User filters by severity and status.
 3. Results show exception, source systems, severity, status, exposure, owner, and age.
 4. User selects **Inspect** to open the lifecycle detail.
-5. No action is performed from the list row; consequential actions are only available on the detail flow and remain policy-gated.
+5. Export queue downloads the currently filtered rows as a CSV; the compact queue filter action opens this screen at the filter controls.
+6. No consequential action is performed from the list row; consequential actions are only available on the detail flow and remain policy-gated.
 
 ## 4. Exception detail flow
 
@@ -55,6 +57,7 @@ Open exception
       |
       +--> Review deterministic exposure and rules
       +--> Inspect canonical lifecycle records
+      +--> View derived lifecycle graph
       +--> Read chronological incident timeline
       +--> Start bounded investigation
                |
