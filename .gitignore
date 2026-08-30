@@ -1,0 +1,14 @@
+node_modules
+.next
+dist
+.turbo
+*.log
+.env*
+!.env.example
+.venv
+__pycache__
+.pytest_cache
+.mypy_cache
+*.egg-info
+*.tsbuildinfo
+apps/api/data/generated/

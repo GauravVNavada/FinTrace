@@ -1,0 +1,1 @@
+"""Canonical FinTrace domain types."""

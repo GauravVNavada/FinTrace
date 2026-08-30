@@ -1,0 +1,133 @@
+# FinTrace Schema
+
+Status: accepted for MVP foundation · 2026-08-30
+
+## Canonical lifecycle
+
+```text
+OrderLifecycle
+├── order
+├── payment[]
+├── settlement[]
+├── invoice[]
+├── refund[]
+├── inventory_movements[]
+└── employee_actions[]
+```
+
+Every business-scoped record includes `organization_id`. IDs are immutable external references; internal database IDs are separate and never used as a substitute for source references.
+
+## Core entities
+
+| Entity | Required fields | Relationships |
+| --- | --- | --- |
+| Order | id, organization_id, store, total, status, created_at | has payments, invoice, refunds, inventory |
+| Payment | id, organization_id, order_id, amount, status, fee, captured_at | has settlements and refunds |
+| Settlement | id, organization_id, payment_id, gross, fees, tax, net, settled_at | references payment |
+| Invoice | id, organization_id, order_id, gross, tax, status, created_at | references order |
+| Refund | id, organization_id, payment_id, amount, status, processed_at | references payment |
+| Inventory movement | id, organization_id, order_id, sku, quantity, type, occurred_at | references order |
+| Employee action | id, organization_id, entity_type, entity_id, employee_id, action, occurred_at | references any lifecycle entity |
+| Exception | id, organization_id, order_id, type, severity, status, exposure, detected_at | has evidence, investigation, recommendation |
+| Audit event | id, organization_id, actor, action, resource, correlation_id, created_at | append-only |
+| Organization member | id, organization_id, actor_id, role, created_at | one role per organization actor |
+| Idempotency key | id, organization_id, actor_id, request_hash, response, expires_at | one response per organization/key |
+| Approval request | id, organization_id, exception_id, action, status, threshold, requester, created_at | has approval decisions |
+| Approval decision | id, organization_id, approval_request_id, actor_id, decision, created_at | one decision per actor/request |
+
+## Reconciliation status
+
+`RECONCILED`, `RECONCILED_WITH_VARIANCE`, `EXCEPTION`, `AMBIGUOUS`, and `PENDING` are mutually exclusive. A status must be derived by deterministic rules; a model cannot write it.
+
+## Exception schema
+
+```json
+{
+  "id": "EXC-1042",
+  "organization_id": "ORG-001",
+  "order_id": "ORD-2041",
+  "type": "REFUND_WITHOUT_INVENTORY_RETURN",
+  "severity": "HIGH",
+  "status": "OPEN",
+  "financial_exposure": 18740,
+  "currency": "INR",
+  "detected_at": "2026-08-30T12:00:00+05:30",
+  "rules_triggered": ["REFUND_EXISTS", "INVENTORY_RETURN_MISSING"]
+}
+```
+
+## Investigation result
+
+Investigation output is strict and uses controlled codes. The evidence score is calculated by the verifier, not supplied by the model. `UNRESOLVED` is a valid result and must not be coerced into a root cause.
+
+```json
+{
+  "status": "SUPPORTED",
+  "root_cause_code": "INCOMPLETE_REFUND_WORKFLOW",
+  "summary": "Refund completed but downstream operational reversal did not complete.",
+  "supporting_evidence": [{ "source": "refund", "record_id": "RFND-2991", "fact": "Full refund completed" }],
+  "contradictory_evidence": [],
+  "missing_evidence": ["Physical goods receipt confirmation"],
+  "recommended_action_code": "REQUEST_INVENTORY_VERIFICATION",
+  "requires_human_review": true
+}
+```
+
+## Controlled taxonomies
+
+Root cause codes include `SETTLEMENT_TIMING`, `SETTLEMENT_FEE_VARIANCE`, `SETTLEMENT_MISSING`, `DUPLICATE_PAYMENT`, `ERP_INVOICE_MISSING`, `ERP_AMOUNT_MISMATCH`, `INCOMPLETE_REFUND_WORKFLOW`, `INVENTORY_REVERSAL_MISSING`, `ERP_REVERSAL_MISSING`, `REFERENCE_MAPPING_FAILURE`, `PARTIAL_REFUND_MISMATCH`, `DATA_QUALITY_ERROR`, `AMBIGUOUS_ASSOCIATION`, and `UNKNOWN`.
+
+## Change policy
+
+Adding or removing a field, enum, relationship, or status requires updating this document, the API contract, tests, and the PRD section that defines the behavior.
+
+## Relational design details
+
+### Money and time
+
+Money is stored as `NUMERIC(18,2)` in persistence or integer minor units where a source supports minor units. Application calculations use decimal-safe types. Currency is explicit on monetary aggregates, and mixed-currency lifecycles are rejected for MVP. All event timestamps are `TIMESTAMPTZ` and are normalized to UTC at ingestion; display conversion happens at the edge.
+
+### Keys and constraints
+
+- Internal primary keys are UUIDs.
+- Source IDs are immutable and unique within `(organization_id, source_system, source_id)`.
+- Every child record has a foreign key to its canonical parent where the source relationship is known.
+- Status values use checked enums rather than arbitrary strings.
+- `financial_exposure >= 0`.
+- `settlement.net = settlement.gross - settlement.fees - settlement.tax - refund_adjustments` is validated by the reconciliation service and stored for explainability.
+- An exception has one current status but retains all state changes in audit history.
+
+### Suggested table inventory
+
+```text
+organizations
+users
+roles / permissions / role_permissions
+orders / order_items
+payments / settlements / refunds
+invoices / inventory_movements / employee_actions
+reconciliation_runs / reconciliation_results
+exceptions / exception_evidence
+investigations / investigation_tool_calls / investigation_results
+recommendations / approval_requests / approval_decisions
+audit_events
+exception_patterns / pattern_members
+```
+
+### Indexing baseline
+
+Every business table gets an organization index. High-volume access paths use composite indexes beginning with `organization_id`, followed by the filter and sort columns, for example `(organization_id, status, detected_at DESC)` on exceptions and `(organization_id, order_id)` on source entities. All list endpoints are paginated; no production endpoint may return an unbounded table.
+
+### Delete and retention behavior
+
+Source financial records and audit events are append-only for MVP. Corrections arrive as new source events or explicit adjustment records. Soft deletion is not used to hide financial history. Production retention, legal hold, archival, and PII deletion rules must be approved before live data is introduced.
+
+## Migration rules
+
+Migrations are version-controlled and forward-compatible. Required changes follow expand → backfill → validate → contract. Do not add a required column to a populated table without a safe default/backfill plan. Large indexes use the database's online/concurrent facility where supported. Destructive operations require a backup, migration review, and recovery test.
+
+## Tenant isolation review
+
+The repository contract must make `organization_id` a required argument, not an optional filter. Tests must include two organizations with identical source IDs and assert that reads, writes, investigation tools, aggregates, and audit history cannot cross the boundary.
+
+Sprint 3 uses the canonical lifecycle records and an in-process investigation/audit adapter. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002, while the demo runtime keeps equivalent control state in memory until PostgreSQL is provisioned. The planned `investigations`, `investigation_tool_calls`, and `investigation_results` tables remain persistence-sprint work; this temporary boundary must not be treated as production durability.
