@@ -1,6 +1,6 @@
 # FinTrace Schema
 
-Status: accepted for MVP foundation · 2026-08-30
+Status: accepted for MVP foundation; PostgreSQL integration increment in progress · 2026-08-30
 
 ## Canonical lifecycle
 
@@ -40,6 +40,8 @@ Every business-scoped record includes `organization_id`. IDs are immutable exter
 `RECONCILED`, `RECONCILED_WITH_VARIANCE`, `EXCEPTION`, `AMBIGUOUS`, and `PENDING` are mutually exclusive. A status must be derived by deterministic rules; a model cannot write it.
 
 ## Exception schema
+
+The public exception identifier is `source_exception_id` and is unique within an organization. The PostgreSQL primary key remains an internal UUID; API clients must never depend on it.
 
 ```json
 {
@@ -130,4 +132,4 @@ Migrations are version-controlled and forward-compatible. Required changes follo
 
 The repository contract must make `organization_id` a required argument, not an optional filter. Tests must include two organizations with identical source IDs and assert that reads, writes, investigation tools, aggregates, and audit history cannot cross the boundary.
 
-Sprint 3 uses the canonical lifecycle records and an in-process investigation/audit adapter. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002, while the demo runtime keeps equivalent control state in memory until PostgreSQL is provisioned. The planned `investigations`, `investigation_tool_calls`, and `investigation_results` tables remain persistence-sprint work; this temporary boundary must not be treated as production durability.
+Sprint 3 uses the canonical lifecycle records and an in-process investigation/audit adapter. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002, while the demo runtime keeps equivalent control state in memory until PostgreSQL is provisioned. Migration 003 adds stable public exception IDs. The PostgreSQL repository now supports canonical lifecycle, exception, aggregate, and audit reads/writes when `STORAGE_BACKEND=postgres`; investigation results, control state, and their durable idempotency records remain the next persistence increment. This temporary boundary must not be treated as production durability.

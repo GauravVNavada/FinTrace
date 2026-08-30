@@ -3,7 +3,7 @@ from typing import Any
 from app.domain.lifecycle import CanonicalLifecycle, LifecycleNotFoundError
 from app.domain.schemas import ExceptionType
 from app.graph.schemas import GraphEdge, GraphNode, GraphNodeState, LifecycleGraph
-from app.repositories.demo import DemoRepository
+from app.repositories.contracts import LifecycleRepository
 
 
 class GraphNotFoundError(LookupError):
@@ -11,7 +11,7 @@ class GraphNotFoundError(LookupError):
 
 
 class LifecycleGraphService:
-    def __init__(self, repository: DemoRepository) -> None:
+    def __init__(self, repository: LifecycleRepository) -> None:
         self._repository = repository
 
     def build(self, organization_id: str, exception_id: str) -> LifecycleGraph:

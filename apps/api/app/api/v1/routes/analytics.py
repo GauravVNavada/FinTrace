@@ -14,11 +14,12 @@ from app.graph.schemas import LifecycleGraph
 from app.graph.service import GraphNotFoundError, LifecycleGraphService
 from app.patterns.schemas import PatternResponse
 from app.patterns.service import PatternNotFoundError, PatternService
-from app.repositories.demo import demo_repository
+from app.repositories.factory import get_repository
 
 router = APIRouter()
-graph_service = LifecycleGraphService(demo_repository)
-pattern_service = PatternService(demo_repository)
+repository = get_repository()
+graph_service = LifecycleGraphService(repository)
+pattern_service = PatternService(repository)
 evaluation_service = EvaluationService()
 
 

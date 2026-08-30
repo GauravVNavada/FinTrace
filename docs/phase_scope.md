@@ -21,6 +21,8 @@ Status: active delivery plan · 2026-08-30
 - [ ] Replace demo adapter with `/api/v1` client.
 - [ ] Persist exceptions, investigations, approvals, and audit events.
 
+Persistence increment status: the PostgreSQL driver, organization-scoped repository path, explicit migration runner, deterministic seed command, readiness check, and local Compose database definition are implemented. The checkbox above remains open until a live PostgreSQL migration/seed/API run is executed; investigation/control/evaluation durability is intentionally still open.
+
 Definition of done: clean checkout can seed, reconcile, expose the dashboard, inspect an exception, investigate one case, escalate an ambiguous case, and emit benchmark metrics.
 
 Sprint 1 demo-boundary gate status: generator, migration definition, canonical lifecycle query, tenant isolation, API contract tests, 500-record CLI generation, and live Uvicorn HTTP smoke test are complete, so the deterministic demo-boundary sprints proceeded. Applying the migration to PostgreSQL remains the separate production-persistence gate because no PostgreSQL server is installed on this workstation; this does not represent a completed production database integration.

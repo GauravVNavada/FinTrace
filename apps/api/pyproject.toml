@@ -5,6 +5,7 @@ description = "FinTrace finance operations API"
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",
+  "psycopg[binary]>=3.2,<4",
   "pydantic-settings>=2.7,<3",
   "uvicorn[standard]>=0.34,<1"
 ]
@@ -12,8 +13,8 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
   "httpx>=0.28,<1",
-  "pytest>=8.3,<9",
-  "pytest-asyncio>=0.25,<1",
+  "pytest>=9.0.3,<10",
+  "pytest-asyncio>=1,<2",
   "ruff>=0.9,<1",
   "mypy>=1.14,<2"
 ]
@@ -21,6 +22,8 @@ dev = [
 [project.scripts]
 fintrace-generate = "app.simulator.cli:main"
 fintrace-evaluate = "app.evaluation.cli:main"
+fintrace-migrate = "app.persistence.cli:main"
+fintrace-seed = "app.persistence.seed_cli:main"
 
 [tool.setuptools.packages.find]
 include = ["app*"]

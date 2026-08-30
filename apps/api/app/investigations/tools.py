@@ -5,7 +5,7 @@ from typing import Any
 
 from app.domain.lifecycle import CanonicalLifecycle
 from app.investigations.schemas import EvidenceItem, EvidenceSource, ToolCall
-from app.repositories.demo import DemoRepository
+from app.repositories.contracts import LifecycleRepository
 
 _ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9-]{2,99}$")
 
@@ -24,7 +24,7 @@ def _validate_id(value: str, field_name: str) -> None:
 class EvidenceToolRegistry:
     """Named, read-only evidence tools with explicit organization scope."""
 
-    def __init__(self, repository: DemoRepository) -> None:
+    def __init__(self, repository: LifecycleRepository) -> None:
         self._repository = repository
 
     def invoke(self, name: str, organization_id: str, lifecycle: CanonicalLifecycle, entity_id: str | None = None) -> ToolResult:

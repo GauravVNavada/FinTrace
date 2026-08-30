@@ -83,8 +83,12 @@ cd apps/api && ruff check .
 
 The Python runtime is installed locally. Sprint 1 API/simulator tests run with the project virtual environment at `apps/api/.venv`. PostgreSQL migration execution remains pending until a local PostgreSQL instance is provisioned.
 
+The persistence increment adds `fintrace-migrate`, `fintrace-seed`, the `/ready` dependency check, and a PostgreSQL repository path selected by `STORAGE_BACKEND=postgres`. The required database integration gate is: start `docker compose up -d postgres`, apply migrations, seed a fixed dataset, run the API against PostgreSQL, and exercise lifecycle, exception, graph, pattern, and audit paths. It is not marked complete until that live environment check runs.
+
 Sprint 3 adds API contract coverage for the flagship cited investigation, same-key idempotency, missing tenant context, cross-tenant denial, invalid provider output, and provider unavailability. The test provider is deterministic; no external AI call is made.
 
 Sprint 4 adds capability authorization, action allowlists, low/high/secondary approval policy, safe simulated approval, resolution idempotency conflicts, audit-event assertions, and concurrent duplicate-approval tests. The controls service is in memory until the migration runner and PostgreSQL test database are added.
 
 Sprint 5 adds graph derivation and tenant isolation tests, deterministic pattern grouping and detail lookup, analytics capability checks, evaluation idempotency, hidden-ground-truth response assertions, and web route smoke checks. The browser smoke check verifies Patterns, Evaluations, and Audit loading/empty/populated states against a running Next.js server. The release script is exercised with a fixed seed and bounded 50-order run so its output is reproducible without PostgreSQL or an external AI provider.
+
+CI now runs frontend quality gates, API tests/static checks, and dependency audits. Secret scanning and a live PostgreSQL CI integration job remain release-hardening follow-ups.

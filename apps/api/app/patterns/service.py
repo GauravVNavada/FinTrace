@@ -5,7 +5,7 @@ from hashlib import sha1
 from app.domain.lifecycle import CanonicalLifecycle
 from app.patterns.schemas import PatternResponse
 from app.reconciliation.engine import reconcile_lifecycle
-from app.repositories.demo import DemoRepository
+from app.repositories.contracts import LifecycleRepository
 
 
 @dataclass(slots=True)
@@ -23,7 +23,7 @@ class PatternNotFoundError(LookupError):
 
 
 class PatternService:
-    def __init__(self, repository: DemoRepository) -> None:
+    def __init__(self, repository: LifecycleRepository) -> None:
         self._repository = repository
 
     def list(self, organization_id: str, limit: int = 20) -> list[PatternResponse]:

@@ -16,7 +16,7 @@ FinTrace follows one core rule: code calculates; AI interprets.
 
 ## Run locally
 
-Requirements: Node.js 20+, pnpm 9+.
+Requirements: Node.js 20+, pnpm 9+. Python 3.12+ is required for the API; Docker is required for the optional local PostgreSQL path.
 
 ```bash
 pnpm install
@@ -24,6 +24,8 @@ pnpm dev
 ```
 
 Open `http://localhost:3000`.
+
+The default API storage backend is the deterministic in-process demo adapter. To exercise PostgreSQL locally, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. See [`docs/local-development.md`](docs/local-development.md).
 
 Validation commands:
 

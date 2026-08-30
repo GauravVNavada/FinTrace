@@ -44,10 +44,12 @@ Open the web app at `http://localhost:3000` or `http://127.0.0.1:3000`. The deve
 
 ## Database phase
 
-PostgreSQL migrations are defined in `apps/api/migrations/001_initial_schema.sql` and `002_controls_and_idempotency.sql`, but are not applied locally until PostgreSQL is provisioned. Application startup must not mutate schema. Migrations run explicitly in CI/deployment.
+PostgreSQL migrations are defined in `apps/api/migrations/001_initial_schema.sql`, `002_controls_and_idempotency.sql`, and `003_exception_external_ids.sql`. If Docker is available, start the database with `docker compose up -d postgres`, then run `fintrace-migrate` and `fintrace-seed` from `apps/api`. Set `STORAGE_BACKEND=postgres` before starting Uvicorn to exercise the database repository. Application startup must not mutate schema; migrations run explicitly in CI/deployment.
+
+The repository includes `compose.yaml` for a local PostgreSQL 16 instance. This workstation does not currently have Docker installed, so the database-backed path is implemented but its live migration/seed check remains environment-dependent.
 
 ## Troubleshooting
 
 - If Next build output is stale, stop the dev server and rerun the build; do not delete source files.
 - If API imports fail, activate the `apps/api/.venv` environment and install the editable package.
-- If the dashboard shows demo data, that is expected until the API adapter phase is complete.
+- If `STORAGE_BACKEND=demo`, the dashboard and remaining static screens show deterministic demo data by design. The PostgreSQL repository path currently covers canonical API reads; replacing the remaining frontend demo adapter is tracked separately in `docs/phase_scope.md`.

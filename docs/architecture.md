@@ -67,7 +67,7 @@ This architecture makes AI failure non-fatal. If an AI provider is unavailable, 
 | Component | Language/runtime | Framework | Database/storage | Important configuration |
 | --- | --- | --- | --- | --- |
 | `apps/web` | TypeScript, Node 20+ | Next.js App Router, React, Tailwind | API responses; typed demo adapter during foundation | `NEXT_PUBLIC_API_BASE_URL` in the API phase |
-| `apps/api` | Python 3.12+ | FastAPI, Pydantic | PostgreSQL 16+ in the persistence phase | `DATABASE_URL`, `ALLOWED_ORIGINS`, `API_PREFIX` |
+| `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ when `STORAGE_BACKEND=postgres`; demo adapter by default | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
 | `packages/ui` | TypeScript, React | Tailwind + shadcn-style primitives | None | Shared by web apps only |
 | Evaluation runner | Python 3.12+ | Plain Python modules | Synthetic CSV/JSON and hidden ground truth | deterministic seed and output path |
 | AI provider adapter | Python | Provider-neutral interface | No prompt/result persistence outside API model | timeout, retry, model, redaction settings |
@@ -97,7 +97,7 @@ packages/
 └── ui/                      # shared visual primitives
 ```
 
-The API scaffold currently exposes `/health`, dashboard/exception/lifecycle reads, Sprint 3 investigation routes, Sprint 4 controls/audit routes, and Sprint 5 graph/pattern/evaluation routes. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. The demo repository and in-process investigation/control/evaluation stores are deliberately temporary and read-only with respect to source systems. They must be replaced by PostgreSQL-backed repositories and persistent audit storage before deployment.
+The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, Sprint 3 investigation routes, Sprint 4 controls/audit routes, and Sprint 5 graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical, exception, aggregate, lifecycle, and audit paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Investigation results, control state, evaluation reports, and durable idempotency still require their own persistence increment before production deployment.
 
 ## Request-to-data path
 
@@ -120,6 +120,6 @@ Database, provider, and external source calls require explicit timeouts. Retries
 | Stage | Web | API | Storage | Evidence required |
 | --- | --- | --- | --- | --- |
 | Local foundation | Next dev server | optional FastAPI scaffold | in-memory demo adapter | browser smoke check |
-| Local P0 | Next dev server | Uvicorn | local PostgreSQL | seed/reconcile/evaluate |
+| Local P0 | Next dev server | Uvicorn | local PostgreSQL | `fintrace-migrate`, `fintrace-seed`, seed/reconcile/evaluate |
 | Staging | Node deployment | containerized API | managed PostgreSQL | migration and security checks |
 | Production candidate | immutable build | separately deployable API | encrypted PostgreSQL + backups | load, auth, tenant, recovery tests |

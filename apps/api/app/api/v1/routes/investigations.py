@@ -12,10 +12,10 @@ from app.investigations.service import (
     InvestigationNotFoundError,
     InvestigationService,
 )
-from app.repositories.demo import demo_repository
+from app.repositories.factory import get_repository
 
 router = APIRouter()
-investigation_service = InvestigationService(demo_repository, get_ai_client(get_settings().ai_provider))
+investigation_service = InvestigationService(get_repository(), get_ai_client(get_settings().ai_provider))
 
 
 @router.post("/exceptions/{exception_id}/investigations", response_model=InvestigationResponse, status_code=status.HTTP_200_OK)

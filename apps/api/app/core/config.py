@@ -8,7 +8,9 @@ class Settings(BaseSettings):
     app_name: str = "FinTrace API"
     app_env: str = "development"
     api_prefix: str = "/api/v1"
-    database_url: str = "postgresql+psycopg://fintrace:fintrace@localhost:5432/fintrace"
+    database_url: str = "postgresql://fintrace:fintrace@localhost:5432/fintrace"
+    storage_backend: str = "demo"
+    migrations_dir: str = "migrations"
     allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     log_level: str = "INFO"
     ai_provider: str = "stub"

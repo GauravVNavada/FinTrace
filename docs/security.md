@@ -75,4 +75,4 @@ All current records are synthetic. A production implementation must classify PII
 - [x] Prompt-injection fixture has no effect.
 - [x] Malformed model output becomes a safe failure.
 - [x] Logs contain IDs and outcomes, not source payloads or secrets.
-- [ ] Dependency audit and secret scan run in CI.
+- [ ] Dependency audit and secret scan run in CI. Package audits are configured; secret scanning remains a CI follow-up.

@@ -3,3 +3,5 @@ packages:
   - "packages/*"
 allowBuilds:
   unrs-resolver: set this to true or false
+overrides:
+  "postcss@8.4.31": 8.5.23

@@ -12,7 +12,7 @@ from app.controls.schemas import (
     Decision,
     ResolutionRequestResponse,
 )
-from app.repositories.demo import DemoRepository
+from app.repositories.contracts import LifecycleRepository
 
 
 class ControlNotFoundError(LookupError):
@@ -32,7 +32,7 @@ class ControlStateError(ValueError):
 
 
 class ControlsService:
-    def __init__(self, repository: DemoRepository) -> None:
+    def __init__(self, repository: LifecycleRepository) -> None:
         self._repository = repository
         self._lock = RLock()
         self._requests: dict[str, tuple[str, ResolutionRequestResponse, set[str]]] = {}

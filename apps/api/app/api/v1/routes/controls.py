@@ -19,10 +19,11 @@ from app.controls.service import (
     ControlsService,
     ControlStateError,
 )
-from app.repositories.demo import demo_repository
+from app.repositories.factory import get_repository
 
 router = APIRouter()
-controls_service = ControlsService(demo_repository)
+repository = get_repository()
+controls_service = ControlsService(repository)
 
 
 @router.get("/audit-events", response_model=list[AuditEventResponse])
@@ -33,9 +34,9 @@ def list_audit_events(
     if Capability.AUDIT_READ not in context.capabilities:
         raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Audit access is restricted"})
     events = (
-        demo_repository.audit_events(context.organization_id, resource_id)
+        repository.audit_events(context.organization_id, resource_id)
         if resource_id
-        else demo_repository.audit_events_for_organization(context.organization_id)
+        else repository.audit_events_for_organization(context.organization_id)
     )
     public_fields = ("event_id", "organization_id", "actor_id", "action", "resource_id", "correlation_id", "created_at")
     return [AuditEventResponse.model_validate({field: event[field] for field in public_fields}) for event in events]

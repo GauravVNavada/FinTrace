@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.deps import get_organization_id
 from app.domain.schemas import ExceptionStatus, ExceptionSummary, Severity
-from app.repositories.demo import demo_repository
+from app.repositories.factory import get_repository
 
 router = APIRouter()
 
@@ -15,5 +15,5 @@ def list_exceptions(
     severity: Annotated[Severity | None, Query()] = None,
     status: Annotated[ExceptionStatus | None, Query()] = None,
 ) -> list[ExceptionSummary]:
-    items = demo_repository.list_exceptions(organization_id)
+    items = get_repository().list_exceptions(organization_id)
     return [item for item in items if (severity is None or item.severity == severity) and (status is None or item.status == status)]

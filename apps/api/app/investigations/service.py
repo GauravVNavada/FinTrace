@@ -15,7 +15,7 @@ from app.investigations.schemas import (
 )
 from app.investigations.tools import EvidenceToolRegistry
 from app.investigations.verifier import verify_candidate
-from app.repositories.demo import DemoRepository
+from app.repositories.contracts import LifecycleRepository
 
 
 class InvestigationNotFoundError(LookupError):
@@ -27,7 +27,7 @@ class IdempotencyConflictError(ValueError):
 
 
 class InvestigationService:
-    def __init__(self, repository: DemoRepository, provider: AIClient) -> None:
+    def __init__(self, repository: LifecycleRepository, provider: AIClient) -> None:
         self._repository = repository
         self._provider = provider
         self._tools = EvidenceToolRegistry(repository)

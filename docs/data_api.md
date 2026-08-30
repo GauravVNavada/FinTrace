@@ -1,6 +1,6 @@
 # FinTrace Data and API Contract
 
-Status: MVP contract draft · 2026-08-30
+Status: MVP contract draft; PostgreSQL repository path added · 2026-08-30
 
 ## Adapter rule
 
@@ -21,6 +21,11 @@ Successful responses return a resource or collection. Errors use a stable envelo
 ```
 
 ## Versioned endpoints
+
+### `GET /ready`
+
+**Auth:** none for local process checks.  
+**Behavior:** returns `ready` for the demo backend; when `STORAGE_BACKEND=postgres`, performs a bounded database connectivity check and returns `503` if the database is unavailable. This endpoint does not run migrations.
 
 ```text
 POST /api/v1/reconciliation-runs
@@ -202,5 +207,9 @@ The development actor context supports `ANALYST`, `FINANCE_MANAGER`, `CONTROLLER
 | `DEPENDENCY_UNAVAILABLE` | 503 | Safe dependency failure |
 
 ## API versioning and compatibility
+
+## Storage selection and migrations
+
+The API uses the deterministic in-process repository by default. Set `STORAGE_BACKEND=postgres` and a `DATABASE_URL` using the PostgreSQL repository path. Apply migrations explicitly with `fintrace-migrate`; application startup never mutates schema. Seed canonical demo records with `fintrace-seed` after migrations are applied. The current PostgreSQL path covers canonical reads, exception reads, aggregate reads, lifecycle reads, and audit event writes; investigation and control state persistence remains a later increment.
 
 Breaking changes require `/api/v2` or an explicitly negotiated media type. Additive response fields are preferred. Clients must tolerate unknown response fields and must not infer authorization from omitted UI fields.

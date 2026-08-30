@@ -16,6 +16,12 @@ async def test_health(client: AsyncClient) -> None:
     assert response.json()["status"] == "ok"
 
 
+async def test_readiness_reports_demo_backend(client: AsyncClient) -> None:
+    response = await client.get("/ready")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ready", "storage_backend": "demo"}
+
+
 async def test_dashboard_requires_tenant_context(client: AsyncClient) -> None:
     response = await client.get("/api/v1/dashboard/summary")
     assert response.status_code == 401
