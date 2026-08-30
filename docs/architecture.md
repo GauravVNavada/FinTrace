@@ -42,6 +42,14 @@ Synthetic generator / source adapters
 
 `packages/ui` owns reusable presentation primitives. Primitives are intentionally small and accessible, following shadcn conventions: composable React components, Tailwind classes, and no product-specific data.
 
+### Design-system ownership
+
+The complete shared UI boundary is `packages/ui/src`. It owns the component files, the public barrel, `cn`, shadcn-compatible variants, and `global.css`. Components are organized as focused files such as `button.tsx`, `card.tsx`, `badge.tsx`, `dropdown-menu.tsx`, and `progress.tsx`; a primitive's supported variants stay in its own file rather than being scattered across apps.
+
+`packages/ui/src/global.css` is the only source of global CSS and design tokens. It defines semantic CSS variables, base styles, accessibility states, and theme selectors. Tailwind semantic utilities map to those variables through the shared UI preset. Components never contain literal color values, palette utilities, or inline color styles. Product apps compose the primitives and may select a theme with a data attribute, but may not redefine tokens or create local primitive copies. The current inventory and verification evidence live in `docs/ui_component_inventory.md`.
+
+Each app's `app/globals.css` must contain exactly one import of the UI package stylesheet and no other declarations. This keeps multiple apps consistent while allowing app-specific themes through namespaced selectors in the shared token file, for example `[data-theme="operations"]` and `[data-theme="review"]`.
+
 `docs` owns the durable decisions. A change to product behavior must update the PRD and the relevant contract document in the same change.
 
 `apps/api` will own normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes as the backend phase is completed. The frontend should consume `/api/v1` only and never connect directly to a database.
@@ -94,7 +102,13 @@ apps/
     │   └── repositories/     # persistence adapter boundary
     └── tests/                # API contract tests
 packages/
-└── ui/                      # shared visual primitives
+└── ui/
+    └── src/
+        ├── global.css       # tokens, themes, reset, shared global styles
+        ├── button.tsx       # all Button variants and sizes
+        ├── card.tsx          # Card family
+        ├── ...              # every reusable shadcn primitive
+        └── index.ts         # public exports only
 ```
 
 The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, Sprint 3 investigation routes, Sprint 4 controls/audit routes, and Sprint 5 graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical, exception, aggregate, lifecycle, and audit paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Investigation results, control state, evaluation reports, and durable idempotency still require their own persistence increment before production deployment.

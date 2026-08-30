@@ -73,6 +73,8 @@ Do not report a theoretical concern or call a dependency vulnerable without advi
 - Verify AI result citations and evidence score independently.
 - Verify approval gates, idempotency, audit events, and ambiguous-case escalation.
 - Verify AI failure leaves reconciliation and manual review available.
+- Verify the UI component boundary: inventory reusable primitives under `packages/ui/src`, check public exports/imports, confirm each app `globals.css` is a one-line shared-style import, scan for literal colors, and verify semantic Tailwind token usage.
+- Execute `pnpm check:ui-architecture` and record its result alongside `pnpm lint`, `pnpm typecheck`, and `pnpm build`; browser smoke must cover all stable routes at desktop/tablet/mobile widths and representative interaction states.
 
 ## 7. Safe command examples
 

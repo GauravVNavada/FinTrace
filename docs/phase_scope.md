@@ -10,6 +10,7 @@ Status: active delivery plan · 2026-08-30
 - [x] Dashboard, queue, detail, patterns, runs, evaluation, audit, and settings surfaces.
 - [x] Reusable shadcn-style primitives: Button, Card, Badge, Progress.
 - [x] Documentation set and decision log.
+- [x] Centralized `packages/ui/src` component inventory, semantic token stylesheet, and app stylesheet import gate.
 
 ## Phase 1 — P0 backend vertical slice (in progress: persistence hardening)
 
@@ -136,3 +137,5 @@ Sprint 5 acceptance criteria:
 ## Review gates
 
 No phase is complete on UI appearance alone. Each gate requires implementation evidence, automated checks, documentation updates, and a short list of known limitations. A failing security or data-integrity gate blocks promotion regardless of frontend completeness.
+
+The UI design-system gate for the current web surface is complete under ADR-006. The inventory, semantic token boundary, app stylesheet import gate, static architecture checks, production build, and browser smoke evidence are recorded in `docs/ui_component_inventory.md`. Future UI work must keep this gate green; completion of this gate does not imply that deferred backend persistence, verified identity, or production deployment prerequisites are complete.

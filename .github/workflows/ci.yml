@@ -20,6 +20,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
+      - run: pnpm check:ui-architecture
       - run: pnpm build
       - run: pnpm audit --audit-level=high
 

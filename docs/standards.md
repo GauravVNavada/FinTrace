@@ -9,7 +9,11 @@ Status: active · 2026-08-30
 - Domain objects are typed and named with controlled enums.
 - Components are reusable and data-driven; product data does not live in presentational markup.
 - Business rules belong in the backend/domain layer, not React components.
-- Shared visual primitives belong in `packages/ui`.
+- Every reusable visual component belongs in `packages/ui/src`, with one component per focused file and explicit barrel exports.
+- `packages/ui/src/global.css` is the single source for resets, typography, spacing, radii, shadows, semantic color tokens, and theme overrides. App stylesheets may contain only the import of this file.
+- Components and app markup use semantic Tailwind/shadcn tokens backed by CSS variables; literal color values, palette utilities such as `bg-slate-900`, and inline color styles are not allowed in reusable components or product screens.
+- Shared Tailwind configuration/presets must map semantic utilities to the UI package tokens. Product apps must not redefine the palette.
+- All components used by an app must be imported from `packages/ui/src` (directly or through its public barrel); duplicate app-local primitives are prohibited.
 - Every new route needs a useful loading, empty, and error state before it is considered complete.
 - Consequential operations are idempotent and auditable.
 
@@ -41,6 +45,18 @@ Status: active · 2026-08-30
 ## Documentation change rule
 
 Any change to requirements, scope, schema, API, architecture, agent behavior, or safety policy must update the relevant Markdown file in `docs/` in the same change. If product behavior changes, update `docs/PRD.md` first and record the implementation consequence in the relevant supporting document.
+
+## Design-system conformance gate
+
+The component boundary is architectural, not cosmetic. A UI change is incomplete until:
+
+- the component exists under `packages/ui/src/<component>.tsx` and is exported from the package entrypoint;
+- all supported variants for a primitive live in that primitive's file (for example, every Button variant lives in `button.tsx`);
+- the component has no literal color values and uses semantic tokens only;
+- the app imports the component from `@fintrace/ui` and does not recreate it locally;
+- `apps/*/app/globals.css` contains only the shared stylesheet import;
+- `packages/ui/src/global.css` contains the token definitions and theme selectors needed by all apps;
+- the component inventory is exercised by at least one route or an explicit component test, and unused duplicate implementations are removed.
 
 ## Review checklist
 

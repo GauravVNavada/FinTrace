@@ -76,6 +76,19 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 - **Observability:** Correlate request, organization, run, exception, and investigation IDs without logging sensitive payloads.
 - **Maintainability:** Strict types, narrow modules, documented decisions, and tests for critical domain rules.
 
+### UI — Design-system requirements
+
+| ID | Requirement | Acceptance criteria |
+| --- | --- | --- |
+| UI-001 | Centralize reusable components | Every reusable component used by an app exists under `packages/ui/src`, is exported publicly, and is imported by the app from `@fintrace/ui`. |
+| UI-002 | Keep primitive variants together | Each primitive file contains all supported variants, sizes, and states for that primitive; app code does not fork variants. |
+| UI-003 | Centralize global styling | `packages/ui/src/global.css` owns reset, typography, semantic tokens, themes, and shared global utilities; each app `globals.css` contains exactly one import and no declarations. |
+| UI-004 | Prohibit hardcoded colors | Components and app markup contain no literal color values, palette utility classes, or inline color styles; Tailwind utilities resolve through semantic CSS variables. |
+| UI-005 | Support multi-app themes | Theme differences are represented by namespaced selectors/tokens in the shared global stylesheet; apps select a theme without defining a second palette. |
+| UI-006 | Verify component usage | The component inventory has no unused duplicate primitives, every exported primitive is either route-used or covered by an explicit component test, and static import/style scans are part of the quality gate. |
+
+Current evidence for UI-001 through UI-006 is maintained in [`ui_component_inventory.md`](ui_component_inventory.md) and enforced by `pnpm check:ui-architecture`.
+
 ## 5. Acceptance scenarios
 
 1. Clean sale with fee variance is reconciled with variance and zero loss exposure.

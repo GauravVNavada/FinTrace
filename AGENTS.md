@@ -10,7 +10,9 @@ Read `docs/PRD.md` first for product intent. Keep `docs/requirements.md`, `docs/
 - A user-visible behavior change updates the PRD and the relevant requirement/flow/scope document in the same change.
 - A schema or endpoint change updates `docs/schema.md` and `docs/data_api.md` before implementation is considered complete.
 - Keep `apps/web` presentation-focused; keep business rules in `apps/api`/domain services.
-- Keep shared UI primitives in `packages/ui` and do not put product data there.
+- Keep every reusable UI component in `packages/ui/src` and do not put product data there.
+- `packages/ui/src/global.css` is the single design-token and global-style source. Each app stylesheet must contain exactly one import of that file and no local CSS rules.
+- UI components must consume semantic CSS-variable tokens through Tailwind/shadcn variants; literal color values and product-specific palette classes are forbidden in component or app markup.
 
 ## Safety and quality
 

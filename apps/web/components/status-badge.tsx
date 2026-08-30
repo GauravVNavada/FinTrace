@@ -1,24 +1,24 @@
 import { Badge } from "@fintrace/ui";
 import type { ExceptionStatus, Severity } from "../lib/types";
 
-const severityStyles: Record<Severity, string> = {
-  CRITICAL: "bg-rose-100 text-rose-700",
-  HIGH: "bg-orange-100 text-orange-700",
-  MEDIUM: "bg-amber-100 text-amber-700",
-  LOW: "bg-slate-100 text-slate-600"
+const severityVariants: Record<Severity, "destructive" | "warning" | "muted"> = {
+  CRITICAL: "destructive",
+  HIGH: "destructive",
+  MEDIUM: "warning",
+  LOW: "muted"
 };
 
-const statusStyles: Record<ExceptionStatus, string> = {
-  OPEN: "bg-rose-50 text-rose-700",
-  IN_REVIEW: "bg-amber-50 text-amber-700",
-  RESOLVED: "bg-emerald-50 text-emerald-700",
-  ESCALATED: "bg-violet-50 text-violet-700"
+const statusVariants: Record<ExceptionStatus, "destructive" | "warning" | "success" | "info"> = {
+  OPEN: "destructive",
+  IN_REVIEW: "warning",
+  RESOLVED: "success",
+  ESCALATED: "info"
 };
 
 export function SeverityBadge({ severity }: { severity: Severity }) {
-  return <Badge className={severityStyles[severity]}><span className="mr-1 h-1.5 w-1.5 rounded-full bg-current" />{severity}</Badge>;
+  return <Badge variant={severityVariants[severity]}><span className="mr-1 h-1.5 w-1.5 rounded-full bg-current" />{severity}</Badge>;
 }
 
 export function StatusBadge({ status }: { status: ExceptionStatus }) {
-  return <Badge className={statusStyles[status]}>{status.replace("_", " ")}</Badge>;
+  return <Badge variant={statusVariants[status]}>{status.replace("_", " ")}</Badge>;
 }

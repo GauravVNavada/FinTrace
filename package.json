@@ -4,6 +4,7 @@
   "scripts": {
     "dev": "turbo dev",
     "build": "turbo build",
+    "check:ui-architecture": "node scripts/check-ui-architecture.mjs",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "prepare": "husky",

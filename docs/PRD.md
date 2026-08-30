@@ -7,7 +7,7 @@
 **Target:** Buildathon submission MVP  
 **Primary objective:** Build an engineering-complete, measurable AI finance-operations system that reconciles synthetic multi-system transaction lifecycles, investigates unresolved exceptions using evidence-backed AI reasoning, recommends controlled remediation, detects recurring failure patterns, and maintains a complete audit trail.
 
-**Implementation status:** The current repository increment delivers the frontend foundation, FastAPI API boundary, deterministic simulator/reconciliation/evaluation modules, provider-neutral investigation flow, server-side simulated controls, derived lifecycle graph, recurring pattern signals, evaluation reporting, and a reproducible demo script described in `docs/phase_scope.md`. A PostgreSQL driver, explicit migration runner, deterministic seed command, readiness check, local Compose definition, and organization-scoped canonical repository path are now implemented, but the live database gate has not run on this workstation. Investigation/control/evaluation persistence, durable audit/idempotency storage, authenticated identity claims, remaining frontend API migration, and a real AI provider remain later work. Sprint 5 analytics are deterministic and API-backed, but pattern recommendations remain advisory and graph/audit data are derived from the selected repository; this status line is maintained with the PRD so the document remains the product source of truth without overstating implementation completeness.
+**Implementation status:** The current repository increment delivers the frontend foundation, FastAPI API boundary, deterministic simulator/reconciliation/evaluation modules, provider-neutral investigation flow, server-side simulated controls, derived lifecycle graph, recurring pattern signals, evaluation reporting, and a reproducible demo script described in `docs/phase_scope.md`. The web UI now has a centralized, semantic-token shadcn-style component boundary, responsive shell, loading/empty/error presentation states, and a generated FinTrace product mark plus App Router favicon; the inventory and verification contract are recorded in `docs/ui_component_inventory.md`. A PostgreSQL driver, explicit migration runner, deterministic seed command, readiness check, local Compose definition, and organization-scoped canonical repository path are now implemented, but the live database gate has not run on this workstation. Investigation/control/evaluation persistence, durable audit/idempotency storage, authenticated identity claims, remaining frontend API migration, and a real AI provider remain later work. Sprint 5 analytics are deterministic and API-backed, but pattern recommendations remain advisory and graph/audit data are derived from the selected repository; this status line is maintained with the PRD so the document remains the product source of truth without overstating implementation completeness.
 
 ---
 
@@ -1925,6 +1925,12 @@ Do not over-engineer microservices.
 - React Query / TanStack Query
 - charting library
 - graph visualization library if needed
+
+### Frontend design-system contract
+
+FinTrace uses a shared shadcn-style design system. All reusable components live in `packages/ui/src`, with one focused file per primitive and all variants for that primitive kept together. The package exports the public component inventory and owns `packages/ui/src/global.css`, which is the single source for semantic CSS-variable tokens, themes, resets, typography, accessibility states, and shared global utilities.
+
+Each application imports that stylesheet through its own `app/globals.css`; the app file contains only the single import and no local CSS declarations. Components and product screens use semantic Tailwind utilities backed by the shared tokens. Literal color values, palette utility classes, inline color styles, duplicate app-local primitives, and scattered component variants are not allowed. Multiple applications select namespaced themes from the shared token file rather than maintaining separate palettes.
 
 ## Backend
 

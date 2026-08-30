@@ -3,9 +3,12 @@ import type { ExceptionDetail, ExceptionItem, Investigation, Metric, Pattern } f
 export const appConfig = {
   productName: "FinTrace",
   workspaceName: "Northstar Retail Group",
+  workspaceEnvironment: "Production workspace",
   batchName: "August close · Run 024",
   lastSynced: "30 Aug 2026, 14:32 IST",
-  currency: "INR" as const
+  currency: "INR" as const,
+  unresolvedExceptions: 56,
+  actor: { name: "Aarav Mehta", firstName: "Aarav", initials: "AM", role: "Finance analyst" }
 };
 
 export const metrics: Metric[] = [
@@ -16,10 +19,10 @@ export const metrics: Metric[] = [
 ];
 
 export const healthBreakdown = [
-  { label: "Reconciled", value: 867, percent: 86.7, tone: "bg-emerald-500" },
-  { label: "With variance", value: 60, percent: 6, tone: "bg-amber-400" },
-  { label: "Open exception", value: 56, percent: 5.6, tone: "bg-rose-500" },
-  { label: "Ambiguous", value: 17, percent: 1.7, tone: "bg-slate-400" }
+  { label: "Reconciled", value: 867, percent: 86.7, tone: "success" },
+  { label: "With variance", value: 60, percent: 6, tone: "warning" },
+  { label: "Open exception", value: 56, percent: 5.6, tone: "destructive" },
+  { label: "Ambiguous", value: 17, percent: 1.7, tone: "muted" }
 ];
 
 export const exceptionItems: ExceptionItem[] = [
