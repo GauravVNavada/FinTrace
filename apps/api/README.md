@@ -63,4 +63,4 @@ Development requests may use `X-Organization-Id`, `X-Actor-Id`, and `X-Actor-Rol
 - Repositories require organization scope.
 - Demo repository is deterministic and process-local; PostgreSQL is the durable runtime.
 - No route accepts organization scope from a request body.
-- Migrations 004–006 persist investigation/evaluation/control workflow snapshots, idempotency responses, ordered tool calls, FinancialInvestigation workspaces, source metadata, source analyses, and mapping proposals. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.
+- Migrations 004–011 persist investigation/evaluation/control workflow snapshots, idempotency responses, ordered tool calls, FinancialInvestigation workspaces, source metadata, source analyses, mapping proposals, immutable normalized datasets, reconciliation runs/results, uploaded investigations, and approval requests. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.
