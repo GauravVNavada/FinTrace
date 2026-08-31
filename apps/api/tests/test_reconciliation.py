@@ -1,5 +1,8 @@
+import pytest
+
+from app.domain.lifecycle import CanonicalLifecycle
 from app.evaluation.metrics import evaluate_dataset
-from app.reconciliation.engine import reconcile_dataset
+from app.reconciliation.engine import reconcile_dataset, reconcile_lifecycle
 from app.simulator.generator import GeneratorConfig, generate_dataset
 
 
@@ -39,3 +42,42 @@ def test_evaluation_is_reproducible_and_reports_throughput() -> None:
     assert first.match_precision == second.match_precision
     assert first.exception_recall == second.exception_recall
     assert first.throughput_per_second > 0
+
+
+def test_missing_uploaded_gateway_fee_is_a_controlled_result() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-1", "amount_minor": 10000},
+        payments=({"payment_id": "PAY-1", "amount_minor": 10000},),
+        settlements=(
+            {"settlement_id": "SET-1", "fees_minor": 0, "settled_at": "2026-08-03T00:00:00+00:00"},
+        ),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+    result = reconcile_lifecycle(lifecycle)
+    assert result.status == "EXCEPTION"
+    assert result.exception_type == "PAYMENT_FEE_MISSING"
+
+
+def test_timezone_naive_timestamps_are_rejected_before_subtraction():
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-NAIVE", "amount_minor": 10000},
+        payments=(
+            {
+                "payment_id": "PAY-NAIVE",
+                "amount_minor": 10000,
+                "captured_at": "2026-08-01T00:00:00+00:00",
+            },
+        ),
+        settlements=(
+            {"settlement_id": "SET-NAIVE", "fees_minor": 0, "settled_at": "2026-08-02T00:00:00"},
+        ),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+    with pytest.raises(ValueError, match="timezone offset"):
+        reconcile_lifecycle(lifecycle)

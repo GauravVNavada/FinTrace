@@ -11,7 +11,12 @@ async def client():
 
 
 def _headers(role: str = "CONTROLLER", key: str = "sprint5-001") -> dict[str, str]:
-    return {"X-Organization-Id": "ORG-001", "X-Actor-Role": role, "X-Actor-Id": "sprint5-user", "Idempotency-Key": key}
+    return {
+        "X-Organization-Id": "ORG-001",
+        "X-Actor-Role": role,
+        "X-Actor-Id": "sprint5-user",
+        "Idempotency-Key": key,
+    }
 
 
 @pytest.mark.asyncio
@@ -38,9 +43,13 @@ async def test_flagship_graph_is_derived_and_tenant_scoped(client: AsyncClient) 
 
 @pytest.mark.asyncio
 async def test_patterns_are_deterministic_and_capability_gated(client: AsyncClient) -> None:
-    analyst = await client.get("/api/v1/patterns", headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"})
+    analyst = await client.get(
+        "/api/v1/patterns", headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"}
+    )
     first = await client.get("/api/v1/patterns?limit=5", headers=_headers(key="sprint5-patterns-a"))
-    second = await client.get("/api/v1/patterns?limit=5", headers=_headers(key="sprint5-patterns-b"))
+    second = await client.get(
+        "/api/v1/patterns?limit=5", headers=_headers(key="sprint5-patterns-b")
+    )
 
     assert analyst.status_code == 403
     assert first.status_code == 200
@@ -55,13 +64,21 @@ async def test_patterns_are_deterministic_and_capability_gated(client: AsyncClie
 
 
 @pytest.mark.asyncio
-async def test_evaluation_report_is_idempotent_and_hidden_labels_stay_internal(client: AsyncClient) -> None:
+async def test_evaluation_report_is_idempotent_and_hidden_labels_stay_internal(
+    client: AsyncClient,
+) -> None:
     headers = _headers(key="sprint5-evaluation-001")
     body = {"orders": 50, "seed": 42, "anomaly_rate": 0.3}
     first = await client.post("/api/v1/evaluation/run", headers=headers, json=body)
     replay = await client.post("/api/v1/evaluation/run", headers=headers, json=body)
-    latest = await client.get("/api/v1/evaluation/latest", headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"})
-    analyst = await client.get("/api/v1/evaluation/latest", headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"})
+    latest = await client.get(
+        "/api/v1/evaluation/latest",
+        headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"},
+    )
+    analyst = await client.get(
+        "/api/v1/evaluation/latest",
+        headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"},
+    )
 
     assert first.status_code == 200
     assert replay.status_code == 200

@@ -11,4 +11,11 @@ def test_migrations_are_discovered_in_version_order() -> None:
         "002_controls_and_idempotency.sql",
         "003_exception_external_ids.sql",
         "004_workflow_persistence.sql",
+        "005_financial_investigations_and_source_files.sql",
+        "006_source_analysis_and_mappings.sql",
+        "007_relationship_proposals.sql",
+        "008_dataset_versions_and_lineage.sql",
+        "009_investigation_reconciliation.sql",
+        "010_financial_exception_investigations.sql",
+        "011_uploaded_approval_requests.sql",
     ]

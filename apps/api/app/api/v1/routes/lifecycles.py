@@ -12,13 +12,19 @@ router = APIRouter()
 
 
 @router.get("/{order_id}", response_model=LifecycleResponse)
-def get_lifecycle(order_id: str, context: Annotated[ActorContext, Depends(get_actor_context)]) -> LifecycleResponse:
+def get_lifecycle(
+    order_id: str, context: Annotated[ActorContext, Depends(get_actor_context)]
+) -> LifecycleResponse:
     if Capability.EXCEPTION_READ not in context.capabilities:
-        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"})
+        raise HTTPException(
+            status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"}
+        )
     try:
         lifecycle = get_repository().lifecycle(context.organization_id, order_id)
     except LifecycleNotFoundError as error:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Lifecycle not found") from error
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Lifecycle not found"
+        ) from error
     return LifecycleResponse(
         organization_id=context.organization_id,
         order=lifecycle.order,

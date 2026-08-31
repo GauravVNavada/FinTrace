@@ -19,12 +19,21 @@ async def client():
         yield test_client
 
 
-def _headers(role: str = "ANALYST", actor: str = "analyst-001", key: str = "controls-test-001") -> dict[str, str]:
-    return {"X-Organization-Id": "ORG-001", "X-Actor-Role": role, "X-Actor-Id": actor, "Idempotency-Key": key}
+def _headers(
+    role: str = "ANALYST", actor: str = "analyst-001", key: str = "controls-test-001"
+) -> dict[str, str]:
+    return {
+        "X-Organization-Id": "ORG-001",
+        "X-Actor-Role": role,
+        "X-Actor-Id": actor,
+        "Idempotency-Key": key,
+    }
 
 
 @pytest.mark.asyncio
-async def test_resolution_request_is_authorized_idempotent_and_approvable(client: AsyncClient) -> None:
+async def test_resolution_request_is_authorized_idempotent_and_approvable(
+    client: AsyncClient,
+) -> None:
     request = await client.post(
         "/api/v1/exceptions/EXC-1042/resolution-request",
         headers=_headers(key="controls-request-001"),
@@ -50,15 +59,21 @@ async def test_resolution_request_is_authorized_idempotent_and_approvable(client
     )
     manager_approval = await client.post(
         f"/api/v1/approvals/{payload['request_id']}/approve",
-        headers=_headers(role="FINANCE_MANAGER", actor="manager-001", key="controls-manager-approval-001"),
+        headers=_headers(
+            role="FINANCE_MANAGER", actor="manager-001", key="controls-manager-approval-001"
+        ),
     )
     controller_approval = await client.post(
         f"/api/v1/approvals/{payload['request_id']}/approve",
-        headers=_headers(role="CONTROLLER", actor="controller-001", key="controls-controller-approval-001"),
+        headers=_headers(
+            role="CONTROLLER", actor="controller-001", key="controls-controller-approval-001"
+        ),
     )
     controller_replay = await client.post(
         f"/api/v1/approvals/{payload['request_id']}/approve",
-        headers=_headers(role="CONTROLLER", actor="controller-001", key="controls-controller-approval-001"),
+        headers=_headers(
+            role="CONTROLLER", actor="controller-001", key="controls-controller-approval-001"
+        ),
     )
 
     assert analyst_approval.status_code == 403
@@ -69,7 +84,9 @@ async def test_resolution_request_is_authorized_idempotent_and_approvable(client
 
 
 @pytest.mark.asyncio
-async def test_resolution_request_rejects_unauthorized_action_and_key_conflict(client: AsyncClient) -> None:
+async def test_resolution_request_rejects_unauthorized_action_and_key_conflict(
+    client: AsyncClient,
+) -> None:
     unauthorized_action = await client.post(
         "/api/v1/exceptions/EXC-1042/resolution-request",
         headers=_headers(key="controls-invalid-action-001"),
@@ -92,7 +109,9 @@ async def test_resolution_request_rejects_unauthorized_action_and_key_conflict(c
 
 
 @pytest.mark.asyncio
-async def test_rejection_is_simulated_and_does_not_change_exception_state(client: AsyncClient) -> None:
+async def test_rejection_is_simulated_and_does_not_change_exception_state(
+    client: AsyncClient,
+) -> None:
     request = await client.post(
         "/api/v1/exceptions/EXC-1042/resolution-request",
         headers=_headers(key="controls-rejection-request-001"),
@@ -101,11 +120,15 @@ async def test_rejection_is_simulated_and_does_not_change_exception_state(client
     request_id = request.json()["request_id"]
     rejection = await client.post(
         f"/api/v1/approvals/{request_id}/reject",
-        headers=_headers(role="CONTROLLER", actor="rejecting-controller", key="controls-rejection-001"),
+        headers=_headers(
+            role="CONTROLLER", actor="rejecting-controller", key="controls-rejection-001"
+        ),
     )
     after_rejection = await client.post(
         f"/api/v1/approvals/{request_id}/approve",
-        headers=_headers(role="CONTROLLER", actor="other-controller", key="controls-after-rejection-001"),
+        headers=_headers(
+            role="CONTROLLER", actor="other-controller", key="controls-after-rejection-001"
+        ),
     )
 
     assert rejection.status_code == 200
@@ -154,9 +177,15 @@ def test_policy_requires_secondary_controller_for_high_value_exception() -> None
 
 def test_concurrent_duplicate_approval_cannot_apply_twice() -> None:
     service = ControlsService(demo_repository)
-    analyst = ActorContext(organization_id="ORG-001", actor_id="concurrent-requester", role=Role.ANALYST)
-    controller = ActorContext(organization_id="ORG-001", actor_id="concurrent-controller", role=Role.CONTROLLER)
-    request = service.request_resolution(analyst, "EXC-1042", ActionCode.REQUEST_INVENTORY_VERIFICATION, "concurrent-request-001")
+    analyst = ActorContext(
+        organization_id="ORG-001", actor_id="concurrent-requester", role=Role.ANALYST
+    )
+    controller = ActorContext(
+        organization_id="ORG-001", actor_id="concurrent-controller", role=Role.CONTROLLER
+    )
+    request = service.request_resolution(
+        analyst, "EXC-1042", ActionCode.REQUEST_INVENTORY_VERIFICATION, "concurrent-request-001"
+    )
 
     def approve(key: str):
         try:
@@ -186,11 +215,19 @@ def test_high_value_request_requires_two_distinct_controller_approvals() -> None
         rules_triggered=[],
     )
     service = ControlsService(repository)
-    requester = ActorContext(organization_id="ORG-001", actor_id="high-requester", role=Role.ANALYST)
-    first_controller = ActorContext(organization_id="ORG-001", actor_id="controller-001", role=Role.CONTROLLER)
-    second_controller = ActorContext(organization_id="ORG-001", actor_id="controller-002", role=Role.CONTROLLER)
+    requester = ActorContext(
+        organization_id="ORG-001", actor_id="high-requester", role=Role.ANALYST
+    )
+    first_controller = ActorContext(
+        organization_id="ORG-001", actor_id="controller-001", role=Role.CONTROLLER
+    )
+    second_controller = ActorContext(
+        organization_id="ORG-001", actor_id="controller-002", role=Role.CONTROLLER
+    )
 
-    request = service.request_resolution(requester, "EXC-HIGH-001", ActionCode.REQUEST_INVENTORY_VERIFICATION, "high-request-001")
+    request = service.request_resolution(
+        requester, "EXC-HIGH-001", ActionCode.REQUEST_INVENTORY_VERIFICATION, "high-request-001"
+    )
     first = service.approve(first_controller, request.request_id, "high-approval-001")
     second = service.approve(second_controller, request.request_id, "high-approval-002")
 

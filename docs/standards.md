@@ -1,6 +1,6 @@
 # FinTrace Engineering and Product Standards
 
-Status: active · 2026-08-30
+Status: active; ingestion and provider standards added · 2026-08-31
 
 ## Engineering
 
@@ -16,6 +16,15 @@ Status: active · 2026-08-30
 - All components used by an app must be imported from `packages/ui/src` (directly or through its public barrel); duplicate app-local primitives are prohibited.
 - Every new route needs a useful loading, empty, and error state before it is considered complete.
 - Consequential operations are idempotent and auditable.
+
+## Ingestion and AI evolution standards
+
+- Upload handlers are transport boundaries; parsing, classification, mapping, normalization, and reconciliation belong in typed backend services.
+- No uploaded file is sent wholesale to an AI provider. Source analysis uses bounded headers, inferred types, statistics, and limited samples.
+- A real provider must be explicitly configured. Offline deterministic behavior is allowed only in tests or an explicitly labeled offline mode.
+- Required mappings and medium/low-confidence relationships require user confirmation.
+- Source lineage is mandatory for normalized records so every canonical value can be traced to a file and row.
+- Financial investigation, exception investigation, reconciliation run, and evaluation run are separate domain objects.
 
 ## Financial correctness
 

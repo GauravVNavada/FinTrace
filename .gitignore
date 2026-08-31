@@ -12,3 +12,4 @@ __pycache__
 *.egg-info
 *.tsbuildinfo
 apps/api/data/generated/
+apps/api/data/uploads/

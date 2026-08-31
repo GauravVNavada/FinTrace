@@ -1,7 +1,9 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
-from app.investigations.provider import UnavailableAIClient
+from app.domain.lifecycle import CanonicalLifecycle
+from app.domain.schemas import ExceptionStatus, ExceptionSummary, ExceptionType, Severity
+from app.investigations.provider import StubAIClient, UnavailableAIClient
 from app.investigations.service import InvestigationService
 from app.main import app
 from app.repositories.demo import demo_repository
@@ -27,14 +29,23 @@ async def test_flagship_investigation_is_cited_and_idempotent(client: AsyncClien
     assert payload["root_cause_code"] == "INCOMPLETE_REFUND_WORKFLOW"
     assert payload["recommended_action_code"] == "REQUEST_INVENTORY_VERIFICATION"
     assert payload["evidence_score"] == 70
-    assert {item["record_id"] for item in payload["supporting_evidence"] if item["record_id"]} >= {"RFND-2991", "INV-4012"}
+    assert {item["record_id"] for item in payload["supporting_evidence"] if item["record_id"]} >= {
+        "RFND-2991",
+        "INV-4012",
+    }
     assert len(payload["tool_calls"]) == 6
-    assert {event["event_type"] for event in demo_repository.audit_events("ORG-001", "EXC-1042")} >= {
+    assert {
+        event["event_type"] for event in demo_repository.audit_events("ORG-001", "EXC-1042")
+    } >= {
         "INVESTIGATION_STARTED",
     }
 
-    detail = await client.get(f"/api/v1/investigations/{payload['investigation_id']}", headers=headers)
-    calls = await client.get(f"/api/v1/investigations/{payload['investigation_id']}/tool-calls", headers=headers)
+    detail = await client.get(
+        f"/api/v1/investigations/{payload['investigation_id']}", headers=headers
+    )
+    calls = await client.get(
+        f"/api/v1/investigations/{payload['investigation_id']}/tool-calls", headers=headers
+    )
     assert detail.status_code == 200
     assert calls.status_code == 200
     assert calls.json()[4]["name"] == "get_inventory_movements"
@@ -43,7 +54,9 @@ async def test_flagship_investigation_is_cited_and_idempotent(client: AsyncClien
 @pytest.mark.asyncio
 async def test_investigation_requires_tenant_and_idempotency(client: AsyncClient) -> None:
     no_tenant = await client.post("/api/v1/exceptions/EXC-1042/investigations")
-    no_key = await client.post("/api/v1/exceptions/EXC-1042/investigations", headers={"X-Organization-Id": "ORG-001"})
+    no_key = await client.post(
+        "/api/v1/exceptions/EXC-1042/investigations", headers={"X-Organization-Id": "ORG-001"}
+    )
     other_tenant = await client.post(
         "/api/v1/exceptions/EXC-1042/investigations",
         headers={"X-Organization-Id": "ORG-OTHER", "Idempotency-Key": "sprint3-other-001"},
@@ -82,3 +95,44 @@ def test_invalid_provider_result_becomes_unresolved() -> None:
     assert result.requires_human_review is True
     assert result.recommended_action_code is None
     assert provider.calls == 2
+
+
+def test_ambiguous_payment_relationship_is_unresolved_not_provider_failure() -> None:
+    exception = ExceptionSummary(
+        id="RRES-AMB-001",
+        organization_id="ORG-001",
+        order_id="ORD-AMB-001",
+        type=ExceptionType.AMBIGUOUS_ASSOCIATION,
+        severity=Severity.HIGH,
+        status=ExceptionStatus.OPEN,
+        financial_exposure=100,
+        currency="INR",
+        detected_at="2026-08-31T00:00:00+00:00",
+    )
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-AMB-001", "amount_minor": 10000},
+        payments=(
+            {"payment_id": "PAY-AMB-001", "amount_minor": 10000},
+            {"payment_id": "PAY-AMB-002", "amount_minor": 10000},
+        ),
+        settlements=(),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+    result = InvestigationService(demo_repository, StubAIClient()).investigate_lifecycle(
+        "ORG-001", exception, lifecycle
+    )
+
+    assert result.status == "UNRESOLVED"
+    assert result.root_cause_code in {"AMBIGUOUS_ASSOCIATION", "UNKNOWN"}
+    assert result.requires_human_review is True
+    assert all(call.status == "SUCCEEDED" for call in result.tool_calls)
+    assert {call.name for call in result.tool_calls} == {
+        "get_order",
+        "get_payments_for_order",
+        "get_invoice_for_order",
+        "get_settlements_for_order",
+        "get_refunds_for_order",
+    }

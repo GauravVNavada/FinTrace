@@ -13,6 +13,8 @@ class Role(StrEnum):
 
 
 class Capability(StrEnum):
+    FINANCIAL_INVESTIGATION_READ = "financial_investigation.read"
+    FINANCIAL_INVESTIGATION_WRITE = "financial_investigation.write"
     EXCEPTION_READ = "exception.read"
     EXCEPTION_INVESTIGATE = "exception.investigate"
     EXCEPTION_COMMENT = "exception.comment"
@@ -27,6 +29,7 @@ class Capability(StrEnum):
 class ActionCode(StrEnum):
     REQUEST_INVENTORY_VERIFICATION = "REQUEST_INVENTORY_VERIFICATION"
     REQUEST_ERP_INVOICE_CORRECTION = "REQUEST_ERP_INVOICE_CORRECTION"
+    REQUEST_PAYMENT_REVIEW = "REQUEST_PAYMENT_REVIEW"
     REQUEST_SETTLEMENT_REVIEW = "REQUEST_SETTLEMENT_REVIEW"
     REQUEST_REFUND_REVIEW = "REQUEST_REFUND_REVIEW"
     MARK_AS_TIMING_DIFFERENCE = "MARK_AS_TIMING_DIFFERENCE"
@@ -57,6 +60,8 @@ class ActorContext(BaseModel):
     @property
     def capabilities(self) -> frozenset[Capability]:
         capabilities = {
+            Capability.FINANCIAL_INVESTIGATION_READ,
+            Capability.FINANCIAL_INVESTIGATION_WRITE,
             Capability.EXCEPTION_READ,
             Capability.EXCEPTION_INVESTIGATE,
             Capability.EXCEPTION_COMMENT,
@@ -65,9 +70,21 @@ class ActorContext(BaseModel):
         if self.role == Role.FINANCE_MANAGER:
             capabilities.update({Capability.RESOLUTION_APPROVE_LOW, Capability.AUDIT_READ})
         elif self.role == Role.CONTROLLER:
-            capabilities.update({Capability.RESOLUTION_APPROVE_LOW, Capability.RESOLUTION_APPROVE_HIGH, Capability.POLICY_MANAGE, Capability.ANALYTICS_READ, Capability.AUDIT_READ})
+            capabilities.update(
+                {
+                    Capability.RESOLUTION_APPROVE_LOW,
+                    Capability.RESOLUTION_APPROVE_HIGH,
+                    Capability.POLICY_MANAGE,
+                    Capability.ANALYTICS_READ,
+                    Capability.AUDIT_READ,
+                }
+            )
         elif self.role == Role.AUDITOR:
-            capabilities = {Capability.EXCEPTION_READ, Capability.AUDIT_READ}
+            capabilities = {
+                Capability.FINANCIAL_INVESTIGATION_READ,
+                Capability.EXCEPTION_READ,
+                Capability.AUDIT_READ,
+            }
         return frozenset(capabilities)
 
 

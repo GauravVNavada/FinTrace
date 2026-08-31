@@ -31,7 +31,7 @@ export interface ExceptionItem {
   severity: Severity;
   status: ExceptionStatus;
   exposure: number;
-  currency: "INR";
+  currency: string;
   detectedAt: string;
   summary: string;
   source: string;
@@ -148,7 +148,18 @@ export interface ApiLifecycleGraph {
   edges: { source: string; target: string; relationship: string }[];
 }
 
-export type ResolutionActionCode = "REQUEST_INVENTORY_VERIFICATION" | "REQUEST_ERP_INVOICE_CORRECTION" | "REQUEST_SETTLEMENT_REVIEW" | "REQUEST_REFUND_REVIEW" | "MARK_AS_TIMING_DIFFERENCE" | "MARK_AS_EXPECTED_FEE_VARIANCE" | "ESCALATE_TO_FINANCE_MANAGER" | "ESCALATE_TO_CONTROLLER" | "CLOSE_AS_RESOLVED";
+export interface ApiLifecycleResponse {
+  organization_id: string;
+  order: Record<string, unknown>;
+  payments: Record<string, unknown>[];
+  settlements: Record<string, unknown>[];
+  invoices: Record<string, unknown>[];
+  refunds: Record<string, unknown>[];
+  inventory_movements: Record<string, unknown>[];
+  employee_actions: Record<string, unknown>[];
+}
+
+export type ResolutionActionCode = "REQUEST_INVENTORY_VERIFICATION" | "REQUEST_ERP_INVOICE_CORRECTION" | "REQUEST_PAYMENT_REVIEW" | "REQUEST_SETTLEMENT_REVIEW" | "REQUEST_REFUND_REVIEW" | "MARK_AS_TIMING_DIFFERENCE" | "MARK_AS_EXPECTED_FEE_VARIANCE" | "ESCALATE_TO_FINANCE_MANAGER" | "ESCALATE_TO_CONTROLLER" | "CLOSE_AS_RESOLVED";
 
 export interface ApiResolutionRequest {
   request_id: string;
@@ -208,4 +219,147 @@ export interface ApiInvestigation {
   evidence_score: number;
   tool_calls: { name: string; target: string; status: string; duration_ms: number }[];
   created_at: string;
+}
+
+export type FinancialInvestigationStatus = "DRAFT" | "SOURCES_UPLOADED" | "MAPPING_REQUIRED" | "RELATIONSHIP_REVIEW" | "READY_TO_BUILD" | "PROCESSING" | "RECONCILED" | "FAILED";
+export type SourceFileStatus = "UPLOADED" | "ANALYZING" | "MAPPING_REQUIRED" | "READY" | "FAILED";
+
+export interface ApiFinancialInvestigation {
+  id: string;
+  organization_id: string;
+  name: string;
+  description: string | null;
+  period_start: string | null;
+  period_end: string | null;
+  base_currency: string;
+  status: FinancialInvestigationStatus;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  source_file_count: number;
+}
+
+export interface ApiSourceFile {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  original_filename: string;
+  mime_type: string;
+  size_bytes: number;
+  row_count: number;
+  column_count: number;
+  status: SourceFileStatus;
+  detected_source_type: string | null;
+  detection_confidence: number | null;
+  created_at: string;
+}
+
+export interface DemoDataRequest {
+  orders: number;
+  seed: number;
+  anomaly_rate: number;
+  scenario_types?: string[];
+}
+
+export interface ApiDemoDataResponse {
+  financial_investigation_id: string;
+  orders: number;
+  seed: number;
+  anomaly_rate: number;
+  scenario_types: string[];
+  sources: ApiSourceFile[];
+}
+
+export type SourceType = "SALES" | "ORDERS" | "PAYMENTS" | "SETTLEMENTS" | "REFUNDS" | "INVOICES" | "INVENTORY_MOVEMENTS" | "EMPLOYEE_ACTIONS" | "UNKNOWN";
+export type MappingStatus = "PROPOSED" | "EDITED" | "CONFIRMED";
+
+export interface ApiSourceAnalysis {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  source_file_id: string;
+  headers: string[];
+  sample_rows: Record<string, string | null>[];
+  columns: { name: string; inferred_type: string; non_empty_count: number; unique_count: number; sample_values: string[]; min_value: string | null; max_value: string | null }[];
+  source_type: SourceType;
+  classification_confidence: number;
+  reasoning_summary: string;
+  provider_status: "OFFLINE_DETERMINISTIC" | "AI_PROVIDER" | "AI_PROVIDER_UNAVAILABLE";
+  analyzed_at: string;
+}
+
+export interface ApiSourceMapping {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  source_file_id: string;
+  source_column: string;
+  canonical_field: string | null;
+  confidence: number;
+  required: boolean;
+  inferred_type: string;
+  ignored: boolean;
+  status: MappingStatus;
+  updated_at: string;
+}
+
+export interface ApiRelationshipProposal {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  source_file_id: string;
+  target_source_file_id: string;
+  join_fields: string[];
+  evidence_summary: string;
+  confidence: number;
+  status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "EDITED";
+  updated_at: string;
+}
+
+export interface ApiDatasetVersion {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  version_no: number;
+  status: "READY" | "FAILED";
+  record_count: number;
+  source_count: number;
+  created_at: string;
+}
+
+export interface ApiReconciliationRun {
+  id: string;
+  organization_id: string;
+  financial_investigation_id: string;
+  dataset_version_id: string;
+  status: "COMPLETED" | "FAILED";
+  lifecycle_count: number;
+  reconciled_count: number;
+  exception_count: number;
+  ambiguous_count: number;
+  open_exposure_minor: number;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface ApiReconciliationResult {
+  id: string;
+  run_id: string;
+  order_id: string;
+  status: string;
+  exception_type: string | null;
+  severity: string;
+  exposure_minor: number;
+  findings: { code: string; message: string; exposure_minor: number }[];
+}
+
+export interface ApiFinancialInvestigationPattern {
+  pattern_id: string;
+  financial_investigation_id: string;
+  exception_type: string;
+  occurrence_count: number;
+  associated_exposure_minor: number;
+  member_order_ids: string[];
+  advisory: boolean;
+  observation: string;
 }

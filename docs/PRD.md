@@ -3,11 +3,47 @@
 **Product:** FinTrace  
 **Tagline:** Financial exception investigation and lifecycle observability for multi-system business operations  
 **Buildathon Track:** Razorpay AI Buildathon — Track 04: AI Finance Controller  
-**Document Version:** 1.0  
-**Target:** Buildathon submission MVP  
+**Document Version:** 2.0
+**Target:** Data-driven investigation platform evolution
 **Primary objective:** Build an engineering-complete, measurable AI finance-operations system that reconciles synthetic multi-system transaction lifecycles, investigates unresolved exceptions using evidence-backed AI reasoning, recommends controlled remediation, detects recurring failure patterns, and maintains a complete audit trail.
 
-**Implementation status:** The repository delivers the MVP vertical slice described in `docs/phase_scope.md`: Turbo workspace, semantic-token shadcn-style UI, FastAPI API boundary, deterministic simulator/reconciliation/evaluation modules, PostgreSQL migrations and seed, organization-scoped canonical reads, durable investigations/evaluations/controls/idempotency/audit records, verified HS256 identity claims with an explicit development fallback, derived lifecycle graph, recurring pattern signals, typed web API clients, and reproducible demo/test commands. The UI includes responsive loading/empty/error states, centralized reusable components under `packages/ui/src/components`, a generated FinTrace mark, an App Router favicon, functional CSV exports, API-backed evaluation/run actions, graph loading, searchable queue navigation, and usable header/help states. The default local provider remains the deterministic stub; an external provider is optional and never required for deterministic correctness. Pattern recommendations remain advisory, graph data are derived from the selected repository, and production deployment still requires operational controls such as a managed identity provider, secret manager, rate limiting, CSP/HSTS, and dependency/secret scanning.
+**Implementation status:** Sprints 0–7 are implemented for the local, synthetic-data product path. The repository provides a top-level `FinancialInvestigation` workspace, organization-scoped CSV/XLSX intake, bounded analysis and classification, mapping and relationship confirmation, immutable normalization with source lineage, deterministic lifecycle construction/reconciliation, durable uploaded-result investigations, advisory patterns, controls, audit, benchmark evaluation, fresh synthetic source generation, and connected web screens. The fresh generator uses the same upload pipeline and is bounded by request validation; the browser walkthrough has been verified against a running API and web server. The legacy `/exceptions` resource remains a seeded compatibility surface and is intentionally not presented as an uploaded-investigation projection. Uploaded runs are not scored against hidden ground truth because the upload contract does not accept labels; the public evaluation screen reports only measured synthetic benchmark metrics. A live external AI provider is opt-in through the configured OpenAI-compatible adapter; the default local mode is explicitly labelled deterministic/offline. The baseline also includes the Turbo workspace, semantic-token shadcn-style UI, FastAPI API boundary, PostgreSQL migrations and seed, organization-scoped canonical reads, durable workflow/idempotency/audit records, verified HS256 identity claims with an explicit development fallback, derived lifecycle graph, recurring pattern signals, typed web API clients, and reproducible tests. No product behavior is represented as complete unless it is persisted where required, API-backed, tested, and documented.
+
+## Active product evolution directive
+
+Current evolution status: the web source-intake route supports fresh synthetic generation or bounded CSV/XLSX upload, source analysis, classification review, mapping edits, explicit mapping confirmation, deterministic relationship review, immutable normalization, reconciliation, result investigation, advisory patterns, and audit inspection. Uploaded-run exceptions enter the bounded evidence-tool/verifier path, use the configured provider adapter when available, return a durable `SUPPORTED`, `UNRESOLVED`, or `FAILED` investigation, and are retrieved with their evidence trace. Dashboard, pattern, source, relationship, run, audit, and detail screens consume live API data and expose loading, empty, and unavailable states without substituting snapshots. The legacy seeded exception queue is kept as a separate compatibility workflow; uploaded results are shown in their owning financial investigation rather than silently merged into that queue. Labeled uploaded-dataset evaluation remains intentionally outside the current API because no ground-truth label contract exists.
+
+FinTrace is evolving from a seeded finance exception demo into an AI-assisted financial lifecycle investigation platform:
+
+> A business uploads financial and operational records for a time period. FinTrace classifies and maps those sources, reconstructs transaction lifecycles, deterministically reconciles what it can prove, then uses bounded AI to investigate unresolved lifecycle breaks and surface evidence-backed root causes, potential exposure, recurring control gaps, and safe next actions.
+
+The target pipeline is:
+
+```text
+Source files
+  → source analysis
+  → schema mapping
+  → relationship discovery
+  → canonical normalization
+  → lifecycle construction
+  → deterministic reconciliation
+  → exception creation
+  → bounded AI investigation
+  → deterministic verification
+  → human review and policy controls
+  → patterns, audit, and evaluation
+```
+
+The four terms below are intentionally distinct:
+
+| Term | Meaning |
+| --- | --- |
+| `FinancialInvestigation` | Top-level company/time-period workspace containing uploaded sources, dataset versions, runs, exceptions, patterns, and audit history. |
+| `ExceptionInvestigation` | Evidence-bounded investigation of one unresolved exception. |
+| `ReconciliationRun` | One deterministic execution over a specific dataset version. |
+| `EvaluationRun` | A benchmark execution against hidden synthetic ground truth. |
+
+Deterministic software establishes financial truth. AI interprets residual ambiguity. FinTrace is not a generic upload-and-ask-GPT system, spreadsheet chatbot, LLM arithmetic engine, autonomous money-moving agent, or replacement for accounting and audit systems.
 
 ---
 
@@ -1352,6 +1388,7 @@ Examples:
 ```text
 REQUEST_INVENTORY_VERIFICATION
 REQUEST_ERP_INVOICE_CORRECTION
+REQUEST_PAYMENT_REVIEW
 REQUEST_SETTLEMENT_REVIEW
 REQUEST_REFUND_REVIEW
 MARK_AS_TIMING_DIFFERENCE
@@ -2106,23 +2143,12 @@ This prevents cross-tenant data leakage.
 
 # 57. API Design
 
-Suggested MVP endpoints.
-
-## Reconciliation
-
-```http
-POST /api/v1/reconciliation-runs
-GET  /api/v1/reconciliation-runs
-GET  /api/v1/reconciliation-runs/{id}
-```
-
----
+The implemented MVP API is organized under `/api/v1`. Uploaded financial-investigation workflows use investigation-scoped run and result routes; there is no separate top-level reconciliation-run resource.
 
 ## Dashboard
 
 ```http
 GET /api/v1/dashboard/summary
-GET /api/v1/dashboard/trends
 ```
 
 ---
@@ -2132,7 +2158,6 @@ GET /api/v1/dashboard/trends
 ```http
 GET /api/v1/exceptions
 GET /api/v1/exceptions/{id}
-GET /api/v1/exceptions/{id}/timeline
 GET /api/v1/exceptions/{id}/graph
 ```
 
@@ -2144,14 +2169,6 @@ GET /api/v1/exceptions/{id}/graph
 POST /api/v1/exceptions/{id}/investigations
 GET  /api/v1/investigations/{id}
 GET  /api/v1/investigations/{id}/tool-calls
-```
-
----
-
-## Recommendations
-
-```http
-GET /api/v1/exceptions/{id}/recommendation
 ```
 
 ---
@@ -2211,9 +2228,9 @@ Consequential endpoints must support idempotency.
 Especially:
 
 ```http
-POST /resolution-request
-POST /approve
-POST /reconciliation-runs
+POST /api/v1/exceptions/{id}/resolution-request
+POST /api/v1/approvals/{id}/approve
+POST /api/v1/financial-investigations/{id}/reconciliation-runs
 ```
 
 Header:

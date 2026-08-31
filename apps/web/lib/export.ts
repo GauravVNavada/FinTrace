@@ -1,7 +1,8 @@
 export type CsvValue = string | number | boolean | null | undefined;
 
 function escapeCsvValue(value: CsvValue): string {
-  const text = value == null ? "" : String(value);
+  const rawText = value == null ? "" : String(value);
+  const text = /^[=+\-@]/.test(rawText) ? `'${rawText}` : rawText;
   return /[\",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 

@@ -1,10 +1,28 @@
 # FinTrace Architecture
 
-Status: accepted for MVP runtime · 2026-08-30
+Status: accepted local product architecture; Sprints 0–7 implemented · 2026-08-31
 
 ## Decision summary
 
 FinTrace uses a modular monorepo with one Next.js web application, one FastAPI API service, a shared UI package, and a versioned backend contract. The MVP does not introduce microservices beyond the web/API boundary, queues, graph databases, vector databases, or Kubernetes. A relational model is sufficient for canonical entities; the lifecycle graph is derived for presentation.
+
+## Evolution target
+
+The existing baseline is extended with an investigation-scoped ingestion pipeline. The top-level `FinancialInvestigation` owns source files, analysis, mappings, relationship proposals, dataset versions, reconciliation runs, exceptions, patterns, and audit history. `ExceptionInvestigation` remains a separate child workflow for evidence analysis of one exception.
+
+```text
+FinancialInvestigation
+  → source files and source analysis
+  → confirmed mappings and relationships
+  → normalized dataset version
+  → lifecycle construction
+  → ReconciliationRun
+  → exceptions and patterns
+  → ExceptionInvestigation
+  → review controls and audit
+```
+
+Uploaded source content is untrusted input. Classification and mapping receive bounded metadata, headers, inferred types, statistics, and limited samples; full files are not sent to a model. Deterministic relationship evidence and canonical normalization remain authoritative. AI may provide semantic interpretation but cannot establish monetary truth, authorization, or state transitions.
 
 ## System shape
 
@@ -52,7 +70,7 @@ Each app's `app/globals.css` must contain exactly one import of the UI package s
 
 `docs` owns the durable decisions. A change to product behavior must update the PRD and the relevant contract document in the same change.
 
-`apps/api` owns normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes. The frontend consumes `/api/v1` only and never connects directly to a database.
+`apps/api` owns source ingestion boundaries, bounded source analysis, normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes. The frontend consumes `/api/v1` only and never connects directly to a database.
 
 ## Runtime and deployment
 
@@ -98,7 +116,7 @@ apps/
     │   ├── controls/         # capabilities, approval policy, idempotency, audit
     │   ├── graph/            # derived lifecycle graph schemas and service
     │   ├── patterns/         # deterministic recurring-signal grouping
-    │   ├── evaluation/       # bounded evaluation API and report service
+    │   ├── evaluation/       # bounded synthetic evaluation API and report service
     │   └── repositories/     # persistence adapter boundary
     └── tests/                # API contract tests
 packages/
@@ -114,7 +132,7 @@ packages/
         └── index.ts         # public exports only
 ```
 
-The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default for tests. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical reads and all durable workflow paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
+The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, financial-investigation source/generation/normalization/reconciliation routes, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default for local review and tests. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical reads and durable workflow paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
 
 ## Request-to-data path
 

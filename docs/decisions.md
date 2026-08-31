@@ -65,3 +65,13 @@ Components consume semantic Tailwind utilities backed by CSS variables. Literal 
 **Why:** This gives the repository one accessible, testable design system, prevents visual drift, makes themes explicit, and keeps product applications focused on composition and behavior.
 
 **Acceptance evidence:** `docs/ui_component_inventory.md`, focused primitive files, public exports, semantic Tailwind preset, stylesheet line-count check, literal-color scan, duplicate-control scan, production build, and route/component smoke tests. The inventory is complete for the current web surface; future primitives must follow the change procedure in that document.
+
+## ADR-007 — Investigation-scoped ingestion without replacing canonical reconciliation
+
+**Status:** Accepted for the evolution program · 2026-08-31
+
+**Decision:** Add a top-level `FinancialInvestigation` resource and an explicit source-analysis/normalization pipeline around the existing canonical entities and deterministic reconciliation engine. Keep `ExceptionInvestigation` as the child workflow for one exception. Uploaded files, mappings, relationships, dataset versions, and runs are organization-scoped and persisted through the repository boundary.
+
+**Why:** The product must move from a pre-seeded exception demo to an evidence-driven workflow while retaining deterministic financial truth, existing safety controls, and the current reconciliation implementation.
+
+**Consequences:** New migrations and APIs are required. The demo adapter may support isolated tests, but production-looking metrics must come from an investigation dataset. Real AI is optional only when explicitly configured; unavailable providers must be visible rather than silently represented as real analysis.

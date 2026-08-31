@@ -10,7 +10,9 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--anomaly-rate", type=float, default=0.30)
     args = parser.parse_args()
-    report, _ = evaluate_dataset(generate_dataset(GeneratorConfig(args.orders, args.seed, args.anomaly_rate)))
+    report, _ = evaluate_dataset(
+        generate_dataset(GeneratorConfig(args.orders, args.seed, args.anomaly_rate))
+    )
     print("=== FINTRACE BENCHMARK ===")
     print(f"Lifecycles: {report.lifecycles}")
     print(f"Auto reconciled: {report.auto_reconciled}")

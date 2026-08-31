@@ -36,7 +36,8 @@ class LifecycleStore:
             return tuple(
                 item
                 for item in self._records.get(name, [])
-                if item.get("organization_id") == organization_id and item.get(foreign_key) == order_id
+                if item.get("organization_id") == organization_id
+                and item.get(foreign_key) == order_id
             )
 
         payments = related("payments")
@@ -44,12 +45,14 @@ class LifecycleStore:
         settlements = tuple(
             item
             for item in self._records.get("settlements", [])
-            if item.get("organization_id") == organization_id and item.get("payment_id") in payment_ids
+            if item.get("organization_id") == organization_id
+            and item.get("payment_id") in payment_ids
         )
         refunds = tuple(
             item
             for item in self._records.get("refunds", [])
-            if item.get("organization_id") == organization_id and item.get("payment_id") in payment_ids
+            if item.get("organization_id") == organization_id
+            and item.get("payment_id") in payment_ids
         )
         return CanonicalLifecycle(
             order=orders[0],

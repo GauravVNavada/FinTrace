@@ -42,7 +42,9 @@ def seed_database(database_url: str, config: GeneratorConfig) -> SeedResult:
                 "SELECT count(*) AS count FROM exceptions WHERE reconciliation_run_id = %s",
                 (existing_run["id"],),
             ).fetchone()["count"]
-            return SeedResult(config.organization_id, run_key, config.orders, int(exception_count), True)
+            return SeedResult(
+                config.organization_id, run_key, config.orders, int(exception_count), True
+            )
 
         run = conn.execute(
             """
@@ -108,7 +110,14 @@ def _insert_order(conn: Any, organization_uuid: Any, row: dict[str, Any]) -> Any
         ON CONFLICT (organization_id, source_order_id) DO UPDATE SET amount_minor = EXCLUDED.amount_minor
         RETURNING id
         """,
-        (organization_uuid, row["order_id"], row["store"], row["amount_minor"], row["status"], _date(row["created_at"])),
+        (
+            organization_uuid,
+            row["order_id"],
+            row["store"],
+            row["amount_minor"],
+            row["status"],
+            _date(row["created_at"]),
+        ),
     ).fetchone()["id"]
 
 
@@ -121,51 +130,99 @@ def _insert_payment(conn: Any, organization_uuid: Any, row: dict[str, Any], orde
         ON CONFLICT (organization_id, source_payment_id) DO UPDATE SET amount_minor = EXCLUDED.amount_minor
         RETURNING id
         """,
-        (organization_uuid, row["payment_id"], order_uuid, row["amount_minor"], row["gateway_fee_minor"], row["status"], _date(row["captured_at"])),
+        (
+            organization_uuid,
+            row["payment_id"],
+            order_uuid,
+            row["amount_minor"],
+            row["gateway_fee_minor"],
+            row["status"],
+            _date(row["captured_at"]),
+        ),
     ).fetchone()["id"]
 
 
-def _insert_settlement(conn: Any, organization_uuid: Any, row: dict[str, Any], payment_uuid: Any) -> None:
+def _insert_settlement(
+    conn: Any, organization_uuid: Any, row: dict[str, Any], payment_uuid: Any
+) -> None:
     conn.execute(
         """
         INSERT INTO settlements
           (organization_id, source_settlement_id, payment_id, gross_minor, fees_minor, tax_minor, net_minor, settled_at, status)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
-        (organization_uuid, row["settlement_id"], payment_uuid, row["gross_minor"], row["fees_minor"], row["tax_minor"], row["net_minor"], _date(row["settled_at"]), row["status"]),
+        (
+            organization_uuid,
+            row["settlement_id"],
+            payment_uuid,
+            row["gross_minor"],
+            row["fees_minor"],
+            row["tax_minor"],
+            row["net_minor"],
+            _date(row["settled_at"]),
+            row["status"],
+        ),
     )
 
 
-def _insert_invoice(conn: Any, organization_uuid: Any, row: dict[str, Any], order_uuid: Any) -> None:
+def _insert_invoice(
+    conn: Any, organization_uuid: Any, row: dict[str, Any], order_uuid: Any
+) -> None:
     conn.execute(
         """
         INSERT INTO invoices
           (organization_id, source_invoice_id, order_id, gross_minor, status, created_at)
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        (organization_uuid, row["invoice_id"], order_uuid, row["gross_minor"], row["status"], _date(row["created_at"])),
+        (
+            organization_uuid,
+            row["invoice_id"],
+            order_uuid,
+            row["gross_minor"],
+            row["status"],
+            _date(row["created_at"]),
+        ),
     )
 
 
-def _insert_refund(conn: Any, organization_uuid: Any, row: dict[str, Any], payment_uuid: Any) -> None:
+def _insert_refund(
+    conn: Any, organization_uuid: Any, row: dict[str, Any], payment_uuid: Any
+) -> None:
     conn.execute(
         """
         INSERT INTO refunds
           (organization_id, source_refund_id, payment_id, amount_minor, status, processed_at)
         VALUES (%s, %s, %s, %s, %s, %s)
         """,
-        (organization_uuid, row["refund_id"], payment_uuid, row["amount_minor"], row["status"], _date(row["processed_at"])),
+        (
+            organization_uuid,
+            row["refund_id"],
+            payment_uuid,
+            row["amount_minor"],
+            row["status"],
+            _date(row["processed_at"]),
+        ),
     )
 
 
-def _insert_inventory(conn: Any, organization_uuid: Any, row: dict[str, Any], order_uuid: Any) -> None:
+def _insert_inventory(
+    conn: Any, organization_uuid: Any, row: dict[str, Any], order_uuid: Any
+) -> None:
     conn.execute(
         """
         INSERT INTO inventory_movements
           (organization_id, source_movement_id, order_id, sku, quantity, movement_type, occurred_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (organization_uuid, row["movement_id"], order_uuid, row["sku"], row["quantity"], row["movement_type"], _date(row["occurred_at"])),
+        (
+            organization_uuid,
+            row["movement_id"],
+            order_uuid,
+            row["sku"],
+            row["quantity"],
+            row["movement_type"],
+            _date(row["occurred_at"]),
+        ),
     )
 
 
@@ -176,7 +233,15 @@ def _insert_employee_action(conn: Any, organization_uuid: Any, row: dict[str, An
           (organization_id, source_action_id, entity_type, entity_id, employee_id, action, occurred_at)
         VALUES (%s, %s, %s, %s, %s, %s, %s)
         """,
-        (organization_uuid, row["action_id"], row["entity_type"], row["entity_id"], row["employee_id"], row["action"], _date(row["occurred_at"])),
+        (
+            organization_uuid,
+            row["action_id"],
+            row["entity_type"],
+            row["entity_id"],
+            row["employee_id"],
+            row["action"],
+            _date(row["occurred_at"]),
+        ),
     )
 
 

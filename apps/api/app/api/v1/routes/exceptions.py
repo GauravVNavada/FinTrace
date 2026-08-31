@@ -16,21 +16,34 @@ def list_exceptions(
     context: Annotated[ActorContext, Depends(get_actor_context)],
     severity: Annotated[Severity | None, Query()] = None,
     status: Annotated[ExceptionStatus | None, Query()] = None,
+    limit: Annotated[int, Query(ge=1, le=1000)] = 100,
 ) -> list[ExceptionSummary]:
     _require(context, Capability.EXCEPTION_READ)
-    items = get_repository().list_exceptions(context.organization_id)
-    return [item for item in items if (severity is None or item.severity == severity) and (status is None or item.status == status)]
+    items = get_repository().list_exceptions(context.organization_id, limit)
+    return [
+        item
+        for item in items
+        if (severity is None or item.severity == severity)
+        and (status is None or item.status == status)
+    ]
 
 
 @router.get("/{exception_id}", response_model=ExceptionSummary)
-def get_exception(exception_id: str, context: Annotated[ActorContext, Depends(get_actor_context)]) -> ExceptionSummary:
+def get_exception(
+    exception_id: str, context: Annotated[ActorContext, Depends(get_actor_context)]
+) -> ExceptionSummary:
     _require(context, Capability.EXCEPTION_READ)
     item = get_repository().get_exception(context.organization_id, exception_id)
     if item is None:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail={"code": "RESOURCE_NOT_FOUND", "message": "Exception does not exist"})
+        raise HTTPException(
+            status_code=http_status.HTTP_404_NOT_FOUND,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Exception does not exist"},
+        )
     return item
 
 
 def _require(context: ActorContext, capability: Capability) -> None:
     if capability not in context.capabilities:
-        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"})
+        raise HTTPException(
+            status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"}
+        )

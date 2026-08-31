@@ -11,6 +11,8 @@ def main() -> None:
     parser.add_argument("--anomaly-rate", type=float, default=0.30)
     parser.add_argument("--output", type=Path, default=Path("data/generated"))
     args = parser.parse_args()
-    dataset = generate_dataset(GeneratorConfig(orders=args.orders, seed=args.seed, anomaly_rate=args.anomaly_rate))
+    dataset = generate_dataset(
+        GeneratorConfig(orders=args.orders, seed=args.seed, anomaly_rate=args.anomaly_rate)
+    )
     output = write_dataset(dataset, args.output)
     print(f"Generated {args.orders} lifecycles with seed {args.seed} at {output}")

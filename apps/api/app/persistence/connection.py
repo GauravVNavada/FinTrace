@@ -9,7 +9,7 @@ from psycopg.rows import dict_row
 @contextmanager
 def connection(database_url: str) -> Iterator[Any]:
     """Open one bounded transaction and roll it back if the caller fails."""
-    with psycopg.connect(database_url, row_factory=dict_row) as conn:
+    with psycopg.connect(database_url, row_factory=dict_row, connect_timeout=5) as conn:
         try:
             yield conn
             conn.commit()

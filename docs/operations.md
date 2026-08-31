@@ -1,6 +1,10 @@
 # FinTrace Operations and Observability
 
-**Status:** MVP operational contract · 2026-08-30
+**Status:** local product operational contract; ingestion and reconciliation observability defined · 2026-08-31
+
+## Ingestion metrics
+
+The evolution pipeline must expose safe counts and durations for generation, upload, analysis, mapping, normalization, lifecycle construction, reconciliation, and investigation. Logs may contain investigation/source/run IDs, statuses, sizes, row counts, and durations, but never file contents, provider prompts, tokens, or raw personal/financial payloads.
 
 ## Correlation fields
 
@@ -15,7 +19,7 @@ investigation_id
 idempotency_key
 ```
 
-Logs contain event names, status, duration, and safe identifiers. They do not contain tokens, full source records, prompts, model payloads, or personal data.
+The API middleware generates or validates a bounded `X-Request-Id`, returns it on every response, logs method/path/status/duration, and makes it available to audit correlation. Logs contain event names, status, duration, and safe identifiers. They do not contain tokens, full source records, prompts, model payloads, or personal data.
 
 ## Health endpoints
 

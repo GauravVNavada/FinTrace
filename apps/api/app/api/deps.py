@@ -12,7 +12,11 @@ from app.core.config import get_settings
 
 
 def _unauthorized(message: str = "Authentication required") -> HTTPException:
-    return HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=message, headers={"WWW-Authenticate": "Bearer"})
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=message,
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
 
 def _decode_part(value: str) -> bytes:
@@ -37,7 +41,9 @@ def _verified_claims(authorization: str | None) -> dict[str, Any] | None:
     settings = get_settings()
     if header.get("alg") != "HS256" or header.get("typ") not in {None, "JWT"}:
         raise _unauthorized("Unsupported access token")
-    expected = hmac.new(settings.auth_secret.encode(), f"{parts[0]}.{parts[1]}".encode(), hashlib.sha256).digest()
+    expected = hmac.new(
+        settings.auth_secret.encode(), f"{parts[0]}.{parts[1]}".encode(), hashlib.sha256
+    ).digest()
     if not hmac.compare_digest(signature, expected):
         raise _unauthorized("Invalid access token")
     now = int(time.time())
@@ -52,7 +58,9 @@ def _verified_claims(authorization: str | None) -> dict[str, Any] | None:
         raise _unauthorized("Invalid access token role")
     if not isinstance(claims.get("exp"), (int, float)) or now > float(claims["exp"]) + skew:
         raise _unauthorized("Access token expired")
-    if "iat" in claims and (not isinstance(claims["iat"], (int, float)) or float(claims["iat"]) > now + skew):
+    if "iat" in claims and (
+        not isinstance(claims["iat"], (int, float)) or float(claims["iat"]) > now + skew
+    ):
         raise _unauthorized("Invalid access token issued-at time")
     return claims
 
@@ -67,9 +75,11 @@ def get_organization_id(
     if claims is not None:
         claim_org = str(claims["organization_id"])
         if x_organization_id and x_organization_id != claim_org:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Tenant scope mismatch")
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN, detail="Tenant scope mismatch"
+            )
         return claim_org
-    if settings.auth_mode == "required":
+    if settings.auth_mode.casefold() == "required":
         raise _unauthorized("Bearer authentication is required")
     if not x_organization_id:
         raise _unauthorized()
@@ -93,4 +103,6 @@ def get_actor_context(
             role=Role(actor_role),
         )
     except ValueError as error:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid actor context") from error
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Invalid actor context"
+        ) from error

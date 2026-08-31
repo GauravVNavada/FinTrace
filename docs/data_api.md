@@ -1,10 +1,71 @@
 # FinTrace Data and API Contract
 
-Status: accepted MVP contract; PostgreSQL workflow persistence and verified bearer claims added · 2026-08-30
+Status: accepted evolution contract; Sprints 1–7 local ingestion, normalization, reconciliation, investigation, advisory-signal, and demo-generation slices implemented · 2026-08-31
 
 ## Adapter rule
 
-The web application uses typed API clients for dashboard summary, exception queue/detail, investigations, patterns, evaluations, and audit activity. The runs/settings surfaces are read-only product configuration views until their dedicated run-history contract is introduced. Components consume domain objects from client mapping functions and may not duplicate financial records or implement reconciliation logic.
+The web application uses typed API clients for dashboard summary, exception queue/detail, investigations, patterns, evaluations, audit activity, and the financial-investigation workflow. Financial-investigation run metrics, results, advisory patterns, uploaded exception investigation traces, source generation, lifecycle detail, and audit events are API-backed. The seeded exception queue remains a separate compatibility resource; uploaded results are not silently merged into it. Components consume domain objects from client mapping functions and may not duplicate financial records or implement reconciliation logic.
+
+## Active API evolution
+
+The upload workflow introduces a separate `FinancialInvestigation` resource. It is distinct from the existing exception-level `ExceptionInvestigation` routes. Sprint 1 implements the minimum coherent contracts:
+
+```text
+POST /api/v1/financial-investigations
+GET  /api/v1/financial-investigations
+GET  /api/v1/financial-investigations/{id}
+POST /api/v1/financial-investigations/{id}/sources
+GET  /api/v1/financial-investigations/{id}/sources
+DELETE /api/v1/financial-investigations/{id}/sources/{source_id}
+POST /api/v1/financial-investigations/{id}/demo-data
+```
+
+The upload endpoints validate organization scope, multipart metadata, extension/content consistency, compressed and uncompressed size/archive-member budgets, extracted row/column limits, safe generated storage names, and idempotency. Structural source analysis is explicitly sample-bounded; normalization parses through the configured row limit and rejects overflow rather than silently truncating. Sprint 2 adds bounded source analysis and explicit mapping review. Sprint 3 adds deterministic relationship proposals and immutable dataset-version normalization with source lineage; lifecycle and reconciliation endpoints must remain scoped to the financial investigation and its immutable dataset version.
+
+### Fresh synthetic source generation
+
+`POST /financial-investigations/{id}/demo-data` requires `Idempotency-Key` and accepts bounded `orders`, `seed`, `anomaly_rate`, and optional allowlisted `scenario_types`. It is available only for a workspace with no attached sources, creates separate orders/payments/settlements/invoices/refunds/inventory/employee-action CSV exports, and stores them through the same upload and audit pipeline as user-provided files. Generation never exposes hidden labels, never bypasses analysis/mapping/relationship confirmation, and cannot overwrite an existing source set. Reusing the same idempotency key and request replays the generated source response; a different request conflicts.
+
+### Sprint 1 implemented source contract
+
+`POST /financial-investigations` requires `Idempotency-Key` and a name, period start/end, and three-letter base currency. The API creates a `DRAFT` investigation in the caller's organization. `POST /financial-investigations/{id}/sources` requires a multipart `file` field and `Idempotency-Key`; only UTF-8 CSV and OOXML XLSX are accepted. The API returns bounded metadata including original display filename, byte size, row count, column count, status, and creation time. Raw file bytes are stored under a generated server reference and are not included in API responses.
+
+`GET` list/detail/source routes are organization-scoped. Reusing an upload idempotency key replays the original response; reusing it with a different request is a conflict. Deleting a source removes its generated stored file and writes `SOURCE_FILE_DELETED` to the audit stream. Source status is `UPLOADED` until analysis begins, `MAPPING_REQUIRED` after proposals are persisted, and `READY` only after required mappings are explicitly confirmed.
+
+### Sprint 2 implemented source-analysis contract
+
+```text
+POST  /financial-investigations/{id}/sources/{source_id}/analyze
+GET   /financial-investigations/{id}/sources/{source_id}/analysis
+GET   /financial-investigations/{id}/sources/{source_id}/mappings
+PATCH /financial-investigations/{id}/sources/{source_id}/mappings/{mapping_id}
+POST  /financial-investigations/{id}/sources/{source_id}/mappings/confirm
+PATCH /financial-investigations/{id}/sources/{source_id}/classification
+POST  /financial-investigations/{id}/relationships/discover
+GET   /financial-investigations/{id}/relationships
+PATCH /financial-investigations/{id}/relationships/{relationship_id}
+```
+
+Analysis is bounded to structural metadata and limited samples read from the generated server reference. The default provider is explicitly `OFFLINE_DETERMINISTIC`; an OpenAI-compatible provider is used only when configured. Provider output is validated against allowlisted source types and canonical fields. Confirmation is blocked when required mappings are absent or ignored, and no normalization or reconciliation is implied by a successful analysis.
+
+Relationship discovery uses only confirmed mappings and deterministic overlap of supported join fields. It returns `PROPOSED` relationships with evidence and confidence; only an explicit authorized decision can move one to `ACCEPTED`, `REJECTED`, or `EDITED`.
+
+### Sprint 3–7 dataset, investigation, signal, and demo contract
+
+```text
+POST /financial-investigations/{id}/dataset-versions/normalize
+GET  /financial-investigations/{id}/dataset-versions/latest
+GET  /financial-investigations/{id}/dataset-versions/{dataset_version_id}/records
+POST /financial-investigations/{id}/reconciliation-runs
+GET  /financial-investigations/{id}/reconciliation-runs/latest
+GET  /financial-investigations/{id}/reconciliation-runs/{run_id}/results
+POST /financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/investigate
+GET  /financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/investigation
+GET  /financial-investigations/{id}/patterns
+POST /financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/resolution-request
+```
+
+Normalization is blocked until every source has confirmed required mappings and every discovered relationship has an explicit decision. Unknown source classifications, rows with extra cells, timezone-naive timestamps, duplicate invoices, and normalized rows without a canonical relationship key are refused instead of ignored. Monetary source fields are converted from decimal major units to integer minor units using decimal-safe rounding; malformed dates, monetary values, duplicate source IDs, duplicate orders, and ambiguous lifecycle construction remain explicit failures. Reconciliation requires `Idempotency-Key`, reads one immutable dataset version, constructs lifecycles deterministically, persists one result per order, and records exception-created and run-completed audit events. The uploaded-exception investigation endpoint also requires `Idempotency-Key`; it reconstructs only the selected result's scoped lifecycle, lets the configured provider select from an allowlisted read-only tool set, validates the bounded plan and provider output against cited records and deterministic exception compatibility, and persists `SUPPORTED`, `UNRESOLVED`, or `FAILED`. Relationship ambiguity is `UNRESOLVED`; provider outage is `FAILED` with an explicit unavailable status. Its result can be retrieved through the scoped run/result investigation route, including the validated evidence score and read-only tool trace. It cannot alter normalized data, reconciliation results, or external financial state. Investigation patterns group repeated exception types from the latest run and are advisory signals only; they do not prove a common root cause. Uploaded datasets are not evaluated against hidden ground truth until a labeled evaluation contract is introduced.
 
 ## API envelope
 
@@ -28,16 +89,9 @@ Successful responses return a resource or collection. Errors use a stable envelo
 **Behavior:** returns `ready` for the demo backend; when `STORAGE_BACKEND=postgres`, performs a bounded database connectivity check and returns `503` if the database is unavailable. This endpoint does not run migrations.
 
 ```text
-POST /api/v1/reconciliation-runs
-GET  /api/v1/reconciliation-runs
-GET  /api/v1/reconciliation-runs/{id}
-
 GET  /api/v1/dashboard/summary
-GET  /api/v1/dashboard/trends
-
 GET  /api/v1/exceptions
 GET  /api/v1/exceptions/{id}
-GET  /api/v1/exceptions/{id}/timeline
 GET  /api/v1/exceptions/{id}/graph
 GET  /api/v1/lifecycles/{order_id}
 
@@ -45,11 +99,9 @@ POST /api/v1/exceptions/{id}/investigations
 GET  /api/v1/investigations/{id}
 GET  /api/v1/investigations/{id}/tool-calls
 
-GET  /api/v1/exceptions/{id}/recommendation
 POST /api/v1/exceptions/{id}/resolution-request
 POST /api/v1/approvals/{id}/approve
 POST /api/v1/approvals/{id}/reject
-
 GET  /api/v1/audit-events
 
 GET  /api/v1/patterns
@@ -63,12 +115,11 @@ GET  /api/v1/evaluation/latest
 - `organization_id` comes from authenticated server context; it is never trusted from a browser body.
 - Consequential POST requests require `Idempotency-Key`.
 - All query filters are validated against allowlisted enum values.
-- Pagination is cursor-based before production scale.
-- Every response carries or logs a `request_id`.
+- Collection endpoints accept bounded `limit` values and every response carries and logs a `request_id`; audit events use it as the default correlation ID.
 
 ## Investigation contract
 
-The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. The deterministic provider is the default local implementation.
+The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. Key pools retry in order for safe provider failures; an explicitly configured fallback provider can be tried after the primary pool is exhausted. The deterministic provider is the default local implementation.
 
 ## Caching and freshness
 
@@ -79,18 +130,6 @@ Dashboard aggregates may be cached by reconciliation run ID. Exception detail an
 When persistence is introduced, create an explicit migration for each schema change. Do not mutate tables at application startup. Update [`docs/schema.md`](schema.md) and the PRD in the same pull request.
 
 ## Endpoint specifications
-
-### `POST /api/v1/reconciliation-runs`
-
-**Auth:** `reconciliation.run`  
-**Headers:** `Idempotency-Key` required.  
-**Behavior:** starts a deterministic run against an approved input batch. It never calls the AI provider. The response identifies the run and exposes progress/status; the completed run contains aggregate metrics and exception counts.  
-**Failure:** `INVALID_DATASET`, `RUN_ALREADY_EXISTS`, `IDEMPOTENCY_CONFLICT`.
-
-### `GET /api/v1/reconciliation-runs/{id}`
-
-**Auth:** `dashboard.read`  
-**Response:** run metadata, counts by reconciliation status, throughput, and evaluation metrics when ground truth is available to the evaluator. Ground truth is never included in a normal API response.
 
 ### `GET /api/v1/dashboard/summary`
 
@@ -110,7 +149,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 ### `GET /api/v1/exceptions/{id}`
 
 **Auth:** `exception.read`  
-**Response:** exception metadata, exposure, deterministic rule findings, lifecycle records, timeline, policy state, and links to investigation/audit resources.  
+**Response:** exception metadata, exposure, and deterministic rule findings. The web detail view then retrieves the canonical lifecycle, derived graph, and resource-scoped audit events through their separate APIs; it does not use a client-side detail fixture.
 **Authorization:** object-level organization ownership is checked before lookup result is returned. A cross-tenant ID returns the same not-found shape as an unknown ID.
 
 ### `GET /api/v1/lifecycles/{order_id}`
@@ -127,16 +166,22 @@ When persistence is introduced, create an explicit migration for each schema cha
 **Behavior:** collects bounded read-only evidence and returns a structured investigation result. It does not approve or resolve.  
 **Failure:** `EXCEPTION_NOT_FOUND`, `INVESTIGATION_IN_PROGRESS`, `PROVIDER_UNAVAILABLE` (503 with a safe failed result), `RESULT_REJECTED` (unresolved result requiring review).
 
-**Current demo:** `EXC-1042` in `ORG-001` is the deterministic flagship fixture. It cites the refund, active invoice, payment, order, inventory, and employee-action evidence without exposing source-system mutation or a provider score.
+**Current compatibility demo:** `EXC-1042` in `ORG-001` is a seeded exception resource. Its lifecycle and evidence are read through the same organization-scoped APIs as the rest of the legacy compatibility surface; the detail UI does not substitute a hardcoded snapshot when the resource is absent.
 
 ### `POST /api/v1/exceptions/{id}/resolution-request`
 
-**Auth:** `resolution.request`  
-**Headers:** `Idempotency-Key` required.  
+**Auth:** `resolution.request`
+**Headers:** `Idempotency-Key` required.
 **Behavior:** creates one approval request if policy requires it; otherwise returns a simulated safe action only where explicitly allowlisted.  
 **Failure:** `ACTION_NOT_ALLOWED`, `APPROVAL_REQUIRED`, `INVALID_STATE`, `IDEMPOTENCY_CONFLICT`.
 
 **Current implementation:** resolution and approval state is persisted through the repository contract in PostgreSQL mode. Bearer tokens signed with the configured HS256 secret carry `sub`, `organization_id`, `role`, `iss`, `aud`, `iat`, and `exp`. `X-Actor-*` headers are accepted only in development mode.
+
+### `POST /api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/resolution-request`
+
+**Auth:** `resolution.request`
+**Headers:** `Idempotency-Key` required.
+**Behavior:** converts the selected uploaded `EXCEPTION` or `AMBIGUOUS` result into the same server-side approval policy used by the legacy exception queue. It records `REVIEW_REQUESTED` and does not mutate financial state. Duplicate keys replay the original request; different payloads conflict.
 
 ### `POST /api/v1/approvals/{id}/approve`
 

@@ -1,6 +1,10 @@
 # FinTrace Security Design
 
-**Status:** MVP security baseline · 2026-08-30
+**Status:** MVP security baseline; ingestion controls added to active requirements · 2026-08-31
+
+## File-ingestion security requirements
+
+The Sprint 1 upload boundary enforces an allowlisted extension/content policy for CSV and XLSX, maximum request and extracted-row/column limits, safe generated storage names, organization/investigation ownership checks, malformed/empty file rejection, temporary-storage cleanup, and bounded parsing. Original filenames are display metadata only. Spreadsheet formulas must not be exported back as executable formulas, and uploaded cell text must be treated as untrusted data for both UI rendering and AI prompts. Classification, mapping, and AI use are not performed in Sprint 1.
 
 ## 1. Threat model
 
@@ -35,7 +39,7 @@ API -> audit log boundary
 
 ### Authentication
 
-The API verifies HS256 bearer claims (`sub`, `organization_id`, `role`, `iss`, `aud`, `iat`, and `exp`) when a bearer token is provided. Set `AUTH_MODE=required` outside local development; in that mode a browser-provided organization header is never accepted as authentication. Production should place the signing key behind a secret manager and add issuer-side revocation/key rotation.
+The API verifies HS256 bearer claims (`sub`, `organization_id`, `role`, `iss`, `aud`, `iat`, and `exp`) when a bearer token is provided. Staging and production force `AUTH_MODE=required` and reject header-only tenant/actor context; a strong non-default signing secret is required. Production should place the signing key behind a secret manager and add issuer-side revocation/key rotation.
 
 ### Authorization
 
@@ -75,4 +79,4 @@ All current records are synthetic. A production implementation must classify PII
 - [x] Prompt-injection fixture has no effect.
 - [x] Malformed model output becomes a safe failure.
 - [x] Logs contain IDs and outcomes, not source payloads or secrets.
-- [ ] Dependency audit and secret scan run in CI. Package audits are configured; secret scanning remains a CI follow-up.
+- [x] Dependency audit and secret scan run in CI. Package audits and Gitleaks are configured.

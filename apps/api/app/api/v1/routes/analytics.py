@@ -32,7 +32,10 @@ def get_exception_graph(
     try:
         return graph_service.build(context.organization_id, exception_id)
     except GraphNotFoundError as error:
-        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "Exception does not exist"}) from error
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Exception does not exist"},
+        ) from error
 
 
 @router.get("/patterns", response_model=list[PatternResponse])
@@ -53,7 +56,10 @@ def get_pattern(
     try:
         return pattern_service.get(context.organization_id, pattern_id)
     except PatternNotFoundError as error:
-        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "Pattern does not exist"}) from error
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Pattern does not exist"},
+        ) from error
 
 
 @router.post("/evaluation/run", response_model=EvaluationResponse)
@@ -64,13 +70,20 @@ def run_evaluation(
 ) -> EvaluationResponse:
     _require(context, Capability.ANALYTICS_READ)
     if idempotency_key is None:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
+        )
     try:
         return evaluation_service.run(context.organization_id, payload, idempotency_key)
     except EvaluationConflictError as error:
-        raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": str(error)}) from error
+        raise HTTPException(
+            status_code=409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": str(error)}
+        ) from error
     except ValueError as error:
-        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": str(error)}) from error
+        raise HTTPException(
+            status_code=422, detail={"code": "INVALID_REQUEST", "message": str(error)}
+        ) from error
 
 
 @router.get("/evaluation/latest", response_model=EvaluationResponse)
@@ -81,9 +94,14 @@ def get_latest_evaluation(
     try:
         return evaluation_service.latest(context.organization_id)
     except EvaluationNotFoundError as error:
-        raise HTTPException(status_code=404, detail={"code": "RESOURCE_NOT_FOUND", "message": "Evaluation does not exist"}) from error
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "Evaluation does not exist"},
+        ) from error
 
 
 def _require(context: ActorContext, capability: Capability) -> None:
     if capability not in context.capabilities:
-        raise HTTPException(status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"})
+        raise HTTPException(
+            status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"}
+        )

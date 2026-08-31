@@ -2,7 +2,7 @@
 
 **Version:** 1.0.0  
 **Status:** Active  
-**Last updated:** 2026-08-30  
+**Last updated:** 2026-08-31
 **Source:** [`PRD.md`](PRD.md)
 
 ## 1. Purpose
@@ -22,17 +22,38 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 
 ## 3. Functional requirements
 
+### FIN — Financial investigation ingestion evolution
+
+| ID | Requirement | Status / acceptance criteria |
+| --- | --- | --- |
+| FIN-001 | Create a financial investigation workspace | Complete Sprint 1; persists organization, period, currency, creator, status, and timestamps. |
+| FIN-002 | Upload supported source files | Complete Sprint 1; accepts CSV/XLSX only, validates type/size/content, stores safe metadata, and never trusts a browser path. |
+| FIN-003 | Preserve source lineage | Implemented Sprint 3; normalized records retain source file, row, column, and source-record references. |
+| FIN-004 | Keep domain terms distinct | Active; financial workspace, exception investigation, reconciliation run, and evaluation run have separate identifiers and lifecycles. |
+| FIN-005 | Require explicit mapping confirmation | Implemented Sprint 2 slice; web review, allowlisted edits, and unresolved-required-field blocking are active before normalization. |
+| FIN-006 | Keep ambiguity first-class | Active; uncertain relationships become `AMBIGUOUS`/`UNRESOLVED` and are never guessed. |
+| FIN-007 | Analyze bounded source structure | Active Sprint 2; only headers, inferred column profiles, bounded samples, and row/column counts are analyzed. |
+| FIN-008 | Produce reviewable source classification | Active Sprint 2; deterministic offline classification is available and an explicitly configured provider may propose a classification; provider status is persisted. |
+| FIN-009 | Persist mapping proposals and edits | Active Sprint 2; proposals are tenant-scoped, canonical fields are allowlisted, and confirmed mappings cannot be edited in place. |
+| FIN-010 | Record source-analysis outcomes | Active Sprint 2; analysis, mapping, confirmation, edit, and provider-failure events are auditable and safe to inspect. |
+| FIN-011 | Discover relationships deterministically | Implemented Sprint 3 slice; proposals use confirmed canonical join fields, remain tenant-scoped, and require explicit acceptance, rejection, or edit decision. |
+| FIN-012 | Refuse unjoinable normalized data | Implemented Sprint 3 hardening; unsupported source types and rows without a canonical relationship key block lifecycle construction instead of being silently discarded. |
+| FIN-013 | Expose investigation-scoped outcomes | Implemented Sprint 4–6 slice; persisted run metrics, results, advisory patterns, and uploaded exception investigation traces are retrieved only through the owning financial investigation and organization scope. |
+| FIN-014 | Generate fresh synthetic source exports | Implemented Sprint 7; bounded `orders`, `seed`, `anomaly_rate`, and allowlisted scenario selection create source files through the same upload pipeline, require idempotency, and refuse overwrite when sources already exist. |
+| FIN-015 | Route uploaded outcomes into controlled review | Uploaded `EXCEPTION` and `AMBIGUOUS` results expose an idempotent, organization-scoped review-request path that reuses server-side action and approval policy. |
+
 ### RECON — Reconciliation
 
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
 | RECON-001 | Process a reproducible synthetic batch | Seed and record count are configurable; seed 42 produces the demo batch. |
-| RECON-002 | Normalize source records | Money, timestamps, status, and source references map to canonical types. |
+| RECON-002 | Normalize source records | Implemented Sprint 3 slice; decimal monetary fields become integer minor units, timestamps and source references are validated, malformed/duplicate records block the dataset, and unknown/unjoinable rows are refused. |
 | RECON-003 | Reconcile deterministically | Exact IDs, references, amount consistency, fees, taxes, and timing windows are evaluated without an LLM. |
 | RECON-004 | Assign one lifecycle status | Each lifecycle is `RECONCILED`, `RECONCILED_WITH_VARIANCE`, `EXCEPTION`, `AMBIGUOUS`, or `PENDING`. |
 | RECON-005 | Preserve ground truth isolation | The investigator cannot access `ground_truth.json`; only evaluation code can. |
 | RECON-006 | Query a canonical lifecycle | A tenant-scoped order lookup returns all related source records or a safe not-found response. |
 | RECON-007 | Produce reproducible evaluation metrics | A seeded run reports match rate, precision/recall, throughput, and unresolved cases without AI. |
+| RECON-008 | Keep investigation metrics API-backed | Implemented Sprint 4; investigation overview, runs, patterns, and source/detail surfaces read persisted API results and expose honest loading, empty, and unavailable states without fixture substitution. |
 
 ### EXC — Exceptions
 
@@ -48,12 +69,13 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
-| INV-001 | Use bounded tools | Only allowlisted, read-only, organization-scoped tools can be called. |
+| INV-001 | Use bounded tools | The configured provider may select only from allowlisted, read-only, organization-scoped tools; the service validates and caps every plan. |
 | INV-002 | Validate structured output | Schema validation occurs before display or persistence; retry once, then fail safely. |
 | INV-003 | Verify citations | Cited records exist, belong to the tenant, and support the root-cause code. |
 | INV-004 | Recommend only controlled actions | Free-text actions are not executable; action codes are allowlisted. |
 | INV-005 | Audit the investigation | Investigation start, tool calls, result validation, and review request are logged. |
-| INV-006 | Fail safely when the provider is unavailable | The API returns a typed failed investigation, preserves deterministic evidence access, and performs no resolution or source-system mutation. |
+| INV-006 | Fail safely when the provider is unavailable | The API retries explicitly configured keys/providers, then returns a typed failed investigation if all are unavailable; deterministic evidence remains accessible and no resolution or source-system mutation occurs. |
+| INV-007 | Retrieve a validated investigation trace | Implemented Sprint 5 slice; a tenant-scoped run/result route returns the persisted status, deterministic evidence score, citations, review requirement, and ordered read-only tool calls. |
 
 ### SAFE — Safety and controls
 
@@ -63,7 +85,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | SAFE-002 | Never move real money in MVP | Resolution is simulated and produces an audit event only. |
 | SAFE-003 | Prevent cross-tenant access | Every business query receives authenticated organization context. |
 | SAFE-004 | Keep finance available if AI fails | Deterministic reconciliation and manual review remain usable. |
-| SAFE-005 | Make retry-safe writes | Reconciliation and resolution writes require idempotency keys. |
+| SAFE-005 | Make retry-safe writes | Reconciliation, uploaded-exception investigation, and resolution writes require idempotency keys and replay stable responses. |
 | SAFE-006 | Enforce capability-level approval | Approval and rejection are authorized against server-side capability and threshold policy, not UI role visibility. |
 | SAFE-007 | Prevent duplicate approval effects | Same-key replay is stable, different request reuse conflicts, and concurrent duplicate decisions are rejected. |
 

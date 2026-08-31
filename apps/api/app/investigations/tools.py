@@ -27,7 +27,13 @@ class EvidenceToolRegistry:
     def __init__(self, repository: LifecycleRepository) -> None:
         self._repository = repository
 
-    def invoke(self, name: str, organization_id: str, lifecycle: CanonicalLifecycle, entity_id: str | None = None) -> ToolResult:
+    def invoke(
+        self,
+        name: str,
+        organization_id: str,
+        lifecycle: CanonicalLifecycle,
+        entity_id: str | None = None,
+    ) -> ToolResult:
         _validate_id(organization_id, "organization_id")
         order_id = str(lifecycle.order["order_id"])
         _validate_id(order_id, "order_id")
@@ -37,17 +43,31 @@ class EvidenceToolRegistry:
 
         if name == "get_order":
             values = (lifecycle.order,)
-            evidence = [EvidenceItem(source=EvidenceSource.ORDER, record_id=order_id, fact="Completed order exists.")]
+            evidence = [
+                EvidenceItem(
+                    source=EvidenceSource.ORDER, record_id=order_id, fact="Completed order exists."
+                )
+            ]
             target = order_id
         elif name == "get_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = (lifecycle.payments[0],)
-            evidence = [EvidenceItem(source=EvidenceSource.PAYMENT, record_id=payment_id, fact="Captured payment is linked to the order.")]
+            evidence = [
+                EvidenceItem(
+                    source=EvidenceSource.PAYMENT,
+                    record_id=payment_id,
+                    fact="Captured payment is linked to the order.",
+                )
+            ]
             target = payment_id
         elif name == "get_payments_for_order":
             values = lifecycle.payments
             evidence = [
-                EvidenceItem(source=EvidenceSource.PAYMENT, record_id=str(item["payment_id"]), fact="Captured payment is linked to the order.")
+                EvidenceItem(
+                    source=EvidenceSource.PAYMENT,
+                    record_id=str(item["payment_id"]),
+                    fact="Captured payment is linked to the order.",
+                )
                 for item in values
             ]
             target = order_id
@@ -57,28 +77,68 @@ class EvidenceToolRegistry:
             settlement_id = str(lifecycle.settlements[0]["settlement_id"])
             _validate_id(settlement_id, "settlement_id")
             values = (lifecycle.settlements[0],)
-            evidence = [EvidenceItem(source=EvidenceSource.SETTLEMENT, record_id=settlement_id, fact="Settlement is linked to the payment.")]
+            evidence = [
+                EvidenceItem(
+                    source=EvidenceSource.SETTLEMENT,
+                    record_id=settlement_id,
+                    fact="Settlement is linked to the payment.",
+                )
+            ]
             target = settlement_id
         elif name == "get_settlements_for_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.settlements
             evidence = [
-                EvidenceItem(source=EvidenceSource.SETTLEMENT, record_id=str(item["settlement_id"]), fact="Settlement is linked to the payment.")
+                EvidenceItem(
+                    source=EvidenceSource.SETTLEMENT,
+                    record_id=str(item["settlement_id"]),
+                    fact="Settlement is linked to the payment.",
+                )
                 for item in values
             ]
             target = payment_id
+        elif name == "get_settlements_for_order":
+            values = lifecycle.settlements
+            evidence = [
+                EvidenceItem(
+                    source=EvidenceSource.SETTLEMENT,
+                    record_id=str(item["settlement_id"]),
+                    fact="Settlement is linked to the order.",
+                )
+                for item in values
+            ]
+            target = order_id
         elif name == "get_refunds_for_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.refunds
             evidence = [
-                EvidenceItem(source=EvidenceSource.REFUND, record_id=str(item["refund_id"]), fact="Refund is processed.")
+                EvidenceItem(
+                    source=EvidenceSource.REFUND,
+                    record_id=str(item["refund_id"]),
+                    fact="Refund is processed.",
+                )
                 for item in values
             ]
             target = payment_id
+        elif name == "get_refunds_for_order":
+            values = lifecycle.refunds
+            evidence = [
+                EvidenceItem(
+                    source=EvidenceSource.REFUND,
+                    record_id=str(item["refund_id"]),
+                    fact="Refund is processed against the order.",
+                )
+                for item in values
+            ]
+            target = order_id
         elif name == "get_invoice_for_order":
             values = lifecycle.invoices
             evidence = [
-                EvidenceItem(source=EvidenceSource.INVOICE, record_id=str(item["invoice_id"]), fact="ERP invoice is active and linked to the order.")
+                EvidenceItem(
+                    source=EvidenceSource.INVOICE,
+                    record_id=str(item["invoice_id"]),
+                    fact="ERP invoice is active and linked to the order.",
+                )
                 for item in values
             ]
             target = order_id
@@ -86,16 +146,30 @@ class EvidenceToolRegistry:
             values = lifecycle.inventory_movements
             returns = [item for item in values if item.get("movement_type") == "RETURN"]
             evidence = [
-                EvidenceItem(source=EvidenceSource.INVENTORY, record_id=str(item["movement_id"]), fact="Inventory return movement exists.")
+                EvidenceItem(
+                    source=EvidenceSource.INVENTORY,
+                    record_id=str(item["movement_id"]),
+                    fact="Inventory return movement exists.",
+                )
                 for item in returns
             ]
             if not returns:
-                evidence.append(EvidenceItem(source=EvidenceSource.INVENTORY, record_id=None, fact="No inventory RETURN movement exists."))
+                evidence.append(
+                    EvidenceItem(
+                        source=EvidenceSource.INVENTORY,
+                        record_id=None,
+                        fact="No inventory RETURN movement exists.",
+                    )
+                )
             target = order_id
         elif name == "get_employee_action_logs":
             values = lifecycle.employee_actions
             evidence = [
-                EvidenceItem(source=EvidenceSource.EMPLOYEE_ACTION, record_id=str(item["action_id"]), fact="Employee action was recorded.")
+                EvidenceItem(
+                    source=EvidenceSource.EMPLOYEE_ACTION,
+                    record_id=str(item["action_id"]),
+                    fact="Employee action was recorded.",
+                )
                 for item in values
             ]
             target = order_id
@@ -115,7 +189,13 @@ class EvidenceToolRegistry:
 
         duration_ms = max(0, int((monotonic() - started) * 1000))
         return ToolResult(
-            call=ToolCall(name=name, target=target, status="SUCCEEDED", duration_ms=duration_ms, evidence=evidence),
+            call=ToolCall(
+                name=name,
+                target=target,
+                status="SUCCEEDED",
+                duration_ms=duration_ms,
+                evidence=evidence,
+            ),
             values=values,
         )
 

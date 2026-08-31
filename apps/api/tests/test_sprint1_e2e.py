@@ -21,6 +21,8 @@ async def test_sprint1_vertical_slice(tmp_path) -> None:
     assert '"order_id": "ORD-10000"' in ground_truth
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/api/v1/lifecycles/ORD-10000", headers={"X-Organization-Id": "ORG-001"})
+        response = await client.get(
+            "/api/v1/lifecycles/ORD-10000", headers={"X-Organization-Id": "ORG-001"}
+        )
     assert response.status_code == 200
     assert response.json()["order"]["order_id"] == "ORD-10000"

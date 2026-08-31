@@ -1,6 +1,6 @@
 # FinTrace UI Component Inventory
 
-**Status:** Implemented for the current web surface · 2026-08-30  
+**Status:** Implemented for the current web surface · 2026-08-31
 **Owner:** Web platform / design system  
 **Authority:** `docs/ui_component_migration_prompt.md`, `docs/standards.md`, and ADR-006 in `docs/decisions.md`
 
@@ -28,12 +28,14 @@ The inventory is intentionally limited to primitives needed by the current produ
 | `components/badge.tsx` | `Badge` | Status/severity badges, pattern state labels | `check:ui-architecture`; route smoke |
 | `components/button.tsx` | `Button`, `buttonVariants` | Shell actions, filters, queue, detail actions, controls | `check:ui-architecture`; route smoke |
 | `components/card.tsx` | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter` | All dashboard and product panels; loading state | `check:ui-architecture`; route smoke |
-| `components/input.tsx` | `Input` | Shell search and exception queue search | `check:ui-architecture`; interaction smoke |
+| `components/input.tsx` | `Input` | Shell search, exception queue search, investigation form | `check:ui-architecture`; interaction smoke |
+| `components/file-input.tsx` | `FileInput` | Investigation source intake | `check:ui-architecture`; upload interaction smoke |
 | `components/progress.tsx` | `Progress` | Reconciliation health and evidence score | `check:ui-architecture`; route smoke |
 | `components/select.tsx` | `Select` | Exception severity and lifecycle filters | `check:ui-architecture`; interaction smoke |
 | `components/separator.tsx` | `Separator` | Responsive shell header | `check:ui-architecture`; route smoke |
 | `components/skeleton.tsx` | `Skeleton` | App Router loading boundary | `check:ui-architecture`; loading route smoke |
 | `components/table.tsx` | `Table`, `TableHeader`, `TableBody`, `TableFooter`, `TableHead`, `TableRow`, `TableCell`, `TableCaption` | Queue and reconciliation-run tables | `check:ui-architecture`; route smoke |
+| `components/textarea.tsx` | `Textarea` | Investigation description form | `check:ui-architecture`; interaction smoke |
 
 `CardDescription`, `CardFooter`, `TableFooter`, and `TableCaption` are composable subparts of the route-used Card/Table families. They are exported together with their parent family so future screens do not create local structural variants.
 

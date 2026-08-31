@@ -39,8 +39,12 @@ class PatternService:
             group.exposure_minor += result.exposure_minor
             group.order_ids.append(str(lifecycle.order["order_id"]))
             group.severities.append(result.severity)
-        patterns = [self._to_response(group) for group in groups.values() if len(group.order_ids) >= 2]
-        patterns.sort(key=lambda item: (-item.occurrence_count, -item.associated_exposure, item.pattern_id))
+        patterns = [
+            self._to_response(group) for group in groups.values() if len(group.order_ids) >= 2
+        ]
+        patterns.sort(
+            key=lambda item: (-item.occurrence_count, -item.associated_exposure, item.pattern_id)
+        )
         return patterns[:limit]
 
     def get(self, organization_id: str, pattern_id: str) -> PatternResponse:
@@ -51,7 +55,10 @@ class PatternService:
 
     @staticmethod
     def _workflow(lifecycle: CanonicalLifecycle) -> str:
-        if any(action.get("action") == "MANUAL_REFUND_APPROVED" for action in lifecycle.employee_actions):
+        if any(
+            action.get("action") == "MANUAL_REFUND_APPROVED"
+            for action in lifecycle.employee_actions
+        ):
             return "Manual POS refund"
         return "Standard workflow"
 
@@ -77,7 +84,13 @@ class PatternService:
                 "Ambiguous payment association",
                 "Require a stronger source reference before payment matching.",
             ),
-        }.get((group.exception_type), (f"Recurring {group.exception_type.lower().replace('_', ' ')}", "Review the shared workflow control."))
+        }.get(
+            (group.exception_type),
+            (
+                f"Recurring {group.exception_type.lower().replace('_', ' ')}",
+                "Review the shared workflow control.",
+            ),
+        )
         severity_rank = {"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
         severity = max(group.severities, key=lambda value: severity_rank.get(value, 0))
         return PatternResponse(

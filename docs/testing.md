@@ -1,6 +1,24 @@
 # FinTrace Testing Strategy
 
-**Status:** active · 2026-08-30
+**Status:** active; local Sprints 0–7 path verified · 2026-08-31
+
+## Evolution test path
+
+The implemented end-to-end path is tested as one vertical slice:
+
+```text
+create financial investigation
+  → upload valid CSV/XLSX
+  → reject invalid/oversized/malformed input
+  → persist metadata after refresh
+  → analyze bounded samples
+  → confirm mappings and relationships
+  → normalize with lineage
+  → reconcile and investigate
+  → unresolved/ambiguous result → request review → approve or reject
+```
+
+Sprint 1 includes multipart validation, safe filename/path tests, empty/malformed file tests, organization isolation, idempotent upload behavior, metadata persistence, and audit assertions. Sprint 2 adds bounded CSV/XLSX analysis, inferred types, classification/provider status, mapping proposals, required-field blocking, edit/confirmation behavior, provider failure, persistence, and tenant-scope tests. Sprint 3–6 tests cover relationship decisions, normalization lineage, decimal-safe money conversion, reconciliation persistence, uploaded-result investigations, dynamic bounded tool selection, provider key-pool/fallback behavior, explicit `UNRESOLVED` ambiguity, controlled review/approval, patterns, audit, and hidden-label isolation. Sprint 7 tests bounded fresh generation through the same upload path and the browser flow. Browser verification checks source statuses and populated/empty/unavailable states rather than only checking that a dropzone renders.
 
 ## Test pyramid
 
@@ -96,14 +114,25 @@ $env:DATABASE_URL = "postgresql://fintrace:fintrace@127.0.0.1:55432/fintrace"
 ./scripts/e2e-postgres.ps1
 ```
 
-The Python runtime is installed locally. API/simulator tests run with `apps/api/.venv`; Docker PostgreSQL migrations 001–004 and seed-42 data have been applied locally.
+The Python runtime is installed locally. API/simulator tests run with `apps/api/.venv`; Docker PostgreSQL migrations 001–010 and seed-42 data are the local persistence verification path.
 
-The persistence increment adds `fintrace-migrate`, `fintrace-seed`, the `/ready` dependency check, and a PostgreSQL repository path selected by `STORAGE_BACKEND=postgres`. The live database gate has been run: Docker PostgreSQL was migrated and seeded, and HTTP smoke covered lifecycle, exception, investigation replay, evaluation replay, approval, and audit paths.
+## Verified local release evidence
 
-Sprint 3 adds API contract coverage for the flagship cited investigation, same-key idempotency, missing tenant context, cross-tenant denial, invalid provider output, and provider unavailability. The test provider is deterministic; no external AI call is made.
+On 2026-08-31 the repository was verified with:
+
+- API: Ruff clean, mypy clean across 82 source files, `53 passed, 3 skipped`.
+- PostgreSQL: migrations applied with `Applied 0 migration(s): none`; the three-test vertical slice passed with `STORAGE_BACKEND=postgres` and `FINTRACE_TEST_DATABASE_URL` set.
+- Web: lint clean, typecheck clean, UI architecture checks passed, and production build generated all 13 routes.
+- Browser: live API-connected walkthrough covered investigation creation/list/detail, fresh generator, source analysis, mapping confirmation, relationships, reconciliation, uploaded-result investigation, dashboard, patterns, runs/evaluation, audit, settings, and the seeded compatibility exception detail.
+
+The browser walkthrough used the in-process demo backend; PostgreSQL persistence was separately exercised by the integration suite. The default AI provider was the explicitly labelled deterministic local provider, so no live external AI call is claimed.
+
+The persistence increment adds `fintrace-migrate`, `fintrace-seed`, the `/ready` dependency check, and a PostgreSQL repository path selected by `STORAGE_BACKEND=postgres`. The live database gate covers migration/seed, lifecycle and exception reads, financial-investigation source upload/delete, source-analysis/mapping persistence, investigation replay, evaluation replay, approval, and audit paths.
+
+Sprint 3 adds relationship proposal generation, confirmed-mapping gating, explicit decisions, immutable dataset versions, decimal-safe money conversion, lineage, malformed-value refusal, unknown/unjoinable-row refusal, tenant isolation, and audit assertions. Sprint 4 adds investigation-scoped deterministic lifecycle construction, persisted reconciliation runs/results, idempotency, currency-aware metrics, and result retrieval. Sprint 5 adds uploaded-result investigation through provider-selected, allowlisted evidence tools, strict plan/result verification, safe `UNRESOLVED` output for ambiguity, explicit `FAILED`/503 behavior for provider outage, durable investigation responses, scoped retrieval, read-only trace display, the uploaded-result review/approval route, and provider key-pool/fallback behavior. Sprint 6 adds deterministic advisory pattern grouping and exposure roll-up. Sprint 7 adds source generation, scenario selection, generator idempotency/conflict behavior, and browser workflow verification. The test provider is deterministic; live provider probes are separate and never consume the deterministic test suite.
 
 Sprint 4 adds capability authorization, signed bearer-claim verification, action allowlists, low/high/secondary approval policy, safe simulated approval, durable resolution idempotency conflicts, audit-event assertions, and concurrent duplicate-approval tests.
 
 Sprint 5 adds graph derivation and tenant isolation tests, deterministic pattern grouping and detail lookup, analytics capability checks, evaluation idempotency, hidden-ground-truth response assertions, and web route smoke checks. The browser smoke check verifies Patterns, Evaluations, and Audit loading/empty/populated states against a running Next.js server. The release script is exercised with a fixed seed and bounded 50-order run so its output is reproducible without PostgreSQL or an external AI provider. CI also provisions PostgreSQL, applies migrations, seeds a bounded dataset, and runs `tests/test_postgres_integration.py`.
 
-CI now runs frontend quality gates, API tests/static checks, and dependency audits. Secret scanning and a live PostgreSQL CI integration job remain release-hardening follow-ups.
+CI now runs frontend quality gates, API tests/static checks, dependency audits, and the PostgreSQL integration suite including the upload-to-reconciliation-to-investigation vertical slice. Secret scanning remains a release-hardening follow-up.

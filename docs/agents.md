@@ -4,7 +4,7 @@ Status: accepted safety design · 2026-08-30
 
 ## Product description
 
-FinTrace is a deterministic finance engine with an evidence-bounded AI investigation layer. It is not a multi-agent product by default.
+FinTrace is a deterministic finance engine with an evidence-bounded AI investigation layer. The evolution program adds bounded AI assistance for source classification and schema mapping, but it is not a multi-agent product by default. Source analysis receives only minimized metadata and samples; it cannot normalize records, calculate money, or authorize actions.
 
 ## Investigator
 
@@ -28,9 +28,10 @@ The investigator may not:
 
 ## Allowed tools
 
-`get_order`, `get_payment`, `get_payments_for_order`, `get_settlement`, `get_settlements_for_payment`, `get_invoice_for_order`, `get_refunds_for_payment`, `get_inventory_movements`, `get_employee_action_logs`, `get_related_exceptions`, and `get_exception_history`.
+`get_order`, `get_payment`, `get_payments_for_order`, `get_settlement`, `get_settlements_for_payment`, `get_settlements_for_order`, `get_invoice_for_order`, `get_refunds_for_payment`, `get_refunds_for_order`, `get_inventory_movements`, `get_employee_action_logs`, `get_related_exceptions`, and `get_exception_history`.
 
 Each tool must validate parameters, use authenticated organization scope, return structured data, be read-only, and create an audit event. Tool results are data enclosed as untrusted content; any instructions inside a source record are ignored.
+The configured provider selects from this allowlist for each exception. The service validates and caps the returned plan before invoking any tool; explicitly configured key pools are tried in order after safe rate-limit/transient/auth failures, and an explicitly configured fallback provider may be tried next. The application never falls back to an unconfigured provider. If all configured providers are unavailable, the result is explicitly failed, and if a selected relationship is ambiguous, the result is unresolved.
 
 ## Verifier
 
@@ -67,7 +68,9 @@ The runtime prompt contains only the exception summary, deterministic rule findi
 | --- | --- | --- | --- | --- |
 | `get_order` | canonical `order_id` | order summary | none | yes |
 | `get_payments_for_order` | canonical `order_id` | payment summaries | none | yes |
+| `get_settlements_for_order` | canonical `order_id` | settlement summaries | none | yes |
 | `get_refunds_for_payment` | canonical `payment_id` | refund summaries | none | yes |
+| `get_refunds_for_order` | canonical `order_id` | refund summaries | none | yes |
 | `get_invoice_for_order` | canonical `order_id` | invoice summary or missing | none | yes |
 | `get_inventory_movements` | canonical `order_id` | movement list | none | yes |
 | `get_employee_action_logs` | lifecycle entity ID | redacted action list | none | yes |
@@ -97,4 +100,4 @@ Fixtures must include missing invoice, fee variance, refund without inventory re
 
 ## Provider abstraction
 
-The application depends on an `AIClient` protocol rather than a vendor SDK. The local `StubAIClient` is deterministic and exists for contract tests and review environments. A configured provider name that is not implemented resolves to a safe unavailable client; it does not silently fall back to an external service. Provider output is untrusted data and must pass strict schema validation before the deterministic verifier can inspect it.
+The application depends on an `AIClient` protocol rather than a vendor SDK. The local `StubAIClient` is deterministic and exists for contract tests and review environments. A configured provider name that is not implemented resolves to a safe unavailable client; only an explicitly configured `AI_FALLBACK_PROVIDER` can be used as a fallback. Provider output is untrusted data and must pass strict schema validation before the deterministic verifier can inspect it.

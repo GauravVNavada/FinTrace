@@ -1,6 +1,21 @@
 # FinTrace Schema
 
-Status: accepted for MVP; PostgreSQL workflow persistence migration 004 applied and verified · 2026-08-30
+Status: accepted evolution schema; migrations 001–011 applied and verified locally · 2026-08-31
+
+## Domain separation for the evolution program
+
+The existing exception-level investigation schema remains valid for `ExceptionInvestigation`. It must not be reused as the top-level workspace for uploaded source data.
+
+| Entity | Purpose | Owns |
+| --- | --- | --- |
+| `FinancialInvestigation` | Top-level company/time-period analysis workspace | source files, mappings, relationships, dataset versions, runs, exceptions, patterns, and audit scope |
+| `ExceptionInvestigation` | Investigation of one unresolved exception | bounded tool calls, structured result, evidence verification, and recommendation |
+| `ReconciliationRun` | Deterministic execution over one dataset version | counts, statuses, exposure, throughput, and run lifecycle |
+| `EvaluationRun` | Benchmark execution against hidden synthetic ground truth | measured deterministic/AI metrics and evaluation configuration |
+
+Migration 005 adds the `financial_investigations` and `source_files` tables for the Sprint 1 source-intake boundary. Migration 006 adds tenant-scoped `source_analyses` and `source_mappings` for the Sprint 2 analysis/confirmation boundary. Migration 007 adds tenant-scoped `relationship_proposals`; proposals are deterministic evidence, never automatic acceptance. Migration 008 adds immutable `dataset_versions` and tenant-scoped `normalized_records` with source lineage. Migration 009 adds investigation-scoped `financial_reconciliation_runs` and `financial_reconciliation_results` linked to the immutable dataset version. Migration 010 adds uploaded-result `financial_exception_investigations` with durable bounded responses. Migration 011 allows `approval_requests` to reference either a canonical exception or an uploaded reconciliation result, enforcing exactly one subject. Existing canonical entities and migration ordering must be preserved.
+
+Fresh synthetic source generation does not add a parallel schema: it persists generated CSV exports through `source_files`, then follows the same analysis, mapping, relationship, normalization, reconciliation, and uploaded-result investigation boundaries. The seeded `exceptions` table remains a compatibility resource and is not a hidden projection of `financial_reconciliation_results`.
 
 ## Canonical lifecycle
 
@@ -37,6 +52,8 @@ Every business-scoped record includes `organization_id`. IDs are immutable exter
 | Investigation | id, organization_id, source_investigation_id, exception_id, status, response, created_at | one durable structured result per public investigation ID |
 | Investigation tool call | id, organization_id, investigation_id, sequence_no, name, payload, created_at | ordered, organization-scoped read-only evidence calls |
 | Evaluation run | id, organization_id, source_evaluation_id, response, created_at | latest public benchmark result per organization |
+| Financial investigation | id, organization_id, source_investigation_id, name, period, base_currency, status, created_by, created_at | owns source files and later immutable dataset versions |
+| Source file | id, organization_id, financial_investigation_id, source_file_id, original_filename, storage_reference, mime_type, size_bytes, row/column counts, status, created_at | metadata and generated storage reference for one bounded upload |
 
 ## Reconciliation status
 
@@ -139,4 +156,4 @@ Migrations are version-controlled and forward-compatible. Required changes follo
 
 The repository contract must make `organization_id` a required argument, not an optional filter. Tests must include two organizations with identical source IDs and assert that reads, writes, investigation tools, aggregates, and audit history cannot cross the boundary.
 
-Sprint 3 uses canonical lifecycle records and bounded investigation tools. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002; migration 003 adds stable public exception IDs; migration 004 adds durable investigations, ordered tool calls, evaluations, and public workflow identifiers. The PostgreSQL repository supports canonical lifecycle, exception, aggregate, audit, investigation, evaluation, and control reads/writes when `STORAGE_BACKEND=postgres`. The demo runtime keeps an equivalent process-local contract for isolated tests.
+Sprint 3 uses canonical lifecycle records and bounded investigation tools. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002; migration 003 adds stable public exception IDs; migration 004 adds durable investigations, ordered tool calls, evaluations, and public workflow identifiers; migration 005 adds financial-investigation/source-file intake; migration 006 adds source analyses and mappings. The PostgreSQL repository supports canonical lifecycle, exception, aggregate, audit, financial investigation, source analysis, mapping, investigation, evaluation, and control reads/writes when `STORAGE_BACKEND=postgres`. The demo runtime keeps an equivalent process-local contract for isolated tests.

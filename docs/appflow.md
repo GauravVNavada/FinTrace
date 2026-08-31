@@ -1,7 +1,38 @@
 # FinTrace Application Flow
 
 **Version:** 1.0.0  
-**Last updated:** 2026-08-30
+**Last updated:** 2026-08-31
+
+## Active evolution flow
+
+The existing navigation remains available for the seeded MVP. The new primary user journey will be investigation-scoped:
+
+```text
+Investigations
+  → New financial investigation
+  → Upload sources
+  → Review mappings
+  → Review relationships
+  → Build dataset/lifecycles
+  → Reconcile
+  → Exceptions, patterns, evaluation, audit
+```
+
+The `/investigations/*` routes provide the complete local `FinancialInvestigation` workspace and source-to-reconciliation flow. Sources can be uploaded or generated fresh; the current exception detail investigation remains a separate `ExceptionInvestigation` child workflow.
+
+### Financial investigation source intake (implemented Sprint 1)
+
+1. Analyst opens **Investigations** and creates a workspace with name, period, and base currency.
+2. FinTrace persists the workspace and routes to source intake.
+3. Analyst selects one or more CSV/XLSX exports.
+4. The API validates format, encoding, headers, size, extracted rows/columns, organization ownership, and idempotency before storing bytes under a generated server reference.
+5. The UI refreshes the persisted source list and displays metadata/status. Unsafe or malformed files remain rejected with a safe error.
+6. Analyst may remove a source; the API deletes the stored bytes and records an audit event.
+7. The source page can analyze each file, review/edit mappings, and confirm required fields. It also offers bounded fresh synthetic generation only before sources exist. No state implies that reconciliation has run.
+
+### Source analysis and mapping review (implemented Sprint 2 slice)
+
+For an uploaded or generated source, the web flow can request bounded analysis, review classification and mapping proposals, edit or ignore columns, and explicitly confirm mappings. Required-field gaps remain visible and block confirmation. Offline analysis is labelled deterministic/offline; a configured live provider is optional and provider failure is shown as unavailable rather than presented as a successful AI result. The investigation overview and standalone relationship route can discover deterministic relationship proposals and accept or reject them; confirmed sources can then be normalized into an immutable dataset version with row-level lineage and reconciled through the deterministic lifecycle engine. Uploaded-run exceptions are investigated from the owning financial investigation; the seeded legacy queue remains a separate compatibility workflow.
 
 ## 1. Navigation map
 
@@ -36,7 +67,7 @@ Authenticated workspace
 3. Health and throughput show system state without implying live production monitoring.
 4. Priority exceptions link to the canonical detail view.
 5. Pattern cards show correlation signals and a recommended control.
-6. Export report downloads the current summary as a CSV; Run reconciliation invokes the bounded deterministic evaluation contract and reports completion or failure in place.
+6. Export report downloads the current investigation summary as a CSV; the investigation control invokes persisted deterministic normalization/reconciliation and reports completion or failure in place. Benchmark evaluation is a separate control under Evaluations.
 
 Empty state: “No unresolved exceptions. All lifecycles reconciled for this batch.”  
 Failure state: “Dashboard unavailable. Try again. Existing run history remains available.”
@@ -87,6 +118,17 @@ AMBIGUOUS
 
 The system must not select a candidate merely to make the dashboard look complete.
 
+For an uploaded reconciliation result, the same safety rule continues through remediation:
+
+```text
+duplicate or ambiguous result
+  -> bounded evidence investigation
+  -> UNRESOLVED
+  -> Request human review
+  -> approval policy and idempotency checks
+  -> APPROVED / REJECTED decision recorded in audit
+```
+
 ## 6. Role flows
 
 - **Analyst:** view, investigate, annotate, and request review.
@@ -100,11 +142,17 @@ The system must not select a candidate merely to make the dashboard look complet
 Investigation requested
         |
         +--> provider unavailable or invalid result
+        |       |
+        |       +--> return FAILED / unavailable (HTTP 503 for the uploaded-result route)
+        |       +--> show deterministic evidence and the provider-unavailable state
+        |       +--> keep human review available
+        |       +--> do not change financial state
+        |
+        +--> evidence is contradictory or insufficient
                 |
-                +--> show deterministic evidence
-                +--> mark investigation unavailable
-                +--> keep review request available
-                +--> do not change financial state
+                +--> return UNRESOLVED
+                +--> show ambiguity and human-review state
+                +--> keep the controlled review/approval path available
 ```
 
 ## 8. Screen inventory
