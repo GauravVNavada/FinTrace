@@ -2,8 +2,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.financial_investigations.files import UploadValidationError
+from app.financial_investigations.schemas import SourceType
 from app.main import app
 from app.source_analysis.analyzer import analyze_content
+from app.source_analysis.provider import OfflineSourceAnalysisProvider
 
 
 def _headers(role: str = "CONTROLLER") -> dict[str, str]:
@@ -176,3 +178,40 @@ def test_analysis_limit_requires_explicit_truncation() -> None:
         analyze_content("orders.csv", content, 1, 20)
     document = analyze_content("orders.csv", content, 1, 20, truncate=True)
     assert document.row_count == 1
+
+
+def test_offline_provider_maps_canonical_minor_unit_export_headers() -> None:
+    payments = analyze_content(
+        "payments.csv",
+        b"payment_id,order_id,amount_minor,gateway_fee_minor,captured_at\n"
+        b"PAY-1,ORD-1,10000,180,2026-08-01T08:00:00+00:00\n",
+        100,
+        20,
+    )
+    payment_mappings = {
+        item.source_column: item
+        for item in OfflineSourceAnalysisProvider().propose_mappings(SourceType.PAYMENTS, payments)
+    }
+
+    assert payment_mappings["amount_minor"].canonical_field == "amount"
+    assert payment_mappings["gateway_fee_minor"].canonical_field == "gateway_fee_amount"
+    assert payment_mappings["gateway_fee_minor"].ignored is False
+
+    settlements = analyze_content(
+        "settlements.csv",
+        b"settlement_id,payment_id,gross_minor,fees_minor,tax_minor,net_minor\n"
+        b"SET-1,PAY-1,10000,180,32,9788\n",
+        100,
+        20,
+    )
+    settlement_mappings = {
+        item.source_column: item
+        for item in OfflineSourceAnalysisProvider().propose_mappings(
+            SourceType.SETTLEMENTS, settlements
+        )
+    }
+
+    assert settlement_mappings["gross_minor"].canonical_field == "gross_amount"
+    assert settlement_mappings["fees_minor"].canonical_field == "fee_amount"
+    assert settlement_mappings["tax_minor"].canonical_field == "tax_amount"
+    assert settlement_mappings["net_minor"].canonical_field == "net_amount"

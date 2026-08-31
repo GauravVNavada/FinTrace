@@ -1,6 +1,7 @@
 import hashlib
 import json
 from datetime import UTC, datetime
+from typing import Any
 from uuid import uuid4
 
 from app.controls.schemas import ActorContext
@@ -67,15 +68,67 @@ class ReconciliationService:
         if version is None:
             raise ReconciliationNotFound("No normalized dataset exists for this investigation")
         records = self._repository.list_normalized_records(
-            context.organization_id, investigation_id, str(version["id"])
+            context.organization_id,
+            investigation_id,
+            str(version["id"]),
+            max(int(version.get("record_count", 0)), 1),
         )
+        expected_records = int(version.get("record_count", 0))
+        loaded_records = len(records)
+        if loaded_records != expected_records:
+            return self._persist_incomplete(
+                context,
+                investigation_id,
+                version,
+                idempotency_key,
+                request_hash,
+                expected_records,
+                loaded_records,
+                0,
+                max(expected_records - loaded_records, 0),
+                f"Expected {expected_records} normalized records but loaded {loaded_records}.",
+            )
         try:
             lifecycles = construct_lifecycles(context.organization_id, records)
         except LifecycleConstructionError as error:
-            raise ReconciliationBlocked(str(error)) from error
+            return self._persist_incomplete(
+                context,
+                investigation_id,
+                version,
+                idempotency_key,
+                request_hash,
+                expected_records,
+                loaded_records,
+                0,
+                loaded_records,
+                str(error),
+            )
         if not lifecycles:
-            raise ReconciliationBlocked(
-                "The normalized dataset contains no constructible order lifecycles"
+            return self._persist_incomplete(
+                context,
+                investigation_id,
+                version,
+                idempotency_key,
+                request_hash,
+                expected_records,
+                loaded_records,
+                0,
+                loaded_records,
+                "The normalized dataset contains no constructible order lifecycles.",
+            )
+        consumed_records = _consumed_record_count(lifecycles)
+        if consumed_records != loaded_records:
+            return self._persist_incomplete(
+                context,
+                investigation_id,
+                version,
+                idempotency_key,
+                request_hash,
+                expected_records,
+                loaded_records,
+                consumed_records,
+                loaded_records - consumed_records,
+                "One or more normalized records were not consumed by a lifecycle.",
             )
         results = [reconcile_lifecycle(lifecycle) for lifecycle in lifecycles]
         started_at = datetime.now(UTC)
@@ -85,12 +138,21 @@ class ReconciliationService:
             "financial_investigation_id": investigation_id,
             "dataset_version_id": str(version["id"]),
             "status": "COMPLETED",
+            "records_expected": expected_records,
+            "records_loaded": loaded_records,
+            "records_consumed": consumed_records,
+            "orphan_record_count": 0,
+            "rejected_record_count": 0,
+            "failure_reason": None,
             "lifecycle_count": len(results),
             "reconciled_count": sum(item.status.startswith("RECONCILED") for item in results),
             "exception_count": sum(item.status == "EXCEPTION" for item in results),
             "ambiguous_count": sum(item.status == "AMBIGUOUS" for item in results),
             "open_exposure_minor": sum(
-                item.exposure_minor for item in results if item.status in {"EXCEPTION", "AMBIGUOUS"}
+                item.exposure_minor
+                for item in results
+                if item.status in {"EXCEPTION", "AMBIGUOUS"}
+                and item.exposure_category in {"POTENTIAL_EXPOSURE", "CONTROL_RISK"}
             ),
             "started_at": started_at,
             "completed_at": datetime.now(UTC),
@@ -109,6 +171,7 @@ class ReconciliationService:
                         "code": finding.code,
                         "message": finding.message,
                         "exposure_minor": finding.exposure_minor,
+                        "exposure_category": finding.exposure_category,
                     }
                     for finding in result.findings
                 ],
@@ -157,6 +220,73 @@ class ReconciliationService:
         )
         return response
 
+    def _persist_incomplete(
+        self,
+        context: ActorContext,
+        investigation_id: str,
+        version: dict[str, object],
+        idempotency_key: str,
+        request_hash: str,
+        expected_records: int,
+        loaded_records: int,
+        consumed_records: int,
+        orphan_record_count: int,
+        reason: str,
+    ) -> ReconciliationRunResponse:
+        existing = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
+        )
+        if existing is not None:
+            if existing.get("request_hash") != request_hash:
+                raise ReconciliationConflict("Idempotency-Key was already used for another request")
+            if int(existing.get("response_status", 425)) == 425:
+                raise ReconciliationConflict(
+                    "An identical reconciliation request is already in progress"
+                )
+            return ReconciliationRunResponse.model_validate(existing["response_body"])
+        now = datetime.now(UTC)
+        run = {
+            "id": f"RR-{uuid4().hex[:12].upper()}",
+            "organization_id": context.organization_id,
+            "financial_investigation_id": investigation_id,
+            "dataset_version_id": str(version["id"]),
+            "status": "INCOMPLETE",
+            "records_expected": expected_records,
+            "records_loaded": loaded_records,
+            "records_consumed": consumed_records,
+            "orphan_record_count": max(orphan_record_count, 0),
+            "rejected_record_count": 0,
+            "failure_reason": reason[:500],
+            "lifecycle_count": 0,
+            "reconciled_count": 0,
+            "exception_count": 0,
+            "ambiguous_count": 0,
+            "open_exposure_minor": 0,
+            "started_at": now,
+            "completed_at": datetime.now(UTC),
+        }
+        try:
+            saved = self._repository.save_reconciliation_run(
+                context.organization_id, run, []
+            )
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
+        response = ReconciliationRunResponse.model_validate(saved)
+        self._repository.complete_idempotency(
+            context.organization_id, idempotency_key, 200, response.model_dump(mode="json")
+        )
+        self._repository.record_audit_event(
+            context.organization_id,
+            "RECONCILIATION_RUN_INCOMPLETE",
+            str(saved["id"]),
+            context.actor_id,
+        )
+        self._repository.update_financial_investigation_status(
+            context.organization_id, investigation_id, "FAILED"
+        )
+        return response
+
     def latest(self, organization_id: str, investigation_id: str) -> ReconciliationRunResponse:
         result = self._repository.latest_reconciliation_run(organization_id, investigation_id)
         if result is None:
@@ -172,3 +302,23 @@ class ReconciliationService:
                 organization_id, investigation_id, run_id, limit
             )
         ]
+
+
+def _consumed_record_count(lifecycles: list[Any]) -> int:
+    consumed: set[str] = set()
+    for lifecycle in lifecycles:
+        rows = (
+            lifecycle.order,
+            *lifecycle.payments,
+            *lifecycle.settlements,
+            *lifecycle.invoices,
+            *lifecycle.refunds,
+            *lifecycle.inventory_movements,
+            *lifecycle.employee_actions,
+        )
+        consumed.update(
+            str(row["__normalized_record_id"])
+            for row in rows
+            if row.get("__normalized_record_id")
+        )
+    return len(consumed)

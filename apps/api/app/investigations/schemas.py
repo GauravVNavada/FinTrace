@@ -20,6 +20,15 @@ class EvidenceSource(StrEnum):
     EMPLOYEE_ACTION = "employee_action"
 
 
+class EvidenceOperator(StrEnum):
+    EQUALS = "equals"
+    NOT_EQUALS = "not_equals"
+    EXISTS = "exists"
+    MISSING = "missing"
+    GREATER_THAN = "greater_than"
+    LESS_THAN = "less_than"
+
+
 class RootCauseCode(StrEnum):
     SETTLEMENT_TIMING = "SETTLEMENT_TIMING"
     SETTLEMENT_FEE_VARIANCE = "SETTLEMENT_FEE_VARIANCE"
@@ -52,6 +61,11 @@ class EvidenceItem(BaseModel):
     source: EvidenceSource
     record_id: str | None = Field(default=None, min_length=1, max_length=100)
     fact: str = Field(min_length=1, max_length=500)
+    field: str | None = Field(default=None, max_length=100)
+    operator: EvidenceOperator | None = None
+    expected_value: str | int | float | bool | None = None
+    verified: bool = False
+    verification_issue: str | None = Field(default=None, max_length=500)
 
 
 class InvestigationCandidate(BaseModel):
@@ -75,6 +89,10 @@ class ToolCall(BaseModel):
     status: str = Field(min_length=1, max_length=30)
     duration_ms: int = Field(ge=0)
     evidence: list[EvidenceItem] = Field(default_factory=list, max_length=50)
+    sequence_no: int = Field(default=0, ge=0)
+    arguments: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    result_record_ids: list[str] = Field(default_factory=list, max_length=100)
+    result_summary: str = ""
 
 
 class InvestigationResponse(InvestigationCandidate):
@@ -83,3 +101,12 @@ class InvestigationResponse(InvestigationCandidate):
     evidence_score: int = Field(ge=0, le=100)
     tool_calls: list[ToolCall] = Field(default_factory=list)
     created_at: datetime
+    provider: str = "unknown"
+    model: str = "unknown"
+    prompt_version: str = "v1"
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    latency_ms: int = Field(default=0, ge=0)
+    verifier_passed: bool = False
+    verifier_issues: list[str] = Field(default_factory=list, max_length=50)
+    rejected_evidence: list[EvidenceItem] = Field(default_factory=list, max_length=30)

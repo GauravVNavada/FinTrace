@@ -141,6 +141,27 @@ export interface ApiEvaluation {
   created_at: string;
 }
 
+export interface ApiAIEvaluation {
+  evaluation_id: string;
+  organization_id: string;
+  provider: string;
+  model: string;
+  report: {
+    cases: number;
+    root_cause_accuracy: number;
+    resolution_correctness: number;
+    escalation_accuracy: number;
+    evidence_citation_validity: number;
+    unsupported_claim_rate: number;
+    structured_output_validity: number;
+    average_tool_calls: number;
+    p50_latency_ms: number;
+    p95_latency_ms: number;
+    provider_failure_rate: number;
+  };
+  created_at: string;
+}
+
 export interface ApiLifecycleGraph {
   exception_id: string;
   organization_id: string;
@@ -211,14 +232,23 @@ export interface ApiInvestigation {
   status: "SUPPORTED" | "UNRESOLVED" | "FAILED";
   root_cause_code: string | null;
   summary: string;
-  supporting_evidence: { source: string; record_id?: string | null; fact: string }[];
-  contradictory_evidence: { source: string; record_id?: string | null; fact: string }[];
+  supporting_evidence: { source: string; record_id?: string | null; fact: string; field?: string | null; operator?: string | null; expected_value?: string | number | boolean | null; verified?: boolean }[];
+  contradictory_evidence: { source: string; record_id?: string | null; fact: string; field?: string | null; operator?: string | null; expected_value?: string | number | boolean | null; verified?: boolean }[];
   missing_evidence: string[];
   recommended_action_code: string | null;
   requires_human_review: boolean;
   evidence_score: number;
-  tool_calls: { name: string; target: string; status: string; duration_ms: number }[];
+  tool_calls: { name: string; target: string; status: string; duration_ms: number; sequence_no: number; arguments: Record<string, string | number | boolean | null>; result_record_ids: string[]; result_summary: string }[];
   created_at: string;
+  provider: string;
+  model: string;
+  prompt_version: string;
+  started_at?: string | null;
+  completed_at?: string | null;
+  latency_ms: number;
+  verifier_passed: boolean;
+  verifier_issues: string[];
+  rejected_evidence: { source: string; record_id?: string | null; fact: string; verification_issue?: string | null }[];
 }
 
 export type FinancialInvestigationStatus = "DRAFT" | "SOURCES_UPLOADED" | "MAPPING_REQUIRED" | "RELATIONSHIP_REVIEW" | "READY_TO_BUILD" | "PROCESSING" | "RECONCILED" | "FAILED";
@@ -285,6 +315,8 @@ export interface ApiSourceAnalysis {
   classification_confidence: number;
   reasoning_summary: string;
   provider_status: "OFFLINE_DETERMINISTIC" | "AI_PROVIDER" | "AI_PROVIDER_UNAVAILABLE";
+  provider: string;
+  model: string;
   analyzed_at: string;
 }
 
@@ -313,6 +345,15 @@ export interface ApiRelationshipProposal {
   evidence_summary: string;
   confidence: number;
   status: "PROPOSED" | "ACCEPTED" | "REJECTED" | "EDITED";
+  confidence_label: string;
+  left_columns: string[];
+  right_columns: string[];
+  value_overlap_percent: number;
+  duplicate_key_rate_percent: number;
+  cardinality: string;
+  type_compatibility: string;
+  temporal_consistency_percent: number | null;
+  amount_agreement_percent: number | null;
   updated_at: string;
 }
 
@@ -332,7 +373,13 @@ export interface ApiReconciliationRun {
   organization_id: string;
   financial_investigation_id: string;
   dataset_version_id: string;
-  status: "COMPLETED" | "FAILED";
+  status: "COMPLETED" | "FAILED" | "INCOMPLETE";
+  records_expected: number;
+  records_loaded: number;
+  records_consumed: number;
+  orphan_record_count: number;
+  rejected_record_count: number;
+  failure_reason: string | null;
   lifecycle_count: number;
   reconciled_count: number;
   exception_count: number;
@@ -350,7 +397,8 @@ export interface ApiReconciliationResult {
   exception_type: string | null;
   severity: string;
   exposure_minor: number;
-  findings: { code: string; message: string; exposure_minor: number }[];
+  exposure_category: string;
+  findings: { code: string; message: string; exposure_minor: number; exposure_category: string }[];
 }
 
 export interface ApiFinancialInvestigationPattern {

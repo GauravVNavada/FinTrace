@@ -17,6 +17,14 @@ class ReconciliationRunResponse(BaseModel):
     financial_investigation_id: str
     dataset_version_id: str
     status: str
+    records_expected: int = Field(default=0, ge=0)
+    records_loaded: int = Field(default=0, ge=0)
+    records_consumed: int = Field(default=0, ge=0)
+    orphan_record_count: int = Field(default=0, ge=0)
+    rejected_record_count: int = Field(default=0, ge=0)
+    failure_reason: str | None = None
+    is_stale: bool = False
+    stale_reason: str | None = None
     lifecycle_count: int = Field(ge=0)
     reconciled_count: int = Field(ge=0)
     exception_count: int = Field(ge=0)
@@ -32,6 +40,7 @@ class ReconciliationFindingResponse(BaseModel):
     code: str
     message: str
     exposure_minor: int = Field(ge=0)
+    exposure_category: str = "DATA_QUALITY"
 
 
 class ReconciliationResultResponse(BaseModel):
@@ -44,4 +53,5 @@ class ReconciliationResultResponse(BaseModel):
     exception_type: str | None
     severity: str
     exposure_minor: int = Field(ge=0)
+    exposure_category: str = "DATA_QUALITY"
     findings: list[ReconciliationFindingResponse]

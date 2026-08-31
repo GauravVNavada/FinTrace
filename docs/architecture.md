@@ -22,7 +22,7 @@ FinancialInvestigation
   → review controls and audit
 ```
 
-Uploaded source content is untrusted input. Classification and mapping receive bounded metadata, headers, inferred types, statistics, and limited samples; full files are not sent to a model. Deterministic relationship evidence and canonical normalization remain authoritative. AI may provide semantic interpretation but cannot establish monetary truth, authorization, or state transitions.
+Uploaded source content is untrusted input. Classification and mapping receive bounded metadata, headers, inferred types, statistics, row count, and limited representative samples; full files are not sent to Gemini. Deterministic relationship evidence and canonical normalization remain authoritative. Exception investigation starts with deterministic findings, then Gemini requests one allowlisted read-only tool per turn until it concludes or reaches the strict eight-call limit. AI may provide semantic interpretation but cannot establish monetary truth, authorization, or state transitions. Every cited field/operator/value claim is checked against the scoped lifecycle before a supported result can persist.
 
 ## System shape
 

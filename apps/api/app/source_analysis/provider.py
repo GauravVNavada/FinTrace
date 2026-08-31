@@ -21,11 +21,15 @@ class ClassificationResult:
         confidence: float,
         reasoning_summary: str,
         provider_status: str,
+        provider: str = "offline-deterministic",
+        model: str = "none",
     ) -> None:
         self.source_type = source_type
         self.confidence = confidence
         self.reasoning_summary = reasoning_summary
         self.provider_status = provider_status
+        self.provider = provider
+        self.model = model
 
 
 class MappingResult:
@@ -67,6 +71,7 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "finaltotal": "amount",
         "total": "amount",
         "amount": "amount",
+        "amountminor": "amount",
         "currency": "currency",
         "createdat": "created_at",
         "saledate": "created_at",
@@ -90,9 +95,11 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "orderid": "order_id",
         "orderreference": "order_id",
         "amount": "amount",
+        "amountminor": "amount",
         "capturedamount": "amount",
         "gatewayfee": "gateway_fee_amount",
         "gatewayfeeamount": "gateway_fee_amount",
+        "gatewayfeeminor": "gateway_fee_amount",
         "processingfee": "gateway_fee_amount",
         "currency": "currency",
         "status": "status",
@@ -105,11 +112,15 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "paymentid": "payment_id",
         "gross": "gross_amount",
         "grossamount": "gross_amount",
+        "grossminor": "gross_amount",
         "fee": "fee_amount",
         "fees": "fee_amount",
+        "feesminor": "fee_amount",
         "tax": "tax_amount",
+        "taxminor": "tax_amount",
         "net": "net_amount",
         "netamount": "net_amount",
+        "netminor": "net_amount",
         "currency": "currency",
         "settledat": "settled_at",
         "settlementdate": "settled_at",
@@ -119,6 +130,7 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "returnid": "refund_id",
         "paymentid": "payment_id",
         "amount": "amount",
+        "amountminor": "amount",
         "refundamount": "amount",
         "currency": "currency",
         "status": "status",
@@ -131,6 +143,7 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "orderid": "order_id",
         "orderreference": "order_id",
         "amount": "amount",
+        "amountminor": "amount",
         "invoicetotal": "amount",
         "total": "amount",
         "currency": "currency",
@@ -182,6 +195,8 @@ REQUIRED_FIELDS: dict[SourceType, frozenset[str]] = {
 
 
 class OfflineSourceAnalysisProvider:
+    provider = "offline-deterministic"
+    model = "none"
     def classify(self, filename: str, document: AnalysisDocument) -> ClassificationResult:
         haystack = " ".join((filename, *document.headers)).casefold().replace("-", "_")
         filename_stem = re.sub(r"[^a-z0-9]+", "_", Path(filename).stem.casefold()).strip("_")
@@ -204,6 +219,8 @@ class OfflineSourceAnalysisProvider:
                 0.0,
                 "No known source-domain signals were found in the filename or headers.",
                 "OFFLINE_DETERMINISTIC",
+                self.provider,
+                self.model,
             )
         confidence = min(0.55 + score * 0.1, 0.95)
         return ClassificationResult(
@@ -211,6 +228,8 @@ class OfflineSourceAnalysisProvider:
             confidence,
             "Classification is a deterministic offline proposal based on bounded filename and header signals.",
             "OFFLINE_DETERMINISTIC",
+            self.provider,
+            self.model,
         )
 
     def propose_mappings(
@@ -261,7 +280,12 @@ class FailoverSourceAnalysisProvider:
 
 class OpenAICompatibleSourceAnalysisProvider:
     def __init__(
-        self, api_keys: str | Sequence[str], base_url: str, model: str, timeout_seconds: float
+        self,
+        api_keys: str | Sequence[str],
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        provider_name: str = "AI_PROVIDER",
     ) -> None:
         raw_keys = (api_keys,) if isinstance(api_keys, str) else tuple(api_keys)
         self._api_keys = tuple(
@@ -270,6 +294,8 @@ class OpenAICompatibleSourceAnalysisProvider:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout_seconds = timeout_seconds
+        self.provider = provider_name
+        self.model = model
 
     def classify(self, filename: str, document: AnalysisDocument) -> ClassificationResult:
         payload = {
@@ -289,6 +315,8 @@ class OpenAICompatibleSourceAnalysisProvider:
                 float(result["confidence"]),
                 str(result["reasoning_summary"])[:500],
                 "AI_PROVIDER",
+                self.provider,
+                self.model,
             )
         except (KeyError, TypeError, ValueError) as error:
             raise SourceAnalysisProviderUnavailable(
@@ -302,16 +330,24 @@ class OpenAICompatibleSourceAnalysisProvider:
             "source_type": source_type.value,
             "headers": document.headers,
             "columns": [profile.model_dump(mode="json") for profile in document.profiles],
+            "allowed_canonical_fields": sorted(set(CANONICAL_ALIASES.get(source_type, {}).values())),
+            "required_canonical_fields": sorted(REQUIRED_FIELDS.get(source_type, frozenset())),
         }
         result = self._json_request(
-            "Return JSON with mappings, an array of objects containing source_column, canonical_field, confidence, and ignored. Use only columns provided and canonical fields appropriate for the source type.",
+            "Return JSON with mappings, an array containing every supplied source_column exactly once. "
+            "For each row set source_column to an exact header from the payload, canonical_field to "
+            "one of allowed_canonical_fields or null, confidence from 0 to 1, and ignored. "
+            "Infer semantics from the bounded sample and column profiles, not from exact spelling. "
+            "For PAYMENTS, a receipt/order reference is order_id, a gateway transaction identifier "
+            "is payment_id, and a paid value is amount. Never return amount_minor; use amount. "
+            "Do not omit required fields when the evidence supports them.",
             payload,
         )
         try:
             candidates = result["mappings"]
             if not isinstance(candidates, list):
                 raise TypeError
-            return [
+            mapped = [
                 MappingResult(
                     str(item["source_column"]),
                     item.get("canonical_field"),
@@ -320,6 +356,15 @@ class OpenAICompatibleSourceAnalysisProvider:
                 )
                 for item in candidates
             ]
+            headers = set(document.headers)
+            allowed_fields = set(CANONICAL_ALIASES.get(source_type, {}).values())
+            if any(item.source_column not in headers for item in mapped):
+                raise ValueError("AI mapping returned a column that is not in the source")
+            if any(item.canonical_field is not None and item.canonical_field not in allowed_fields for item in mapped):
+                raise ValueError("AI mapping returned a canonical field outside the source contract")
+            if any(not 0 <= item.confidence <= 1 for item in mapped):
+                raise ValueError("AI mapping returned an invalid confidence")
+            return mapped
         except (KeyError, TypeError, ValueError) as error:
             raise SourceAnalysisProviderUnavailable(
                 "AI mapping returned invalid structured output"
@@ -386,7 +431,13 @@ def get_source_analysis_provider(
         and api_key
     ):
         providers.append(
-            OpenAICompatibleSourceAnalysisProvider(api_key, base_url, model, timeout_seconds)
+            OpenAICompatibleSourceAnalysisProvider(
+                api_key,
+                _provider_base_url(provider_name, base_url),
+                model,
+                timeout_seconds,
+                provider_name,
+            )
         )
     if (
         fallback_provider_name.casefold()
@@ -395,7 +446,11 @@ def get_source_analysis_provider(
     ):
         providers.append(
             OpenAICompatibleSourceAnalysisProvider(
-                fallback_api_key, fallback_base_url, fallback_model, timeout_seconds
+                fallback_api_key,
+                _provider_base_url(fallback_provider_name, fallback_base_url),
+                fallback_model,
+                timeout_seconds,
+                fallback_provider_name,
             )
         )
     if len(providers) > 1:
@@ -407,3 +462,9 @@ def get_source_analysis_provider(
 
 def _normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def _provider_base_url(provider_name: str, base_url: str) -> str:
+    if provider_name.casefold() in {"gemini", "google"} and base_url.rstrip("/") == "https://api.openai.com/v1":
+        return "https://generativelanguage.googleapis.com/v1beta/openai"
+    return base_url

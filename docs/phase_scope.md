@@ -1,10 +1,10 @@
 # FinTrace Phase Scope
 
-Status: active product baseline · Sprints 0–7 local implementation complete · 2026-08-31
+Status: P0 buildathon implementation · Sprints 0–7 foundation plus P0 repair complete/validated conditionally on live-provider availability · 2026-08-31
 
 ## Product evolution scope
 
-The sections below describe the validated seeded-MVP baseline and the completed local data-driven evolution. Production hardening, live-provider credentials/operations, and an explicit labeled uploaded-dataset evaluation contract remain deployment/product extensions, not hidden implementation work.
+The sections below describe the validated seeded-MVP baseline and the P0 buildathon product. Production hardening and deployment-grade provider operations remain outside this sprint.
 
 ### Domain vocabulary
 
@@ -12,6 +12,8 @@ The sections below describe the validated seeded-MVP baseline and the completed 
 - `ExceptionInvestigation`: evidence investigation of one unresolved exception.
 - `ReconciliationRun`: deterministic execution over one dataset version.
 - `EvaluationRun`: benchmark execution against hidden ground truth.
+
+P0 release contract: reconciliation consumes every normalized record in the immutable dataset version and persists input accounting; source analysis uses Gemini when configured or reports unavailable; relationships expose deterministic data evidence; investigation uses an iterative bounded tool loop; factual claims are verified field-by-field; exposure categories distinguish potential exposure from data quality and timing; and deterministic reconciliation evaluation is displayed separately from the independently authored AI investigation evaluation.
 
 ### Active sprint sequence
 

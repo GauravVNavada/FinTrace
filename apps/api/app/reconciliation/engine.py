@@ -10,6 +10,7 @@ class RuleFinding:
     code: str
     message: str
     exposure_minor: int = 0
+    exposure_category: str = "DATA_QUALITY"
 
 
 @dataclass(frozen=True, slots=True)
@@ -20,6 +21,7 @@ class ReconciliationResult:
     severity: str
     exposure_minor: int
     findings: tuple[RuleFinding, ...] = field(default_factory=tuple)
+    exposure_category: str = "POTENTIAL_EXPOSURE"
 
 
 def _timestamp(value: Any) -> datetime:
@@ -54,7 +56,8 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
             code,
             "HIGH",
             amount_minor,
-            (RuleFinding(code, message, amount_minor),),
+            (RuleFinding(code, message, amount_minor, "POTENTIAL_EXPOSURE"),),
+            "POTENTIAL_EXPOSURE",
         )
 
     if not lifecycle.payments:
@@ -62,7 +65,13 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
             "PAYMENT_MISSING", "Completed order has no captured payment.", amount_minor
         )
         return ReconciliationResult(
-            order["order_id"], "EXCEPTION", finding.code, "HIGH", finding.exposure_minor, (finding,)
+            order["order_id"],
+            "EXCEPTION",
+            finding.code,
+            "HIGH",
+            finding.exposure_minor,
+            (finding,),
+            "POTENTIAL_EXPOSURE",
         )
 
     payment = lifecycle.payments[0]
@@ -71,7 +80,13 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
             "SETTLEMENT_MISSING", "Captured payment has no settlement record.", amount_minor
         )
         return ReconciliationResult(
-            order["order_id"], "EXCEPTION", "MISSING_SETTLEMENT", "MEDIUM", amount_minor, (finding,)
+            order["order_id"],
+            "EXCEPTION",
+            "MISSING_SETTLEMENT",
+            "MEDIUM",
+            amount_minor,
+            (finding,),
+            "POTENTIAL_EXPOSURE",
         )
 
     settlement = lifecycle.settlements[0]
@@ -84,16 +99,27 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                 RuleFinding(
                     "SETTLEMENT_OUTSIDE_WINDOW",
                     "Settlement arrived after the configured T+2 window.",
+                    0,
+                    "TIMING_VARIANCE",
                 )
             )
 
     settlement_fee = settlement.get("fees_minor")
     if settlement_fee in (None, ""):
-        findings.append(RuleFinding("SETTLEMENT_FEE_MISSING", "Settlement has no fee evidence."))
+        findings.append(
+            RuleFinding(
+                "SETTLEMENT_FEE_MISSING", "Settlement has no fee evidence.", 0, "DATA_QUALITY"
+            )
+        )
     gateway_fee = payment.get("gateway_fee_minor")
     if gateway_fee in (None, ""):
         findings.append(
-            RuleFinding("PAYMENT_FEE_MISSING", "Captured payment has no gateway fee evidence.")
+            RuleFinding(
+                "PAYMENT_FEE_MISSING",
+                "Captured payment has no gateway fee evidence.",
+                0,
+                "DATA_QUALITY",
+            )
         )
     elif settlement_fee is not None and gateway_fee is not None:
         fee_delta = abs(int(cast(str | int, settlement_fee)) - int(cast(str | int, gateway_fee)))
@@ -103,12 +129,13 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     "SETTLEMENT_FEE_VARIANCE",
                     "Settlement fee differs from the gateway fee; review as a known variance.",
                     fee_delta,
+                    "TIMING_VARIANCE",
                 )
             )
 
     if not lifecycle.invoices:
         findings.append(
-            RuleFinding("ERP_INVOICE_MISSING", "Completed order has no ERP invoice.", amount_minor)
+            RuleFinding("ERP_INVOICE_MISSING", "Completed order has no ERP invoice.", 0)
         )
     elif int(lifecycle.invoices[0]["gross_minor"]) != amount_minor:
         findings.append(
@@ -116,6 +143,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                 "ERP_AMOUNT_MISMATCH",
                 "ERP invoice gross does not equal order amount.",
                 abs(int(lifecycle.invoices[0]["gross_minor"]) - amount_minor),
+                "DATA_QUALITY",
             )
         )
 
@@ -131,7 +159,10 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
         ):
             findings.append(
                 RuleFinding(
-                    "MANUAL_WORKFLOW_ANOMALY", "Refund was approved through a manual workflow."
+                    "MANUAL_WORKFLOW_ANOMALY",
+                    "Refund was approved through a manual workflow.",
+                    0,
+                    "CONTROL_RISK",
                 )
             )
         if refund_amount < amount_minor:
@@ -140,6 +171,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     "PARTIAL_REFUND_MISMATCH",
                     "Partial refund cannot be reconciled without line-item reversal evidence.",
                     refund_amount,
+                    "POTENTIAL_EXPOSURE",
                 )
             )
         elif not has_return:
@@ -148,6 +180,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     "INVENTORY_RETURN_MISSING",
                     "Full refund has no corresponding inventory return.",
                     refund_amount,
+                    "CONTROL_RISK",
                 )
             )
         if lifecycle.invoices and lifecycle.invoices[0].get("status") == "ACTIVE":
@@ -156,11 +189,12 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     "ERP_REVERSAL_MISSING",
                     "Refund completed while the ERP invoice remains active.",
                     refund_amount,
+                    "CONTROL_RISK",
                 )
             )
 
     if not findings:
-        return ReconciliationResult(order["order_id"], "RECONCILED", None, "LOW", 0)
+        return ReconciliationResult(order["order_id"], "RECONCILED", None, "LOW", 0, (), "NONE")
 
     variance_only = all(
         finding.code in {"SETTLEMENT_OUTSIDE_WINDOW", "SETTLEMENT_FEE_VARIANCE"}
@@ -179,6 +213,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
             "LOW",
             sum(f.exposure_minor for f in findings),
             tuple(findings),
+            "TIMING_VARIANCE",
         )
 
     primary = findings[0]
@@ -198,6 +233,15 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
         in {"REFUND_WITHOUT_INVENTORY_RETURN", "REFUND_WITHOUT_ERP_REVERSAL", "DUPLICATE_PAYMENT"}
         else "MEDIUM"
     )
+    category = max(
+        (finding.exposure_category for finding in findings),
+        key=lambda item: {
+            "POTENTIAL_EXPOSURE": 4,
+            "CONTROL_RISK": 3,
+            "DATA_QUALITY": 2,
+            "TIMING_VARIANCE": 1,
+        }.get(item, 0),
+    )
     return ReconciliationResult(
         order["order_id"],
         "EXCEPTION",
@@ -205,6 +249,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
         severity,
         max(f.exposure_minor for f in findings),
         tuple(findings),
+        category,
     )
 
 

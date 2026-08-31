@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bell, ChevronDown, CircleHelp, FileBarChart, FolderSearch, LayoutDashboard, ListFilter, Network, Search, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { Bell, ChevronDown, CircleHelp, FileBarChart, FolderSearch, LayoutDashboard, Network, Search, Settings2, ShieldCheck, WalletCards } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ type NavItem = { label: string; href: string; icon: LucideIcon };
 type Panel = "workspace" | "notifications" | "help" | null;
 
 const navGroups: Array<{ label: string; items: NavItem[] }> = [
-  { label: "Workspace", items: [{ label: "Overview", href: "/", icon: LayoutDashboard }, { label: "Investigations", href: "/investigations", icon: FolderSearch }, { label: "Exceptions", href: "/exceptions", icon: ListFilter }, { label: "Patterns", href: "/patterns", icon: Network }] },
+  { label: "Workspace", items: [{ label: "Overview", href: "/", icon: LayoutDashboard }, { label: "Investigations", href: "/investigations", icon: FolderSearch }, { label: "Patterns", href: "/patterns", icon: Network }] },
   { label: "Controls", items: [{ label: "Reconciliation runs", href: "/runs", icon: WalletCards }, { label: "Evaluations", href: "/evaluations", icon: FileBarChart }, { label: "Audit trail", href: "/audit", icon: ShieldCheck }] }
 ];
 
@@ -28,7 +28,7 @@ function Navigation({ mobile = false }: { mobile?: boolean }) {
 function HeaderPanel({ panel, onClose }: { panel: Exclude<Panel, null>; onClose: () => void }) {
   if (panel === "workspace") return <div className="absolute right-4 top-14 z-20 w-72 rounded-lg border border-border bg-card p-3 text-xs shadow-lg"><div className="mb-2 font-semibold text-foreground">Current workspace</div><div className="rounded-md border border-border bg-muted/40 p-3"><div className="font-semibold text-foreground">{appConfig.workspaceName}</div><div className="mt-1 text-[11px] text-muted-foreground">{appConfig.workspaceEnvironment}</div></div><p className="mt-3 text-[11px] leading-4 text-muted-foreground">Workspace switching is not enabled in the synthetic MVP environment.</p><Button variant="link" size="sm" className="mt-1 px-0" onClick={onClose}>Close</Button></div>;
   if (panel === "notifications") return <div className="absolute right-14 top-14 z-20 w-72 rounded-lg border border-border bg-card p-4 text-xs shadow-lg"><div className="font-semibold text-foreground">Notifications</div><p className="mt-2 leading-5 text-muted-foreground">No new control alerts. New audit events will appear here as investigations and approvals run.</p><Button asChild variant="link" size="sm" className="mt-2 px-0"><Link href="/audit" onClick={onClose}>Open audit trail</Link></Button></div>;
-  return <div className="absolute right-4 top-14 z-20 w-72 rounded-lg border border-border bg-card p-4 text-xs shadow-lg"><div className="font-semibold text-foreground">FinTrace help</div><p className="mt-2 leading-5 text-muted-foreground">Use Exceptions to investigate lifecycle breaks, Evaluations to run the deterministic benchmark, and Audit trail to verify recorded actions.</p><div className="mt-2 flex gap-3"><Button asChild variant="link" size="sm" className="px-0"><Link href="/evaluations" onClick={onClose}>Evaluations</Link></Button><Button asChild variant="link" size="sm" className="px-0"><Link href="/audit" onClick={onClose}>Audit trail</Link></Button></div></div>;
+  return <div className="absolute right-4 top-14 z-20 w-72 rounded-lg border border-border bg-card p-4 text-xs shadow-lg"><div className="font-semibold text-foreground">FinTrace help</div><p className="mt-2 leading-5 text-muted-foreground">Use Investigations for the complete Sources → Relationships → Reconciliation → Exceptions → AI evidence workflow. Evaluations separates deterministic and AI measurements.</p><div className="mt-2 flex gap-3"><Button asChild variant="link" size="sm" className="px-0"><Link href="/evaluations" onClick={onClose}>Evaluations</Link></Button><Button asChild variant="link" size="sm" className="px-0"><Link href="/audit" onClick={onClose}>Audit trail</Link></Button></div></div>;
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {

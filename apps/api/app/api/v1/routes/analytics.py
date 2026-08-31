@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query
 
 from app.api.deps import get_actor_context
 from app.controls.schemas import ActorContext, Capability
-from app.evaluation.schemas import EvaluationResponse, EvaluationRunRequest
+from app.evaluation.ai_service import AIEvaluationService
+from app.evaluation.schemas import AIEvaluationResponse, EvaluationResponse, EvaluationRunRequest
 from app.evaluation.service import (
     EvaluationConflictError,
     EvaluationNotFoundError,
@@ -21,6 +22,7 @@ repository = get_repository()
 graph_service = LifecycleGraphService(repository)
 pattern_service = PatternService(repository)
 evaluation_service = EvaluationService(repository)
+ai_evaluation_service = AIEvaluationService(repository)
 
 
 @router.get("/exceptions/{exception_id}/graph", response_model=LifecycleGraph)
@@ -98,6 +100,39 @@ def get_latest_evaluation(
             status_code=404,
             detail={"code": "RESOURCE_NOT_FOUND", "message": "Evaluation does not exist"},
         ) from error
+
+
+@router.post("/evaluation/ai/run", response_model=AIEvaluationResponse)
+def run_ai_evaluation(
+    context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> AIEvaluationResponse:
+    _require(context, Capability.ANALYTICS_READ)
+    if idempotency_key is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
+        )
+    try:
+        return ai_evaluation_service.run(context.organization_id, idempotency_key)
+    except ValueError as error:
+        raise HTTPException(
+            status_code=422, detail={"code": "INVALID_REQUEST", "message": str(error)}
+        ) from error
+
+
+@router.get("/evaluation/ai/latest", response_model=AIEvaluationResponse)
+def get_latest_ai_evaluation(
+    context: Annotated[ActorContext, Depends(get_actor_context)],
+) -> AIEvaluationResponse:
+    _require(context, Capability.ANALYTICS_READ)
+    result = ai_evaluation_service.latest(context.organization_id)
+    if result is None:
+        raise HTTPException(
+            status_code=404,
+            detail={"code": "RESOURCE_NOT_FOUND", "message": "AI evaluation does not exist"},
+        )
+    return result
 
 
 def _require(context: ActorContext, capability: Capability) -> None:

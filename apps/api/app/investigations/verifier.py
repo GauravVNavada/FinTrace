@@ -1,8 +1,11 @@
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
+from typing import Any
 
 from app.domain.lifecycle import CanonicalLifecycle
 from app.domain.schemas import ExceptionType
 from app.investigations.schemas import (
+    EvidenceItem,
     InvestigationCandidate,
     InvestigationStatus,
     RecommendationCode,
@@ -14,6 +17,8 @@ from app.investigations.schemas import (
 class VerificationResult:
     candidate: InvestigationCandidate
     evidence_score: int
+    issues: list[str]
+    rejected_evidence: list[EvidenceItem]
 
 
 def verify_candidate(
@@ -21,16 +26,29 @@ def verify_candidate(
     exception_type: ExceptionType,
     lifecycle: CanonicalLifecycle,
 ) -> VerificationResult:
-    valid_ids = _record_ids(lifecycle)
-    cited_ids = {
-        item.record_id
-        for item in candidate.supporting_evidence + candidate.contradictory_evidence
-        if item.record_id
-    }
-    issues = (
-        ["A cited record does not exist in the scoped lifecycle."]
-        if not cited_ids.issubset(valid_ids)
-        else []
+    issues: list[str] = []
+    verified_supporting = []
+    verified_contradictory = []
+    rejected_evidence = []
+    for item in candidate.supporting_evidence:
+        verified, issue = _verify_evidence(item, lifecycle)
+        if verified:
+            verified_supporting.append(item.model_copy(update={"verified": True}))
+        else:
+            rejected_evidence.append(item.model_copy(update={"verified": False, "verification_issue": issue}))
+            issues.append(issue)
+    for item in candidate.contradictory_evidence:
+        verified, issue = _verify_evidence(item, lifecycle)
+        if verified:
+            verified_contradictory.append(item.model_copy(update={"verified": True}))
+        else:
+            rejected_evidence.append(item.model_copy(update={"verified": False, "verification_issue": issue}))
+            issues.append(issue)
+    candidate = candidate.model_copy(
+        update={
+            "supporting_evidence": verified_supporting,
+            "contradictory_evidence": verified_contradictory,
+        }
     )
     issues.extend(_compatibility_issues(candidate, exception_type, lifecycle))
     if candidate.status == InvestigationStatus.SUPPORTED and not candidate.supporting_evidence:
@@ -47,7 +65,98 @@ def verify_candidate(
                 "missing_evidence": [*candidate.missing_evidence, *issues],
             }
         )
-    return VerificationResult(candidate=candidate, evidence_score=score)
+    return VerificationResult(
+        candidate=candidate, evidence_score=score, issues=issues, rejected_evidence=rejected_evidence
+    )
+
+
+def _rows_for_source(lifecycle: CanonicalLifecycle, source: str) -> list[dict[str, Any]]:
+    rows: dict[str, list[dict[str, Any]]] = {
+        "order": [lifecycle.order],
+        "payment": list(lifecycle.payments),
+        "settlement": list(lifecycle.settlements),
+        "invoice": list(lifecycle.invoices),
+        "refund": list(lifecycle.refunds),
+        "inventory": list(lifecycle.inventory_movements),
+        "employee_action": list(lifecycle.employee_actions),
+    }
+    return rows.get(source, [])
+
+
+def _verify_evidence(item: Any, lifecycle: CanonicalLifecycle) -> tuple[bool, str]:
+    rows = _rows_for_source(lifecycle, item.source.value)
+    if item.record_id is None:
+        if item.operator != "missing" or not item.field:
+            return False, f"Evidence for {item.source.value} is missing a record_id."
+        exists = any(
+            _normal_value(row.get(item.field)) == _normal_value(item.expected_value)
+            for row in rows
+        )
+        return (
+            (not exists, f"Claimed {item.source.value}.{item.field}={item.expected_value!r} is present, but the scoped data contradicts it.")
+            if exists
+            else (True, "")
+        )
+    matching = [row for row in rows if _record_id_for_source(row, item.source.value) == item.record_id]
+    if not matching:
+        return False, f"Cited {item.source.value} record {item.record_id} does not exist in the scoped lifecycle."
+    if item.operator is None:
+        return True, ""
+    if not item.field:
+        return False, f"Cited {item.source.value} record {item.record_id} has no field for verification."
+    actual = matching[0].get(item.field)
+    if _compare(actual, item.operator, item.expected_value):
+        return True, ""
+    return False, (
+        f"Cited {item.source.value} record {item.record_id} has {item.field}={actual!r}, "
+        f"not {item.operator} {item.expected_value!r}."
+    )
+
+
+def _record_id_for_source(row: dict[str, Any], source: str) -> str | None:
+    key = {
+        "order": "order_id",
+        "payment": "payment_id",
+        "settlement": "settlement_id",
+        "invoice": "invoice_id",
+        "refund": "refund_id",
+        "inventory": "movement_id",
+        "employee_action": "action_id",
+    }.get(source)
+    value = row.get(key) if key else None
+    return str(value) if value is not None else None
+
+
+def _compare(actual: Any, operator: str | None, expected: Any) -> bool:
+    if operator == "exists":
+        return actual is not None
+    if operator == "missing":
+        return actual is None or str(actual) != str(expected)
+    if actual is None:
+        return False
+    if operator == "equals":
+        return _normal_value(actual) == _normal_value(expected)
+    if operator == "not_equals":
+        return _normal_value(actual) != _normal_value(expected)
+    try:
+        left = Decimal(str(actual))
+        right = Decimal(str(expected))
+    except (InvalidOperation, ValueError):
+        return False
+    if operator == "greater_than":
+        return left > right
+    if operator == "less_than":
+        return left < right
+    return False
+
+
+def _normal_value(value: Any) -> Any:
+    if isinstance(value, bool):
+        return value
+    try:
+        return Decimal(str(value))
+    except (InvalidOperation, ValueError):
+        return str(value).casefold()
 
 
 def _record_ids(lifecycle: CanonicalLifecycle) -> set[str]:

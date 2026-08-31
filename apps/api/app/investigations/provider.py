@@ -1,6 +1,7 @@
 import json
 import re
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib import request
 from urllib.error import HTTPError, URLError
@@ -13,6 +14,14 @@ class ProviderUnavailable(RuntimeError):
     """The configured investigation provider cannot safely answer."""
 
 
+@dataclass(frozen=True, slots=True)
+class AgentDecision:
+    action: str
+    tool_name: str | None = None
+    arguments: dict[str, str | int | float | bool | None] | None = None
+    candidate: dict[str, Any] | None = None
+
+
 class AIClient(Protocol):
     def select_tools(
         self, exception: ExceptionSummary, available_tools: list[str]
@@ -20,9 +29,70 @@ class AIClient(Protocol):
 
     def investigate(self, exception: ExceptionSummary, evidence: list[EvidenceItem]) -> Any: ...
 
+    def next_step(
+        self,
+        exception: ExceptionSummary,
+        findings: list[dict[str, Any]],
+        evidence: list[EvidenceItem],
+        tool_trace: list[dict[str, Any]],
+        available_tools: list[str],
+    ) -> AgentDecision: ...
+
 
 class StubAIClient:
     """Deterministic provider adapter used until a real provider is configured."""
+
+    provider = "stub"
+    model = "deterministic-stub"
+    prompt_version = "p0-iterative-v1"
+
+    def next_step(
+        self,
+        exception: ExceptionSummary,
+        findings: list[dict[str, Any]],
+        evidence: list[EvidenceItem],
+        tool_trace: list[dict[str, Any]],
+        available_tools: list[str],
+    ) -> AgentDecision:
+        del findings
+        used = {str(item.get("name")) for item in tool_trace}
+        if exception.type.value == "MISSING_SETTLEMENT":
+            preferred = [
+                "get_payments_for_order",
+                "get_settlements_for_payment",
+                "get_refunds_for_payment",
+            ]
+        elif exception.type.value == "REFUND_WITHOUT_INVENTORY_RETURN":
+            preferred = [
+                "get_order",
+                "get_payments_for_order",
+                "get_refunds_for_order",
+                "get_invoice_for_order",
+                "get_inventory_movements",
+                "get_employee_action_logs",
+            ]
+        elif exception.type.value == "ERP_AMOUNT_MISMATCH":
+            preferred = [
+                "get_order",
+                "get_payments_for_order",
+                "get_invoice_for_order",
+                "get_settlements_for_order",
+            ]
+        else:
+            preferred = [
+                "get_order",
+                "get_payments_for_order",
+                "get_invoice_for_order",
+                "get_settlements_for_order",
+                "get_refunds_for_order",
+            ]
+        for tool_name in preferred:
+            if tool_name in available_tools and tool_name not in used:
+                return AgentDecision("tool", tool_name, {})
+        return AgentDecision(
+            "final",
+            candidate=self.investigate(exception, evidence),
+        )
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         del available_tools
@@ -86,6 +156,10 @@ class StubAIClient:
 
 
 class UnavailableAIClient:
+    provider = "unavailable"
+    model = "unavailable"
+    prompt_version = "p0-iterative-v1"
+
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         del exception, available_tools
         raise ProviderUnavailable("AI provider unavailable")
@@ -94,12 +168,34 @@ class UnavailableAIClient:
         del exception, evidence
         raise ProviderUnavailable("AI provider unavailable")
 
+    def next_step(self, *args: Any, **kwargs: Any) -> AgentDecision:
+        raise ProviderUnavailable("AI provider unavailable")
+
 
 class FailoverAIClient:
     """Tries explicitly configured providers in order after safe provider failures."""
 
     def __init__(self, clients: Sequence[AIClient]) -> None:
         self._clients = tuple(clients)
+        self.provider = "failover"
+        self.model = ", ".join(getattr(client, "model", "unknown") for client in self._clients)
+        self.prompt_version = "p0-iterative-v1"
+
+    def next_step(
+        self,
+        exception: ExceptionSummary,
+        findings: list[dict[str, Any]],
+        evidence: list[EvidenceItem],
+        tool_trace: list[dict[str, Any]],
+        available_tools: list[str],
+    ) -> AgentDecision:
+        last_error: ProviderUnavailable | None = None
+        for client in self._clients:
+            try:
+                return client.next_step(exception, findings, evidence, tool_trace, available_tools)
+            except ProviderUnavailable as error:
+                last_error = error
+        raise ProviderUnavailable("All configured AI providers are unavailable") from last_error
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         last_error: ProviderUnavailable | None = None
@@ -124,7 +220,12 @@ class OpenAICompatibleAIClient:
     """Provider adapter receiving only a bounded exception and cited evidence."""
 
     def __init__(
-        self, api_keys: str | Sequence[str], base_url: str, model: str, timeout_seconds: float
+        self,
+        api_keys: str | Sequence[str],
+        base_url: str,
+        model: str,
+        timeout_seconds: float,
+        provider_name: str = "AI_PROVIDER",
     ) -> None:
         raw_keys = (api_keys,) if isinstance(api_keys, str) else tuple(api_keys)
         self._api_keys = tuple(
@@ -133,6 +234,68 @@ class OpenAICompatibleAIClient:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._timeout_seconds = timeout_seconds
+        self.provider = provider_name
+        self.model = model
+        self.prompt_version = "p0-iterative-v1"
+
+    def next_step(
+        self,
+        exception: ExceptionSummary,
+        findings: list[dict[str, Any]],
+        evidence: list[EvidenceItem],
+        tool_trace: list[dict[str, Any]],
+        available_tools: list[str],
+    ) -> AgentDecision:
+        payload = {
+            "exception": exception.model_dump(mode="json"),
+            "deterministic_findings": findings,
+            "evidence": [item.model_dump(mode="json") for item in evidence[-50:]],
+            "tool_trace": tool_trace[-10:],
+            "available_tools": available_tools,
+        }
+        instruction = (
+            "Operate as an evidence-bounded finance investigator. Make one decision per turn. "
+            "Use a declared read-only function when more evidence is needed, or return a final "
+            "structured candidate when evidence is sufficient. Never request a tool outside the "
+            "declared list, never calculate money, never invent records, and return UNRESOLVED "
+            "when evidence is insufficient. Return JSON with either {\"action\":\"tool\","
+            "\"tool_name\":\"...\",\"arguments\":{}} or {\"action\":\"final\","
+            "\"candidate\":{...}}. Do not include chain-of-thought."
+        )
+        tool_specs = [
+            {
+                "type": "function",
+                "function": {
+                    "name": name,
+                    "description": "Read-only, organization-scoped evidence lookup.",
+                    "parameters": {
+                        "type": "object",
+                        "properties": {},
+                        "additionalProperties": False,
+                    },
+                },
+            }
+            for name in available_tools
+        ]
+        raw = self._chat(instruction, payload, max_tokens=900, tools=tool_specs)
+        if not isinstance(raw, dict):
+            raise ProviderUnavailable("AI provider returned an invalid agent decision")
+        if "_tool_call" in raw:
+            call = raw["_tool_call"]
+            return AgentDecision(
+                "tool",
+                str(call.get("name")),
+                json.loads(str(call.get("arguments", "{}"))),
+            )
+        action = raw.get("action")
+        if action == "tool" and isinstance(raw.get("tool_name"), str):
+            arguments = raw.get("arguments", {})
+            if not isinstance(arguments, dict):
+                raise ProviderUnavailable("AI provider returned invalid tool arguments")
+            return AgentDecision("tool", raw["tool_name"], arguments)
+        if action == "final" and isinstance(raw.get("candidate"), dict):
+            return AgentDecision("final", candidate=raw["candidate"])
+        raise ProviderUnavailable("AI provider returned an invalid agent decision")
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         payload = {
@@ -168,13 +331,17 @@ class OpenAICompatibleAIClient:
         )
         return self._chat(instruction, payload)
 
-    def _chat(self, instruction: str, payload: dict[str, Any], max_tokens: int = 800) -> Any:
-        body = json.dumps(
-            {
+    def _chat(
+        self,
+        instruction: str,
+        payload: dict[str, Any],
+        max_tokens: int = 800,
+        tools: list[dict[str, Any]] | None = None,
+    ) -> Any:
+        body_payload: dict[str, Any] = {
                 "model": self._model,
                 "temperature": 0,
                 "max_tokens": max_tokens,
-                "response_format": {"type": "json_object"},
                 "messages": [
                     {
                         "role": "system",
@@ -184,7 +351,12 @@ class OpenAICompatibleAIClient:
                     {"role": "user", "content": json.dumps(payload, separators=(",", ":"))},
                 ],
             }
-        ).encode()
+        if tools:
+            body_payload["tools"] = tools
+            body_payload["tool_choice"] = "auto"
+        else:
+            body_payload["response_format"] = {"type": "json_object"}
+        body = json.dumps(body_payload).encode()
         last_error: BaseException | None = None
         for api_key in self._api_keys:
             request_object = request.Request(
@@ -196,7 +368,12 @@ class OpenAICompatibleAIClient:
             try:
                 with request.urlopen(request_object, timeout=self._timeout_seconds) as response:
                     raw = json.loads(response.read())
-                content = raw["choices"][0]["message"]["content"]
+                message = raw["choices"][0]["message"]
+                if tools and message.get("tool_calls"):
+                    call = message["tool_calls"][0]
+                    function = call["function"]
+                    return {"_tool_call": function}
+                content = message["content"]
                 parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", str(content).strip()).strip())
                 if not isinstance(parsed, dict):
                     raise TypeError("provider response must be a JSON object")
@@ -230,7 +407,15 @@ def get_ai_client(
         provider_name.casefold() in {"openai", "openai_compatible", "gemini", "google", "groq"}
         and api_key
     ):
-        clients.append(OpenAICompatibleAIClient(api_key, base_url, model, timeout_seconds))
+        clients.append(
+            OpenAICompatibleAIClient(
+                api_key,
+                _provider_base_url(provider_name, base_url),
+                model,
+                timeout_seconds,
+                provider_name,
+            )
+        )
     if (
         fallback_provider_name.casefold()
         in {"openai", "openai_compatible", "gemini", "google", "groq"}
@@ -238,7 +423,11 @@ def get_ai_client(
     ):
         clients.append(
             OpenAICompatibleAIClient(
-                fallback_api_key, fallback_base_url, fallback_model, timeout_seconds
+                fallback_api_key,
+                _provider_base_url(fallback_provider_name, fallback_base_url),
+                fallback_model,
+                timeout_seconds,
+                fallback_provider_name,
             )
         )
     if len(clients) > 1:
@@ -246,3 +435,9 @@ def get_ai_client(
     if clients:
         return clients[0]
     return UnavailableAIClient()
+
+
+def _provider_base_url(provider_name: str, base_url: str) -> str:
+    if provider_name.casefold() in {"gemini", "google"} and base_url.rstrip("/") == "https://api.openai.com/v1":
+        return "https://generativelanguage.googleapis.com/v1beta/openai"
+    return base_url

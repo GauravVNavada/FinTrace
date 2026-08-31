@@ -18,14 +18,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:3002",
     ]
     log_level: str = "INFO"
-    ai_provider: str = "stub"
+    ai_provider: str = "gemini"
     ai_api_key: str = ""
     gemini_api_key_1: str = ""
     gemini_api_key_2: str = ""
     groq_api_key_1: str = ""
     groq_api_key_2: str = ""
     ai_base_url: str = "https://api.openai.com/v1"
-    ai_model: str = "gpt-4.1-mini"
+    ai_model: str = "gemini-2.5-flash"
     ai_fallback_provider: str = ""
     ai_fallback_api_key: str = ""
     ai_fallback_base_url: str = "https://api.groq.com/openai/v1"

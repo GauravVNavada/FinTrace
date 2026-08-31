@@ -104,6 +104,8 @@ class SourceAnalysisService:
                 "classification_confidence": classification.confidence,
                 "reasoning_summary": classification.reasoning_summary,
                 "provider_status": classification.provider_status,
+                "provider": getattr(provider, "provider", classification.provider),
+                "model": getattr(provider, "model", classification.model),
                 "analyzed_at": now,
             }
             analysis = SourceAnalysisResponse.model_validate(
@@ -323,6 +325,14 @@ class SourceAnalysisService:
         now = datetime.now(UTC)
         records: list[dict[str, object]] = []
         for proposal in proposals:
+            if proposal.source_column not in profiles:
+                raise SourceAnalysisProviderUnavailable(
+                    "AI mapping returned a column that is not present in the source"
+                )
+            if not 0 <= float(proposal.confidence) <= 1:
+                raise SourceAnalysisProviderUnavailable(
+                    "AI mapping returned an invalid confidence"
+                )
             canonical = (
                 proposal.canonical_field if proposal.canonical_field in allowed_fields else None
             )

@@ -39,6 +39,9 @@ def _canonical_values(record: dict[str, Any], organization_id: str) -> dict[str,
                 ) from error
         else:
             converted[key] = value
+    # Retain an internal immutable source-row marker so reconciliation can prove
+    # that every normalized record was consumed without exposing it as finance data.
+    converted["__normalized_record_id"] = str(record.get("id", ""))
     return converted
 
 

@@ -1,10 +1,10 @@
 # FinTrace Evaluation Methodology
 
-**Status:** deterministic synthetic benchmark implemented; uploaded-dataset AI scoring intentionally gated on labels · 2026-08-31
+**Status:** deterministic reconciliation benchmark and independently authored AI-investigation benchmark implemented · 2026-08-31
 
 ## Evaluation boundary
 
-`EvaluationRun` is a benchmark execution and is not a `ReconciliationRun` or an `ExceptionInvestigation`. The current API measures deterministic reconciliation over fresh synthetic data with hidden labels held inside the evaluator. Uploaded investigations do not accept ground-truth labels, so the product does not report fabricated root-cause or AI-accuracy metrics for them. A future labeled evaluation contract must be introduced before such metrics are exposed.
+`EvaluationRun` is a benchmark execution and is not a `ReconciliationRun` or an `ExceptionInvestigation`. The reconciliation benchmark measures fresh generated batches against generator labels. The AI benchmark uses independently authored controlled lifecycle cases and the configured provider; it reports root-cause accuracy, resolution correctness, escalation accuracy, citation validity, unsupported claims, structured validity, tool calls, p50/p95 latency, and provider failures. It does not claim that the deterministic benchmark measures Gemini accuracy.
 
 ## Purpose
 
@@ -40,3 +40,5 @@ The deterministic engine must produce one result per lifecycle, preserve integer
 The API exposes `POST /api/v1/evaluation/run` and `GET /api/v1/evaluation/latest` for the Evaluations screen. The request is bounded to 1–10,000 orders, accepts a reproducible seed and anomaly rate, requires `Idempotency-Key`, and returns only the public report metrics. Hidden labels remain inside the evaluator and are never serialized into the API response.
 
 The supported local release walkthrough is [`docs/demo_script.md`](demo_script.md), backed by [`scripts/demo.ps1`](../scripts/demo.ps1). It generates canonical demo artifacts and runs the evaluator with the same seed. Example output is evidence from that local run only; it is not a production accuracy claim. The evaluation API is idempotent and persists public reports when `STORAGE_BACKEND=postgres`; the local demo adapter keeps the same contract in process for isolated tests.
+
+The AI benchmark is run with `POST /api/v1/evaluation/ai/run` and retrieved with `GET /api/v1/evaluation/ai/latest`. It must use the configured live provider for a buildathon claim; unavailable-provider responses are visible failures, not substituted stub metrics. The cases are small controlled fixtures rather than a claim of production prevalence.

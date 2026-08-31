@@ -156,6 +156,7 @@ class InvestigationService:
     def _investigate(
         self, organization_id: str, exception: ExceptionSummary, lifecycle: Any | None = None
     ) -> InvestigationResponse:
+        started_at = datetime.now(UTC)
         try:
             if lifecycle is None:
                 lifecycle = self._repository.lifecycle(organization_id, exception.order_id)
@@ -179,65 +180,169 @@ class InvestigationService:
             "get_related_exceptions",
             "get_exception_history",
         ]
-        try:
-            selector = getattr(self._provider, "select_tools", None)
-            selected_tools = (
-                selector(exception, available_tools)
-                if selector is not None
-                else self._fallback_tools(exception)
-            )
-            names = [name for name in selected_tools if name in available_tools][:8]
-        except ProviderUnavailable as error:
-            return self._failed_response(exception, tool_calls, str(error))
-        except (TypeError, ValueError):
-            names = self._fallback_tools(exception)
-        if not names:
-            return self._unresolved_response(
-                exception, tool_calls, evidence, "No bounded evidence tools were selected."
-            )
-        for name in names:
-            try:
-                result = self._tools.invoke(name, organization_id, lifecycle, exception.id)
-            except ValueError as error:
-                tool_calls.append(
-                    ToolCall(name=name, target=exception.order_id, status="SKIPPED", duration_ms=0)
-                )
-                return self._unresolved_response(exception, tool_calls, evidence, str(error))
-            tool_calls.append(result.call)
-            self._repository.record_audit_event(
-                organization_id, "INVESTIGATION_TOOL_CALLED", result.call.name
-            )
-            evidence.extend(result.call.evidence)
-
-        candidate = None
-        for attempt in range(2):
-            try:
-                raw_candidate = self._provider.investigate(exception, evidence)
-                candidate = InvestigationCandidate.model_validate(raw_candidate)
-                break
-            except ProviderUnavailable as error:
-                return self._failed_response(exception, tool_calls, str(error))
-            except ValidationError:
-                if attempt == 1:
-                    candidate = InvestigationCandidate(
-                        status=InvestigationStatus.UNRESOLVED,
-                        root_cause_code=None,
-                        summary="Provider output failed strict validation.",
-                        missing_evidence=["A valid structured provider result was not returned."],
-                        recommended_action_code=None,
-                        requires_human_review=True,
+        findings = [
+            {
+                "code": code,
+                "message": f"Deterministic finding: {code}",
+                "exposure_minor": int(exception.financial_exposure * 100),
+            }
+            for code in exception.rules_triggered
+        ]
+        candidate: InvestigationCandidate | None = None
+        next_step = getattr(self._provider, "next_step", None)
+        if callable(next_step):
+            for _ in range(8):
+                trace = [
+                    {
+                        "sequence_no": call.sequence_no,
+                        "name": call.name,
+                        "arguments": call.arguments,
+                        "status": call.status,
+                        "result_summary": call.result_summary,
+                    }
+                    for call in tool_calls
+                ]
+                try:
+                    decision = next_step(
+                        exception, findings, evidence, trace, available_tools
                     )
-        assert candidate is not None
+                except ProviderUnavailable as error:
+                    return _with_metadata(
+                        self._failed_response(exception, tool_calls, str(error)),
+                        started_at,
+                        self._provider,
+                    )
+                except (TypeError, ValueError) as error:
+                    return _with_metadata(
+                        self._unresolved_response(exception, tool_calls, evidence, str(error)),
+                        started_at,
+                        self._provider,
+                    )
+                if decision.action == "final":
+                    try:
+                        candidate = InvestigationCandidate.model_validate(decision.candidate or {})
+                    except ValidationError:
+                        candidate = InvestigationCandidate(
+                            status=InvestigationStatus.UNRESOLVED,
+                            root_cause_code=None,
+                            summary="Provider output failed strict validation.",
+                            missing_evidence=["A valid structured provider result was not returned."],
+                            recommended_action_code=None,
+                            requires_human_review=True,
+                        )
+                    break
+                if decision.action != "tool" or decision.tool_name not in available_tools:
+                    return _with_metadata(
+                        self._unresolved_response(
+                            exception, tool_calls, evidence, "Provider requested a non-allowlisted tool."
+                        ),
+                        started_at,
+                        self._provider,
+                    )
+                arguments = decision.arguments or {}
+                if any(
+                    call.name == decision.tool_name and call.arguments == arguments
+                    for call in tool_calls
+                ):
+                    return _with_metadata(
+                        self._unresolved_response(
+                            exception, tool_calls, evidence, "Provider repeated the same evidence request."
+                        ),
+                        started_at,
+                        self._provider,
+                    )
+                try:
+                    result = self._tools.invoke(
+                        decision.tool_name,
+                        organization_id,
+                        lifecycle,
+                        exception.id,
+                        arguments,
+                    )
+                except ValueError as error:
+                    tool_calls.append(
+                        ToolCall(
+                            name=decision.tool_name,
+                            target=exception.order_id,
+                            status="SKIPPED",
+                            duration_ms=0,
+                            sequence_no=len(tool_calls) + 1,
+                            arguments=arguments,
+                            result_summary=str(error),
+                        )
+                    )
+                    return _with_metadata(
+                        self._unresolved_response(exception, tool_calls, evidence, str(error)),
+                        started_at,
+                        self._provider,
+                    )
+                call = result.call.model_copy(update={"sequence_no": len(tool_calls) + 1})
+                tool_calls.append(call)
+                self._repository.record_audit_event(
+                    organization_id, "INVESTIGATION_TOOL_CALLED", call.name
+                )
+                evidence.extend(call.evidence)
+            if candidate is None:
+                return _with_metadata(
+                    self._unresolved_response(
+                        exception, tool_calls, evidence, "The bounded tool-call limit was reached."
+                    ),
+                    started_at,
+                    self._provider,
+                )
+        else:
+            # Compatibility path for legacy test doubles; configured production providers
+            # implement next_step and always use the iterative loop above.
+            try:
+                selector = getattr(self._provider, "select_tools", None)
+                selected_tools = (
+                    selector(exception, available_tools)
+                    if callable(selector)
+                    else self._fallback_tools(exception)
+                )
+                names = [name for name in selected_tools if name in available_tools][:8]
+                for name in names:
+                    result = self._tools.invoke(name, organization_id, lifecycle, exception.id)
+                    tool_calls.append(result.call.model_copy(update={"sequence_no": len(tool_calls) + 1}))
+                    evidence.extend(result.call.evidence)
+                for attempt in range(2):
+                    try:
+                        candidate = InvestigationCandidate.model_validate(
+                            self._provider.investigate(exception, evidence)
+                        )
+                        break
+                    except ValidationError:
+                        if attempt == 1:
+                            raise
+            except ProviderUnavailable as error:
+                return _with_metadata(
+                    self._failed_response(exception, tool_calls, str(error)),
+                    started_at,
+                    self._provider,
+                )
+            except (ValidationError, TypeError, ValueError):
+                candidate = InvestigationCandidate(
+                    status=InvestigationStatus.UNRESOLVED,
+                    root_cause_code=None,
+                    summary="Provider output failed strict validation.",
+                    missing_evidence=["A valid structured provider result was not returned."],
+                    recommended_action_code=None,
+                    requires_human_review=True,
+                )
 
+        assert candidate is not None
         verification = verify_candidate(candidate, exception.type, lifecycle)
-        return InvestigationResponse(
+        return _with_metadata(InvestigationResponse(
             **verification.candidate.model_dump(),
             investigation_id=f"INV-{uuid4().hex[:12].upper()}",
             exception_id=exception.id,
             evidence_score=verification.evidence_score,
             tool_calls=tool_calls,
             created_at=datetime.now(UTC),
-        )
+            verifier_passed=not verification.issues,
+            verifier_issues=verification.issues,
+            rejected_evidence=verification.rejected_evidence,
+        ), started_at, self._provider)
 
     @staticmethod
     def _fallback_tools(exception: ExceptionSummary) -> list[str]:
@@ -300,3 +405,19 @@ class InvestigationService:
             tool_calls=tool_calls,
             created_at=datetime.now(UTC),
         )
+
+
+def _with_metadata(
+    response: InvestigationResponse, started_at: datetime, provider: Any
+) -> InvestigationResponse:
+    completed_at = datetime.now(UTC)
+    return response.model_copy(
+        update={
+            "provider": getattr(provider, "provider", "unknown"),
+            "model": getattr(provider, "model", "unknown"),
+            "prompt_version": getattr(provider, "prompt_version", "p0-iterative-v1"),
+            "started_at": started_at,
+            "completed_at": completed_at,
+            "latency_ms": max(0, int((completed_at - started_at).total_seconds() * 1000)),
+        }
+    )

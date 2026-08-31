@@ -80,8 +80,21 @@ class FinancialExceptionInvestigationService:
             or financial_investigation is None
         ):
             raise FinancialExceptionNotFound(result_id)
+        dataset_version = next(
+            (
+                item
+                for item in self._repository.list_dataset_versions(
+                    context.organization_id, investigation_id
+                )
+                if item.get("id") == run["dataset_version_id"]
+            ),
+            None,
+        )
         records = self._repository.list_normalized_records(
-            context.organization_id, investigation_id, str(run["dataset_version_id"])
+            context.organization_id,
+            investigation_id,
+            str(run["dataset_version_id"]),
+            max(int(dataset_version.get("record_count", 0)), 1) if dataset_version else 1000,
         )
         try:
             lifecycle = next(
@@ -124,6 +137,11 @@ class FinancialExceptionInvestigationService:
         try:
             self._repository.save_financial_exception_investigation(
                 context.organization_id, investigation_id, result_id, body
+            )
+            self._repository.save_financial_exception_investigation_tool_calls(
+                context.organization_id,
+                response.investigation_id,
+                [item.model_dump(mode="json") for item in response.tool_calls],
             )
         except Exception:
             self._repository.release_idempotency(context.organization_id, idempotency_key)

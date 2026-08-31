@@ -47,6 +47,10 @@ The default `stub` provider is explicitly offline/deterministic. A configured Op
 
 ## Run
 
+## P0 live-provider contract
+
+Set `AI_PROVIDER=gemini`, `AI_MODEL`, and a server-side Gemini key (`GEMINI_API_KEY_1` or `AI_API_KEY`) for the buildathon path. Source analysis sends only the filename, headers, inferred types, row count, bounded sample rows, and basic statistics. Exception investigation receives deterministic findings and returned evidence, then chooses one allowlisted read-only tool per turn up to eight calls. Outputs are schema-validated and fact-verified. A provider outage returns an explicit unavailable status or persisted `FAILED` investigation; it never silently becomes stub output, while deterministic reconciliation remains available. The AI benchmark is exposed separately at `/api/v1/evaluation/ai/run` and `/api/v1/evaluation/ai/latest`.
+
 ```bash
 python -m venv .venv
 # Windows: .venv\\Scripts\\Activate.ps1

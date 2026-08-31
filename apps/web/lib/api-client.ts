@@ -124,6 +124,14 @@ export function fetchLatestEvaluation() {
   return get<ApiEvaluation>("/api/v1/evaluation/latest");
 }
 
+export function fetchLatestAIEvaluation() {
+  return get<import("./types").ApiAIEvaluation>("/api/v1/evaluation/ai/latest");
+}
+
+export function runAIEvaluation(idempotencyKey: string) {
+  return post<import("./types").ApiAIEvaluation>("/api/v1/evaluation/ai/run", {}, idempotencyKey);
+}
+
 export function runEvaluation(request: EvaluationRunRequest, idempotencyKey: string) {
   return post<ApiEvaluation>("/api/v1/evaluation/run", request, idempotencyKey);
 }

@@ -53,6 +53,8 @@ class SourceAnalysisResponse(BaseModel):
     classification_confidence: float = Field(ge=0, le=1)
     reasoning_summary: str = Field(min_length=1, max_length=500)
     provider_status: AnalysisProviderStatus
+    provider: str = "offline-deterministic"
+    model: str = "none"
     analyzed_at: datetime
 
 

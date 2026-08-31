@@ -36,6 +36,17 @@ _MONEY_FIELDS = {
     "net_amount": "net_minor",
 }
 
+_PRIMARY_SOURCE_RECORD_FIELDS = {
+    SourceType.SALES.value: "order_id",
+    SourceType.ORDERS.value: "order_id",
+    SourceType.PAYMENTS.value: "payment_id",
+    SourceType.SETTLEMENTS.value: "settlement_id",
+    SourceType.REFUNDS.value: "refund_id",
+    SourceType.INVOICES.value: "invoice_id",
+    SourceType.INVENTORY_MOVEMENTS.value: "movement_id",
+    SourceType.EMPLOYEE_ACTIONS.value: "action_id",
+}
+
 
 def _canonical_field(source_type: str, field: str) -> str:
     if field == "amount" and source_type == "INVOICES":
@@ -51,6 +62,14 @@ def _minor_units(value: str, field: str) -> int:
         return int(amount * 100)
     except (InvalidOperation, ValueError) as error:
         raise ValueError(f"malformed monetary value for {field}") from error
+
+
+def _primary_source_record_id(source_type: str, values: dict[str, str | int | None]) -> str | None:
+    primary_field = _PRIMARY_SOURCE_RECORD_FIELDS.get(source_type)
+    if primary_field is None:
+        return None
+    value = values.get(primary_field)
+    return str(value) if value not in (None, "") else None
 
 
 class NormalizationService:
@@ -167,14 +186,7 @@ class NormalizationService:
                             "source_column": column,
                             "source_record_id": value if field.endswith("_id") else None,
                         }
-                source_record_id = next(
-                    (
-                        str(value)
-                        for field, value in values.items()
-                        if field.endswith("_id") and value
-                    ),
-                    None,
-                )
+                source_record_id = _primary_source_record_id(source_type, values)
                 if source_record_id is not None:
                     if source_record_id in seen_source_ids:
                         reasons.append(

@@ -34,3 +34,30 @@ class EvaluationResponse(BaseModel):
     anomaly_rate: float = Field(ge=0, le=1)
     report: EvaluationReportResponse
     created_at: datetime
+
+
+class AIEvaluationReportResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    cases: int = Field(ge=0)
+    root_cause_accuracy: float = Field(ge=0, le=100)
+    resolution_correctness: float = Field(ge=0, le=100)
+    escalation_accuracy: float = Field(ge=0, le=100)
+    evidence_citation_validity: float = Field(ge=0, le=100)
+    unsupported_claim_rate: float = Field(ge=0, le=100)
+    structured_output_validity: float = Field(ge=0, le=100)
+    average_tool_calls: float = Field(ge=0)
+    p50_latency_ms: float = Field(ge=0)
+    p95_latency_ms: float = Field(ge=0)
+    provider_failure_rate: float = Field(ge=0, le=100)
+
+
+class AIEvaluationResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    evaluation_id: str
+    organization_id: str
+    provider: str
+    model: str
+    report: AIEvaluationReportResponse
+    created_at: datetime

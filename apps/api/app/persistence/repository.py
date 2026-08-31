@@ -412,15 +412,18 @@ class PostgresRepository:
                 INSERT INTO source_analyses
                   (id, organization_id, financial_investigation_id, source_file_id,
                    headers, sample_rows, column_profiles, source_type,
-                   classification_confidence, reasoning_summary, provider_status, analyzed_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   classification_confidence, reasoning_summary, provider_status,
+                   provider, model, analyzed_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (organization_id, source_file_id) DO UPDATE SET
                   id = EXCLUDED.id, headers = EXCLUDED.headers,
                   sample_rows = EXCLUDED.sample_rows, column_profiles = EXCLUDED.column_profiles,
                   source_type = EXCLUDED.source_type,
                   classification_confidence = EXCLUDED.classification_confidence,
                   reasoning_summary = EXCLUDED.reasoning_summary,
-                  provider_status = EXCLUDED.provider_status, analyzed_at = EXCLUDED.analyzed_at
+                  provider_status = EXCLUDED.provider_status,
+                  provider = EXCLUDED.provider, model = EXCLUDED.model,
+                  analyzed_at = EXCLUDED.analyzed_at
                 """,
                 (
                     data["id"],
@@ -434,6 +437,8 @@ class PostgresRepository:
                     data["classification_confidence"],
                     data["reasoning_summary"],
                     data["provider_status"],
+                    data.get("provider", "offline-deterministic"),
+                    data.get("model", "none"),
                     data["analyzed_at"],
                 ),
             )
@@ -453,7 +458,7 @@ class PostgresRepository:
                        sa.source_file_id, sa.headers, sa.sample_rows,
                        sa.column_profiles AS columns, sa.source_type,
                        sa.classification_confidence, sa.reasoning_summary,
-                       sa.provider_status, sa.analyzed_at
+                       sa.provider_status, sa.provider, sa.model, sa.analyzed_at
                 FROM source_analyses sa
                 JOIN financial_investigations fi
                   ON fi.id = sa.financial_investigation_id
@@ -646,7 +651,7 @@ class PostgresRepository:
             if org_uuid is None:
                 return []
             rows = conn.execute(
-                """SELECT rp.id, rp.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rp.source_file_id, rp.target_source_file_id, rp.join_fields, rp.evidence_summary, rp.confidence, rp.status, rp.updated_at FROM relationship_proposals rp JOIN financial_investigations fi ON fi.id = rp.financial_investigation_id AND fi.organization_id = rp.organization_id WHERE rp.organization_id = %s AND fi.source_investigation_id = %s ORDER BY rp.updated_at DESC""",
+                """SELECT rp.id, rp.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rp.source_file_id, rp.target_source_file_id, rp.join_fields, rp.evidence_summary, rp.confidence, rp.status, rp.confidence_label, rp.left_columns, rp.right_columns, rp.value_overlap_percent, rp.duplicate_key_rate_percent, rp.cardinality, rp.type_compatibility, rp.temporal_consistency_percent, rp.amount_agreement_percent, rp.updated_at FROM relationship_proposals rp JOIN financial_investigations fi ON fi.id = rp.financial_investigation_id AND fi.organization_id = rp.organization_id WHERE rp.organization_id = %s AND fi.source_investigation_id = %s ORDER BY rp.updated_at DESC""",
                 (org_uuid, investigation_id),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -668,7 +673,7 @@ class PostgresRepository:
                 return []
             for proposal in proposals:
                 conn.execute(
-                    """INSERT INTO relationship_proposals (id, organization_id, financial_investigation_id, source_file_id, target_source_file_id, join_fields, evidence_summary, confidence, status, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, financial_investigation_id, source_file_id, target_source_file_id) DO UPDATE SET join_fields = EXCLUDED.join_fields, evidence_summary = EXCLUDED.evidence_summary, confidence = EXCLUDED.confidence, updated_at = EXCLUDED.updated_at""",
+                    """INSERT INTO relationship_proposals (id, organization_id, financial_investigation_id, source_file_id, target_source_file_id, join_fields, evidence_summary, confidence, status, confidence_label, left_columns, right_columns, value_overlap_percent, duplicate_key_rate_percent, cardinality, type_compatibility, temporal_consistency_percent, amount_agreement_percent, updated_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, financial_investigation_id, source_file_id, target_source_file_id) DO UPDATE SET join_fields = EXCLUDED.join_fields, evidence_summary = EXCLUDED.evidence_summary, confidence = EXCLUDED.confidence, confidence_label = EXCLUDED.confidence_label, left_columns = EXCLUDED.left_columns, right_columns = EXCLUDED.right_columns, value_overlap_percent = EXCLUDED.value_overlap_percent, duplicate_key_rate_percent = EXCLUDED.duplicate_key_rate_percent, cardinality = EXCLUDED.cardinality, type_compatibility = EXCLUDED.type_compatibility, temporal_consistency_percent = EXCLUDED.temporal_consistency_percent, amount_agreement_percent = EXCLUDED.amount_agreement_percent, updated_at = EXCLUDED.updated_at""",
                     (
                         proposal["id"],
                         org_uuid,
@@ -679,6 +684,15 @@ class PostgresRepository:
                         proposal["evidence_summary"],
                         proposal["confidence"],
                         proposal["status"],
+                        proposal.get("confidence_label", "LOW"),
+                        Json(proposal.get("left_columns", [])),
+                        Json(proposal.get("right_columns", [])),
+                        proposal.get("value_overlap_percent", 0),
+                        proposal.get("duplicate_key_rate_percent", 0),
+                        proposal.get("cardinality", "UNKNOWN"),
+                        proposal.get("type_compatibility", "UNKNOWN"),
+                        proposal.get("temporal_consistency_percent"),
+                        proposal.get("amount_agreement_percent"),
                         proposal["updated_at"],
                     ),
                 )
@@ -786,7 +800,7 @@ class PostgresRepository:
             org_uuid = self._organization_uuid(conn, organization_id)
             rows = conn.execute(
                 "SELECT nr.id, nr.source_file_id, nr.source_row_number, nr.source_record_id, nr.source_type, nr.values, nr.lineage FROM normalized_records nr JOIN dataset_versions dv ON dv.id = nr.dataset_version_id AND dv.organization_id = nr.organization_id JOIN financial_investigations fi ON fi.id = dv.financial_investigation_id AND fi.organization_id = dv.organization_id WHERE nr.organization_id = %s AND fi.source_investigation_id = %s AND nr.dataset_version_id = %s ORDER BY nr.source_file_id, nr.source_row_number LIMIT %s",
-                (org_uuid, investigation_id, dataset_version_id, min(max(limit, 1), 10000)),
+                (org_uuid, investigation_id, dataset_version_id, max(limit, 1)),
             ).fetchall()
             return [dict(row) for row in rows]
 
@@ -802,13 +816,19 @@ class PostgresRepository:
             if investigation is None:
                 return {}
             conn.execute(
-                "INSERT INTO financial_reconciliation_runs (id, organization_id, financial_investigation_id, dataset_version_id, status, lifecycle_count, reconciled_count, exception_count, ambiguous_count, open_exposure_minor, started_at, completed_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "INSERT INTO financial_reconciliation_runs (id, organization_id, financial_investigation_id, dataset_version_id, status, records_expected, records_loaded, records_consumed, orphan_record_count, rejected_record_count, failure_reason, lifecycle_count, reconciled_count, exception_count, ambiguous_count, open_exposure_minor, started_at, completed_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (
                     run["id"],
                     org_uuid,
                     investigation["id"],
                     run["dataset_version_id"],
                     run["status"],
+                    run.get("records_expected", 0),
+                    run.get("records_loaded", 0),
+                    run.get("records_consumed", 0),
+                    run.get("orphan_record_count", 0),
+                    run.get("rejected_record_count", 0),
+                    run.get("failure_reason"),
                     run["lifecycle_count"],
                     run["reconciled_count"],
                     run["exception_count"],
@@ -820,7 +840,7 @@ class PostgresRepository:
             )
             for result in results:
                 conn.execute(
-                    "INSERT INTO financial_reconciliation_results (id, organization_id, run_id, order_id, status, exception_type, severity, exposure_minor, findings) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO financial_reconciliation_results (id, organization_id, run_id, order_id, status, exception_type, severity, exposure_minor, exposure_category, findings) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     (
                         result["id"],
                         org_uuid,
@@ -830,6 +850,7 @@ class PostgresRepository:
                         result["exception_type"],
                         result["severity"],
                         result["exposure_minor"],
+                        result.get("exposure_category", "DATA_QUALITY"),
                         Json(result["findings"]),
                     ),
                 )
@@ -844,7 +865,7 @@ class PostgresRepository:
         with connection(self._database_url) as conn:
             org_uuid = self._organization_uuid(conn, organization_id)
             row = conn.execute(
-                "SELECT rr.id, rr.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rr.dataset_version_id, rr.status, rr.lifecycle_count, rr.reconciled_count, rr.exception_count, rr.ambiguous_count, rr.open_exposure_minor, rr.started_at, rr.completed_at FROM financial_reconciliation_runs rr JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE rr.organization_id = %s AND fi.source_investigation_id = %s ORDER BY rr.started_at DESC LIMIT 1",
+                "SELECT rr.id, rr.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rr.dataset_version_id, rr.status, rr.records_expected, rr.records_loaded, rr.records_consumed, rr.orphan_record_count, rr.rejected_record_count, rr.failure_reason, rr.is_stale, rr.stale_reason, rr.lifecycle_count, rr.reconciled_count, rr.exception_count, rr.ambiguous_count, rr.open_exposure_minor, rr.started_at, rr.completed_at FROM financial_reconciliation_runs rr JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE rr.organization_id = %s AND fi.source_investigation_id = %s AND rr.is_stale = false ORDER BY rr.started_at DESC LIMIT 1",
                 (org_uuid, investigation_id),
             ).fetchone()
             return dict(row) if row else None
@@ -855,7 +876,7 @@ class PostgresRepository:
         with connection(self._database_url) as conn:
             org_uuid = self._organization_uuid(conn, organization_id)
             rows = conn.execute(
-                "SELECT r.id, r.run_id, r.order_id, r.status, r.exception_type, r.severity, r.exposure_minor, r.findings FROM financial_reconciliation_results r JOIN financial_reconciliation_runs rr ON rr.id = r.run_id AND rr.organization_id = r.organization_id JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE r.organization_id = %s AND fi.source_investigation_id = %s AND r.run_id = %s ORDER BY r.order_id LIMIT %s",
+                "SELECT r.id, r.run_id, r.order_id, r.status, r.exception_type, r.severity, r.exposure_minor, r.exposure_category, r.findings FROM financial_reconciliation_results r JOIN financial_reconciliation_runs rr ON rr.id = r.run_id AND rr.organization_id = r.organization_id JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE r.organization_id = %s AND fi.source_investigation_id = %s AND r.run_id = %s ORDER BY r.order_id LIMIT %s",
                 (org_uuid, investigation_id, run_id, min(max(limit, 1), 10000)),
             ).fetchall()
             return [dict(row) for row in rows]
@@ -886,7 +907,7 @@ class PostgresRepository:
             if investigation is None:
                 return {}
             conn.execute(
-                "INSERT INTO financial_exception_investigations (id, organization_id, financial_investigation_id, reconciliation_result_id, status, response, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, reconciliation_result_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response",
+                "INSERT INTO financial_exception_investigations (id, organization_id, financial_investigation_id, reconciliation_result_id, status, response, provider, model, prompt_version, started_at, completed_at, latency_ms, verifier_passed, verifier_issues, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, reconciliation_result_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response, provider = EXCLUDED.provider, model = EXCLUDED.model, prompt_version = EXCLUDED.prompt_version, started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at, latency_ms = EXCLUDED.latency_ms, verifier_passed = EXCLUDED.verifier_passed, verifier_issues = EXCLUDED.verifier_issues",
                 (
                     response["investigation_id"],
                     org_uuid,
@@ -894,6 +915,14 @@ class PostgresRepository:
                     result_id,
                     response["status"],
                     Json(response),
+                    response.get("provider"),
+                    response.get("model"),
+                    response.get("prompt_version"),
+                    response.get("started_at"),
+                    response.get("completed_at"),
+                    response.get("latency_ms", 0),
+                    response.get("verifier_passed", False),
+                    Json(response.get("verifier_issues", [])),
                     response["created_at"],
                 ),
             )
@@ -909,6 +938,46 @@ class PostgresRepository:
                 (org_uuid, investigation_id, result_id),
             ).fetchone()
             return dict(row["response"]) if row and isinstance(row["response"], dict) else None
+
+    def save_financial_exception_investigation_tool_calls(
+        self, organization_id: str, investigation_id: str, tool_calls: list[dict[str, Any]]
+    ) -> None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return
+            conn.execute(
+                "DELETE FROM financial_exception_investigation_tool_calls WHERE organization_id = %s AND financial_exception_investigation_id = %s",
+                (org_uuid, investigation_id),
+            )
+            for call in tool_calls:
+                conn.execute(
+                    "INSERT INTO financial_exception_investigation_tool_calls (organization_id, financial_exception_investigation_id, sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        org_uuid,
+                        investigation_id,
+                        call.get("sequence_no", 0),
+                        call["name"],
+                        Json(call.get("arguments", {})),
+                        Json(call.get("result_record_ids", [])),
+                        call.get("result_summary", ""),
+                        call.get("duration_ms", 0),
+                        call.get("status", "UNKNOWN"),
+                    ),
+                )
+
+    def get_financial_exception_investigation_tool_calls(
+        self, organization_id: str, investigation_id: str
+    ) -> list[dict[str, Any]]:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return []
+            rows = conn.execute(
+                "SELECT sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status FROM financial_exception_investigation_tool_calls WHERE organization_id = %s AND financial_exception_investigation_id = %s ORDER BY sequence_no",
+                (org_uuid, investigation_id),
+            ).fetchall()
+            return [dict(row) for row in rows]
 
     def lifecycle(self, organization_id: str, order_id: str) -> CanonicalLifecycle:
         with connection(self._database_url) as conn:
@@ -1398,6 +1467,17 @@ class PostgresRepository:
                 ORDER BY created_at DESC
                 LIMIT 1
                 """,
+                (org_uuid,),
+            ).fetchone()
+            return dict(row["response"]) if row else None
+
+    def get_latest_ai_evaluation(self, organization_id: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                "SELECT response FROM evaluation_runs WHERE organization_id = %s AND response->>'evaluation_kind' = 'AI_INVESTIGATION' ORDER BY created_at DESC LIMIT 1",
                 (org_uuid,),
             ).fetchone()
             return dict(row["response"]) if row else None

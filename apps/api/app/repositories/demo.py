@@ -44,6 +44,7 @@ class DemoRepository:
         self._reconciliation_runs: dict[tuple[str, str], list[dict[str, object]]] = {}
         self._reconciliation_results: dict[str, list[dict[str, object]]] = {}
         self._financial_exception_investigations: dict[tuple[str, str], dict[str, object]] = {}
+        self._financial_exception_investigation_tool_calls: dict[str, list[dict[str, object]]] = {}
         self._flagship_lifecycle = CanonicalLifecycle(
             order={
                 "organization_id": "ORG-001",
@@ -602,6 +603,23 @@ class DemoRepository:
             not in {"organization_id", "financial_investigation_id", "reconciliation_result_id"}
         }
 
+    def save_financial_exception_investigation_tool_calls(
+        self, organization_id: str, investigation_id: str, tool_calls: list[dict[str, object]]
+    ) -> None:
+        del organization_id
+        self._financial_exception_investigation_tool_calls[investigation_id] = [
+            dict(item) for item in tool_calls
+        ]
+
+    def get_financial_exception_investigation_tool_calls(
+        self, organization_id: str, investigation_id: str
+    ) -> list[dict[str, object]]:
+        del organization_id
+        return [
+            dict(item)
+            for item in self._financial_exception_investigation_tool_calls.get(investigation_id, [])
+        ]
+
     def get_idempotency(
         self, organization_id: str, idempotency_key: str
     ) -> dict[str, object] | None:
@@ -682,10 +700,15 @@ class DemoRepository:
         )
 
     def save_evaluation(self, organization_id: str, response: dict[str, object]) -> None:
-        self._evaluations[organization_id] = dict(response)
+        key = f"{organization_id}:ai" if response.get("evaluation_kind") == "AI_INVESTIGATION" else organization_id
+        self._evaluations[key] = dict(response)
 
     def get_latest_evaluation(self, organization_id: str) -> dict[str, object] | None:
         response = self._evaluations.get(organization_id)
+        return dict(response) if response and response.get("evaluation_kind") != "AI_INVESTIGATION" else None
+
+    def get_latest_ai_evaluation(self, organization_id: str) -> dict[str, object] | None:
+        response = self._evaluations.get(f"{organization_id}:ai")
         return dict(response) if response else None
 
     def save_resolution_request(self, organization_id: str, response: dict[str, object]) -> None:
