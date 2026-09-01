@@ -43,8 +43,8 @@ Open the web app at `http://localhost:3000`, `http://127.0.0.1:3000`, `http://lo
 - Keep client-exposed variables limited to public configuration.
 - Do not put service-role credentials in `apps/web`.
 - Use separate development/test databases.
-- Copy or edit `apps/api/.env` for local API settings. It contains slots for two Gemini keys and two Groq keys. Set `AI_PROVIDER=gemini` or `AI_PROVIDER=groq`; the first non-empty key for that provider is selected when `AI_API_KEY` is blank. Requests retry the remaining keys for rate-limit, transient, and authentication failures. Set `AI_FALLBACK_PROVIDER=groq` to explicitly fail over from Gemini to Groq (or configure the reverse); switching providers is otherwise manual and never silent. The test suite forces the deterministic stub so it never consumes live quota.
-- Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai` with a current Gemini model; Groq uses `https://api.groq.com/openai/v1` with a current Groq-supported model. Both use the bounded OpenAI-compatible adapter.
+- Copy or edit `apps/api/.env` for local API settings. The default demo configuration is `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, `GEMINI_API_KEY`, `AI_FALLBACK_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY`. Provider-specific keys are preferred; numbered legacy slots remain supported. Only bounded transient failures can use the explicitly configured fallback, while authentication, unsupported-model, and malformed-output failures surface immediately. The test suite forces the deterministic stub so it never consumes live quota.
+- Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai`; Groq uses `https://api.groq.com/openai/v1`. The model IDs are runtime configurable, but each configured model must support strict structured output and tool/function calling.
 
 ## Database phase
 

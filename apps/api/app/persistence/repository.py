@@ -907,7 +907,7 @@ class PostgresRepository:
             if investigation is None:
                 return {}
             conn.execute(
-                "INSERT INTO financial_exception_investigations (id, organization_id, financial_investigation_id, reconciliation_result_id, status, response, provider, model, prompt_version, started_at, completed_at, latency_ms, verifier_passed, verifier_issues, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, reconciliation_result_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response, provider = EXCLUDED.provider, model = EXCLUDED.model, prompt_version = EXCLUDED.prompt_version, started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at, latency_ms = EXCLUDED.latency_ms, verifier_passed = EXCLUDED.verifier_passed, verifier_issues = EXCLUDED.verifier_issues",
+                "INSERT INTO financial_exception_investigations (id, organization_id, financial_investigation_id, reconciliation_result_id, status, response, provider, model, prompt_version, started_at, completed_at, latency_ms, verifier_passed, verifier_issues, provider_error_category, provider_retryable, failure_stage, failure_iteration, failure_detail, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, reconciliation_result_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response, provider = EXCLUDED.provider, model = EXCLUDED.model, prompt_version = EXCLUDED.prompt_version, started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at, latency_ms = EXCLUDED.latency_ms, verifier_passed = EXCLUDED.verifier_passed, verifier_issues = EXCLUDED.verifier_issues, provider_error_category = EXCLUDED.provider_error_category, provider_retryable = EXCLUDED.provider_retryable, failure_stage = EXCLUDED.failure_stage, failure_iteration = EXCLUDED.failure_iteration, failure_detail = EXCLUDED.failure_detail",
                 (
                     response["investigation_id"],
                     org_uuid,
@@ -923,6 +923,11 @@ class PostgresRepository:
                     response.get("latency_ms", 0),
                     response.get("verifier_passed", False),
                     Json(response.get("verifier_issues", [])),
+                    response.get("provider_error_category"),
+                    response.get("provider_retryable"),
+                    response.get("failure_stage"),
+                    response.get("failure_iteration"),
+                    response.get("failure_detail"),
                     response["created_at"],
                 ),
             )
@@ -952,7 +957,7 @@ class PostgresRepository:
             )
             for call in tool_calls:
                 conn.execute(
-                    "INSERT INTO financial_exception_investigation_tool_calls (organization_id, financial_exception_investigation_id, sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    "INSERT INTO financial_exception_investigation_tool_calls (organization_id, financial_exception_investigation_id, sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status, provider, model) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                     (
                         org_uuid,
                         investigation_id,
@@ -963,6 +968,8 @@ class PostgresRepository:
                         call.get("result_summary", ""),
                         call.get("duration_ms", 0),
                         call.get("status", "UNKNOWN"),
+                        call.get("provider", "unknown"),
+                        call.get("model", "unknown"),
                     ),
                 )
 
@@ -974,7 +981,7 @@ class PostgresRepository:
             if org_uuid is None:
                 return []
             rows = conn.execute(
-                "SELECT sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status FROM financial_exception_investigation_tool_calls WHERE organization_id = %s AND financial_exception_investigation_id = %s ORDER BY sequence_no",
+                "SELECT sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status, provider, model FROM financial_exception_investigation_tool_calls WHERE organization_id = %s AND financial_exception_investigation_id = %s ORDER BY sequence_no",
                 (org_uuid, investigation_id),
             ).fetchall()
             return [dict(row) for row in rows]

@@ -92,6 +92,10 @@ export function fetchReadiness() {
   return get<{ status: string; storage_backend: string }>("/ready");
 }
 
+export function fetchProviderHealth() {
+  return get<import("./types").ApiProviderHealth>("/api/v1/ai/provider-health");
+}
+
 export function fetchExceptions() {
   return get<ApiExceptionSummary[]>("/api/v1/exceptions");
 }

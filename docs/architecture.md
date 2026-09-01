@@ -86,7 +86,7 @@ The web app is a Next.js App Router application and can be deployed as a Node pr
 
 ## Consequence
 
-This architecture makes AI failure non-fatal. If an AI provider is unavailable, reconciliation, exception evidence, exposure, timeline, manual review, and audit remain available.
+This architecture makes AI failure non-fatal. If an AI provider is unavailable, `/api/v1/ai/provider-health` exposes the configured state before a demo starts, and investigation responses persist `FAILED` with a redacted error category, retryability, stage, iteration, and latency. Reconciliation, exception evidence, exposure, timeline, manual review, and audit remain available.
 
 ## Stack matrix
 
@@ -96,7 +96,7 @@ This architecture makes AI failure non-fatal. If an AI provider is unavailable, 
 | `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ when `STORAGE_BACKEND=postgres`; demo adapter by default | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
 | `packages/ui` | TypeScript, React | Tailwind + shadcn-style primitives | None | Shared by web apps only |
 | Evaluation runner | Python 3.12+ | Plain Python modules | Synthetic CSV/JSON and hidden ground truth | deterministic seed and output path |
-| AI provider adapter | Python | Provider-neutral interface | No prompt/result persistence outside API model | timeout, retry, model, redaction settings |
+| AI provider adapter | Python | `AIProvider` with `GeminiProvider`, `GroqProvider`, and test-only `StubAIClient` | No prompt/result persistence outside API model; provider/model selected at runtime | timeout, retry, model, redaction settings |
 
 ## Service directory contract
 
@@ -148,7 +148,7 @@ For Sprint 5 analytics, the graph service first applies organization scope and l
 
 ## Failure and timeout policy
 
-Database, provider, and external source calls require explicit timeouts. Retries are only allowed for safe, idempotent operations with bounded exponential backoff. Provider failure returns a typed investigation-unavailable state; it never changes reconciliation state or triggers a resolution.
+Database, provider, and external source calls require explicit timeouts. Retries are only allowed for safe, idempotent transient operations with bounded backoff and configured-key rotation. Daily quota exhaustion, authorization, unsupported-model, malformed tool arguments, verifier rejection, and invalid FinTrace input are not retried or hidden by fallback. Provider failure returns a typed investigation-unavailable state with no credential or provider payload logging; it never changes reconciliation state or triggers a resolution. Provider health performs one bounded structured/tool-capability probe per provider and caches the result briefly.
 
 ## Deployment stages
 

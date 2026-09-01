@@ -208,7 +208,7 @@ class InvestigationService:
                     )
                 except ProviderUnavailable as error:
                     return _with_metadata(
-                        self._failed_response(exception, tool_calls, str(error)),
+                        self._failed_response(exception, tool_calls, error),
                         started_at,
                         self._provider,
                     )
@@ -277,6 +277,12 @@ class InvestigationService:
                         self._provider,
                     )
                 call = result.call.model_copy(update={"sequence_no": len(tool_calls) + 1})
+                call = call.model_copy(
+                    update={
+                        "provider": getattr(self._provider, "provider", "unknown"),
+                        "model": getattr(self._provider, "model", "unknown"),
+                    }
+                )
                 tool_calls.append(call)
                 self._repository.record_audit_event(
                     organization_id, "INVESTIGATION_TOOL_CALLED", call.name
@@ -303,7 +309,15 @@ class InvestigationService:
                 names = [name for name in selected_tools if name in available_tools][:8]
                 for name in names:
                     result = self._tools.invoke(name, organization_id, lifecycle, exception.id)
-                    tool_calls.append(result.call.model_copy(update={"sequence_no": len(tool_calls) + 1}))
+                    tool_calls.append(
+                        result.call.model_copy(
+                            update={
+                                "sequence_no": len(tool_calls) + 1,
+                                "provider": getattr(self._provider, "provider", "unknown"),
+                                "model": getattr(self._provider, "model", "unknown"),
+                            }
+                        )
+                    )
                     evidence.extend(result.call.evidence)
                 for attempt in range(2):
                     try:
@@ -316,7 +330,7 @@ class InvestigationService:
                             raise
             except ProviderUnavailable as error:
                 return _with_metadata(
-                    self._failed_response(exception, tool_calls, str(error)),
+                    self._failed_response(exception, tool_calls, error),
                     started_at,
                     self._provider,
                 )
@@ -388,7 +402,7 @@ class InvestigationService:
 
     @staticmethod
     def _failed_response(
-        exception: ExceptionSummary, tool_calls: list[ToolCall], reason: str
+        exception: ExceptionSummary, tool_calls: list[ToolCall], error: ProviderUnavailable
     ) -> InvestigationResponse:
         return InvestigationResponse(
             status=InvestigationStatus.FAILED,
@@ -396,7 +410,7 @@ class InvestigationService:
             summary="AI provider unavailable; deterministic evidence remains available for manual review.",
             supporting_evidence=[],
             contradictory_evidence=[],
-            missing_evidence=[reason],
+            missing_evidence=[str(error)],
             recommended_action_code=None,
             requires_human_review=True,
             investigation_id=f"INV-{uuid4().hex[:12].upper()}",
@@ -404,6 +418,11 @@ class InvestigationService:
             evidence_score=0,
             tool_calls=tool_calls,
             created_at=datetime.now(UTC),
+            provider_error_category=error.info.category,
+            provider_retryable=error.info.retryable,
+            failure_stage=error.info.stage,
+            failure_iteration=error.info.iteration,
+            failure_detail=str(error)[:500],
         )
 
 
@@ -415,6 +434,13 @@ def _with_metadata(
         update={
             "provider": getattr(provider, "provider", "unknown"),
             "model": getattr(provider, "model", "unknown"),
+            "originally_requested_provider": getattr(
+                provider, "originally_requested_provider", getattr(provider, "provider", "unknown")
+            ),
+            "actual_provider_used": getattr(provider, "provider", "unknown"),
+            "model_used": getattr(provider, "model", "unknown"),
+            "fallback_used": bool(getattr(provider, "fallback_used", False)),
+            "fallback_reason": getattr(provider, "fallback_reason", None),
             "prompt_version": getattr(provider, "prompt_version", "p0-iterative-v1"),
             "started_at": started_at,
             "completed_at": completed_at,

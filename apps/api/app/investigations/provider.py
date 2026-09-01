@@ -1,5 +1,7 @@
 import json
+import logging
 import re
+import time
 from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol
@@ -7,11 +9,27 @@ from urllib import request
 from urllib.error import HTTPError, URLError
 
 from app.domain.schemas import ExceptionSummary
-from app.investigations.schemas import EvidenceItem
+from app.investigations.schemas import EvidenceItem, ProviderHealthItem, ProviderHealthResponse
+
+_logger = logging.getLogger("fintrace.ai_provider")
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderFailureInfo:
+    category: str
+    retryable: bool
+    http_status: int | None = None
+    stage: str = "unknown"
+    iteration: int | None = None
+    detail: str | None = None
 
 
 class ProviderUnavailable(RuntimeError):
     """The configured investigation provider cannot safely answer."""
+
+    def __init__(self, message: str, *, info: ProviderFailureInfo | None = None) -> None:
+        super().__init__(message)
+        self.info = info or ProviderFailureInfo("provider_unavailable", False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,6 +41,8 @@ class AgentDecision:
 
 
 class AIClient(Protocol):
+    def health_check(self) -> ProviderHealthResponse: ...
+
     def select_tools(
         self, exception: ExceptionSummary, available_tools: list[str]
     ) -> list[str]: ...
@@ -39,12 +59,35 @@ class AIClient(Protocol):
     ) -> AgentDecision: ...
 
 
+AIProvider = AIClient
+
+
 class StubAIClient:
     """Deterministic provider adapter used until a real provider is configured."""
 
     provider = "stub"
     model = "deterministic-stub"
     prompt_version = "p0-iterative-v1"
+
+    def health_check(self) -> ProviderHealthResponse:
+        return ProviderHealthResponse(
+            status="CONNECTED",
+            provider=self.provider,
+            model=self.model,
+            configured=True,
+            latency_ms=0,
+            error_category=None,
+            retryable=None,
+            detail="TEST FIXTURE / NON-LIVE",
+            overall_status="AVAILABLE",
+            active_provider=self.provider,
+            providers=[
+                ProviderHealthItem(
+                    status="CONNECTED", provider=self.provider, model=self.model,
+                    configured=True, latency_ms=0, detail="TEST FIXTURE / NON-LIVE",
+                )
+            ],
+        )
 
     def next_step(
         self,
@@ -156,9 +199,32 @@ class StubAIClient:
 
 
 class UnavailableAIClient:
-    provider = "unavailable"
-    model = "unavailable"
     prompt_version = "p0-iterative-v1"
+
+    def __init__(self, provider: str = "unavailable", model: str = "unavailable") -> None:
+        self.provider = provider
+        self.model = model
+
+    def health_check(self) -> ProviderHealthResponse:
+        return ProviderHealthResponse(
+            status="NOT_CONFIGURED",
+            provider=self.provider,
+            model=self.model,
+            configured=False,
+            latency_ms=0,
+            error_category="not_configured",
+            retryable=False,
+            detail="No live AI provider credentials are configured.",
+            overall_status="UNAVAILABLE",
+            active_provider=None,
+            providers=[
+                ProviderHealthItem(
+                    status="NOT_CONFIGURED", provider=self.provider, model=self.model,
+                    configured=False, latency_ms=0, error_category="not_configured",
+                    retryable=False, detail="No live AI provider credentials are configured.",
+                )
+            ],
+        )
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         del exception, available_tools
@@ -177,9 +243,58 @@ class FailoverAIClient:
 
     def __init__(self, clients: Sequence[AIClient]) -> None:
         self._clients = tuple(clients)
-        self.provider = "failover"
-        self.model = ", ".join(getattr(client, "model", "unknown") for client in self._clients)
+        self._active_index = 0
+        self._fallback_reason: str | None = None
         self.prompt_version = "p0-iterative-v1"
+
+    @property
+    def originally_requested_provider(self) -> str:
+        return str(getattr(self._clients[0], "provider", "unknown"))
+
+    @property
+    def provider(self) -> str:
+        return str(getattr(self._clients[self._active_index], "provider", "unknown"))
+
+    @property
+    def model(self) -> str:
+        return str(getattr(self._clients[self._active_index], "model", "unknown"))
+
+    @property
+    def fallback_used(self) -> bool:
+        return self._active_index > 0
+
+    @property
+    def fallback_reason(self) -> str | None:
+        return self._fallback_reason
+
+    @property
+    def health_clients(self) -> tuple[AIClient, ...]:
+        return self._clients
+
+    def health_check(self) -> ProviderHealthResponse:
+        results = [client.health_check() for client in self._clients]
+        for index, result in enumerate(results):
+            if result.status == "CONNECTED":
+                self._active_index = index
+                return result
+        failures = [
+            f"{result.provider}:{result.error_category or 'unavailable'}"
+            + (f" ({result.detail})" if result.detail else "")
+            for result in results
+        ]
+        return ProviderHealthResponse(
+            status="UNAVAILABLE",
+            provider=self.provider,
+            model=self.model,
+            configured=True,
+            latency_ms=sum(result.latency_ms for result in results),
+            error_category="all_providers_unavailable",
+            retryable=True,
+            detail="; ".join(failures)[:500],
+            overall_status="UNAVAILABLE",
+            active_provider=None,
+            providers=[_health_item(result) for result in results],
+        )
 
     def next_step(
         self,
@@ -190,30 +305,51 @@ class FailoverAIClient:
         available_tools: list[str],
     ) -> AgentDecision:
         last_error: ProviderUnavailable | None = None
-        for client in self._clients:
+        for index in range(self._active_index, len(self._clients)):
+            client = self._clients[index]
             try:
-                return client.next_step(exception, findings, evidence, tool_trace, available_tools)
+                result = client.next_step(exception, findings, evidence, tool_trace, available_tools)
+                self._active_index = index
+                return result
             except ProviderUnavailable as error:
                 last_error = error
-        raise ProviderUnavailable("All configured AI providers are unavailable") from last_error
+                if not error.info.retryable:
+                    break
+                if index + 1 < len(self._clients):
+                    self._fallback_reason = error.info.category
+        raise _all_providers_failed(last_error) from last_error
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
         last_error: ProviderUnavailable | None = None
-        for client in self._clients:
+        for index in range(self._active_index, len(self._clients)):
+            client = self._clients[index]
             try:
-                return client.select_tools(exception, available_tools)
+                result = client.select_tools(exception, available_tools)
+                self._active_index = index
+                return result
             except ProviderUnavailable as error:
                 last_error = error
-        raise ProviderUnavailable("All configured AI providers are unavailable") from last_error
+                if not error.info.retryable:
+                    break
+                if index + 1 < len(self._clients):
+                    self._fallback_reason = error.info.category
+        raise _all_providers_failed(last_error) from last_error
 
     def investigate(self, exception: ExceptionSummary, evidence: list[EvidenceItem]) -> Any:
         last_error: ProviderUnavailable | None = None
-        for client in self._clients:
+        for index in range(self._active_index, len(self._clients)):
+            client = self._clients[index]
             try:
-                return client.investigate(exception, evidence)
+                result = client.investigate(exception, evidence)
+                self._active_index = index
+                return result
             except ProviderUnavailable as error:
                 last_error = error
-        raise ProviderUnavailable("All configured AI providers are unavailable") from last_error
+                if not error.info.retryable:
+                    break
+                if index + 1 < len(self._clients):
+                    self._fallback_reason = error.info.category
+        raise _all_providers_failed(last_error) from last_error
 
 
 class OpenAICompatibleAIClient:
@@ -237,6 +373,60 @@ class OpenAICompatibleAIClient:
         self.provider = provider_name
         self.model = model
         self.prompt_version = "p0-iterative-v1"
+
+    def health_check(self) -> ProviderHealthResponse:
+        cached = getattr(self, "_health_cache", None)
+        if cached is not None and cached[0] > time.monotonic():
+            return cached[1]
+        started = time.perf_counter()
+        try:
+            self._chat(
+                "Call fintrace_health_probe exactly once. Return no prose.",
+                {"health_check": "fintrace-provider-health"},
+                max_tokens=40,
+                tools=[{
+                    "type": "function",
+                    "function": {
+                        "name": "fintrace_health_probe",
+                        "description": "Minimal no-op capability probe.",
+                        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
+                    },
+                }],
+                require_tool_call=True,
+                rotate_keys=False,
+                request_stage="provider_health",
+            )
+        except ProviderUnavailable as error:
+            result = ProviderHealthResponse(
+                status="UNAVAILABLE",
+                provider=self.provider,
+                model=self.model,
+                configured=bool(self._api_keys),
+                latency_ms=_elapsed_ms(started),
+                error_category=error.info.category,
+                retryable=error.info.retryable,
+                detail=(error.info.detail or str(error))[:500],
+                overall_status="UNAVAILABLE",
+                active_provider=None,
+                providers=[],
+            )
+            self._health_cache = (time.monotonic() + 30.0, result)
+            return result
+        result = ProviderHealthResponse(
+            status="CONNECTED",
+            provider=self.provider,
+            model=self.model,
+            configured=True,
+            latency_ms=_elapsed_ms(started),
+            error_category=None,
+            retryable=None,
+            detail="Minimal structured request succeeded.",
+            overall_status="AVAILABLE",
+            active_provider=self.provider,
+            providers=[],
+        )
+        self._health_cache = (time.monotonic() + 30.0, result)
+        return result
 
     def next_step(
         self,
@@ -277,7 +467,14 @@ class OpenAICompatibleAIClient:
             }
             for name in available_tools
         ]
-        raw = self._chat(instruction, payload, max_tokens=900, tools=tool_specs)
+        raw = self._chat(
+            instruction,
+            payload,
+            max_tokens=900,
+            tools=tool_specs,
+            request_stage="investigation_decision",
+            tool_loop_iteration=len(tool_trace) + 1,
+        )
         if not isinstance(raw, dict):
             raise ProviderUnavailable("AI provider returned an invalid agent decision")
         if "_tool_call" in raw:
@@ -307,7 +504,7 @@ class OpenAICompatibleAIClient:
             '{"tools":["tool_name"]}. Use no more than 8 tools and choose only names from available_tools. '
             "If the relationship is ambiguous, prefer plural/order-scoped tools."
         )
-        raw = self._chat(instruction, payload, max_tokens=120)
+        raw = self._chat(instruction, payload, max_tokens=120, request_stage="tool_selection")
         selected = raw.get("tools") if isinstance(raw, dict) else None
         if not isinstance(selected, list) or not all(isinstance(item, str) for item in selected):
             raise ProviderUnavailable("AI provider returned an invalid tool plan")
@@ -329,7 +526,7 @@ class OpenAICompatibleAIClient:
             "Do not calculate or invent monetary values. If evidence is insufficient, return "
             "UNRESOLVED with missing_evidence and requires_human_review true."
         )
-        return self._chat(instruction, payload)
+        return self._chat(instruction, payload, request_stage="investigation_final")
 
     def _chat(
         self,
@@ -337,6 +534,10 @@ class OpenAICompatibleAIClient:
         payload: dict[str, Any],
         max_tokens: int = 800,
         tools: list[dict[str, Any]] | None = None,
+        require_tool_call: bool = False,
+        rotate_keys: bool = True,
+        request_stage: str = "unknown",
+        tool_loop_iteration: int | None = None,
     ) -> Any:
         body_payload: dict[str, Any] = {
                 "model": self._model,
@@ -353,40 +554,148 @@ class OpenAICompatibleAIClient:
             }
         if tools:
             body_payload["tools"] = tools
-            body_payload["tool_choice"] = "auto"
+            body_payload["tool_choice"] = (
+                {"type": "function", "function": {"name": tools[0]["function"]["name"]}}
+                if require_tool_call
+                else "auto"
+            )
         else:
             body_payload["response_format"] = {"type": "json_object"}
         body = json.dumps(body_payload).encode()
-        last_error: BaseException | None = None
-        for api_key in self._api_keys:
-            request_object = request.Request(
-                f"{self._base_url}/chat/completions",
-                data=body,
-                headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                method="POST",
-            )
-            try:
-                with request.urlopen(request_object, timeout=self._timeout_seconds) as response:
-                    raw = json.loads(response.read())
-                message = raw["choices"][0]["message"]
-                if tools and message.get("tool_calls"):
-                    call = message["tool_calls"][0]
-                    function = call["function"]
-                    return {"_tool_call": function}
-                content = message["content"]
-                parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", str(content).strip()).strip())
-                if not isinstance(parsed, dict):
-                    raise TypeError("provider response must be a JSON object")
-                return parsed
-            except HTTPError as error:
-                last_error = error
-                if error.code not in {401, 403, 408, 409, 429} and error.code < 500:
+        last_error: ProviderUnavailable | None = None
+        keys = self._api_keys if rotate_keys else self._api_keys[:1]
+        for key_index, api_key in enumerate(keys):
+            for attempt in range(2):
+                request_object = request.Request(
+                    f"{self._base_url}/chat/completions",
+                    data=body,
+                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    method="POST",
+                )
+                started = time.perf_counter()
+                last_error = None
+                try:
+                    with request.urlopen(request_object, timeout=self._timeout_seconds) as response:
+                        raw = json.loads(response.read())
+                    choices = raw.get("choices") if isinstance(raw, dict) else None
+                    message = choices[0].get("message") if isinstance(choices, list) and choices else None
+                    if not isinstance(message, dict):
+                        raise ProviderUnavailable(
+                            "Provider returned an invalid response envelope.",
+                            info=ProviderFailureInfo(
+                                "invalid_response", False, stage=request_stage, iteration=tool_loop_iteration
+                            ),
+                        )
+                    if tools and message.get("tool_calls"):
+                        call = message["tool_calls"][0]
+                        function = call["function"]
+                        return {"_tool_call": function}
+                    content = message.get("content")
+                    if not isinstance(content, str) or not content.strip():
+                        raise ProviderUnavailable(
+                            "Provider response did not contain structured content.",
+                            info=ProviderFailureInfo(
+                                "invalid_response", False, stage=request_stage, iteration=tool_loop_iteration
+                            ),
+                        )
+                    if require_tool_call:
+                        raise ProviderUnavailable(
+                            "Provider does not support the required tool-calling capability.",
+                            info=ProviderFailureInfo(
+                                "unsupported_model_capability", False,
+                                stage=request_stage, iteration=tool_loop_iteration,
+                            ),
+                        )
+                    parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", content.strip()).strip())
+                    if not isinstance(parsed, dict):
+                        raise ProviderUnavailable(
+                            "Provider response was not a JSON object.",
+                            info=ProviderFailureInfo(
+                                "invalid_response", False, stage=request_stage, iteration=tool_loop_iteration
+                            ),
+                        )
+                    return parsed
+                except ProviderUnavailable as error:
+                    last_error = error
                     break
-            except (URLError, TimeoutError) as error:
-                last_error = error
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
-                last_error = error
-        raise ProviderUnavailable("AI provider unavailable") from last_error
+                except HTTPError as error:
+                    provider_detail = _safe_http_detail(error)
+                    category, retryable = _http_failure_category(error.code, provider_detail)
+                    last_error = ProviderUnavailable(
+                        f"Provider HTTP {error.code} ({error.reason})."
+                        + (f" {provider_detail}" if provider_detail else ""),
+                        info=ProviderFailureInfo(
+                            category,
+                            retryable,
+                            error.code,
+                            request_stage,
+                            tool_loop_iteration,
+                            provider_detail,
+                        ),
+                    )
+                    if retryable and error.code != 429 and attempt == 0 and rotate_keys:
+                        time.sleep(0.25)
+                        continue
+                    break
+                except TimeoutError:
+                    last_error = ProviderUnavailable(
+                        "Provider network request failed.",
+                        info=ProviderFailureInfo(
+                            "timeout", True, stage=request_stage, iteration=tool_loop_iteration
+                        ),
+                    )
+                    if attempt == 0 and rotate_keys:
+                        time.sleep(0.25)
+                        continue
+                    break
+                except URLError:
+                    last_error = ProviderUnavailable(
+                        "Provider network request failed.",
+                        info=ProviderFailureInfo(
+                            "temporary_provider_unavailable", True,
+                            stage=request_stage, iteration=tool_loop_iteration,
+                        ),
+                    )
+                    if attempt == 0 and rotate_keys:
+                        time.sleep(0.25)
+                        continue
+                    break
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+                    last_error = ProviderUnavailable(
+                        "Provider returned invalid JSON.",
+                        info=ProviderFailureInfo(
+                            "invalid_response", False, stage=request_stage, iteration=tool_loop_iteration
+                        ),
+                    )
+                    break
+                finally:
+                    if last_error is not None:
+                        _logger.warning(
+                            "ai_provider_failure provider=%s model=%s category=%s retryable=%s stage=%s iteration=%s latency_ms=%s",
+                            self.provider,
+                            self.model,
+                            last_error.info.category,
+                            last_error.info.retryable,
+                            last_error.info.stage,
+                            last_error.info.iteration,
+                            _elapsed_ms(started),
+                        )
+        if last_error is not None:
+            raise last_error
+        raise ProviderUnavailable(
+            "AI provider is not configured.",
+            info=ProviderFailureInfo(
+                "not_configured", False, stage=request_stage, iteration=tool_loop_iteration
+            ),
+        )
+
+
+class GeminiProvider(OpenAICompatibleAIClient):
+    """Gemini's OpenAI-compatible endpoint behind the shared AIProvider contract."""
+
+
+class GroqProvider(OpenAICompatibleAIClient):
+    """Groq's OpenAI-compatible endpoint behind the shared AIProvider contract."""
 
 
 def get_ai_client(
@@ -403,12 +712,18 @@ def get_ai_client(
     if provider_name.casefold() in {"stub", "offline", "deterministic"}:
         return StubAIClient()
     clients: list[AIClient] = []
-    if (
-        provider_name.casefold() in {"openai", "openai_compatible", "gemini", "google", "groq"}
-        and api_key
-    ):
+    provider_classes: dict[str, type[OpenAICompatibleAIClient]] = {
+        "gemini": GeminiProvider,
+        "google": GeminiProvider,
+        "groq": GroqProvider,
+        "openai": OpenAICompatibleAIClient,
+        "openai_compatible": OpenAICompatibleAIClient,
+    }
+    primary_name = provider_name.casefold()
+    if primary_name in provider_classes and api_key:
+        primary_class = provider_classes[primary_name]
         clients.append(
-            OpenAICompatibleAIClient(
+            primary_class(
                 api_key,
                 _provider_base_url(provider_name, base_url),
                 model,
@@ -416,28 +731,166 @@ def get_ai_client(
                 provider_name,
             )
         )
-    if (
-        fallback_provider_name.casefold()
-        in {"openai", "openai_compatible", "gemini", "google", "groq"}
-        and fallback_api_key
-    ):
-        clients.append(
-            OpenAICompatibleAIClient(
-                fallback_api_key,
-                _provider_base_url(fallback_provider_name, fallback_base_url),
-                fallback_model,
-                timeout_seconds,
-                fallback_provider_name,
-            )
+    elif primary_name in provider_classes:
+        clients.append(UnavailableAIClient(provider_name, model))
+    else:
+        clients.append(UnavailableAIClient(provider_name or "unavailable", model))
+    fallback_name = fallback_provider_name.casefold()
+    if fallback_name in provider_classes and fallback_name:
+        fallback_class: type[OpenAICompatibleAIClient] | None = (
+            provider_classes[fallback_name] if fallback_api_key else None
         )
+        if fallback_class is not None:
+            clients.append(
+                fallback_class(
+                    fallback_api_key,
+                    _provider_base_url(fallback_provider_name, fallback_base_url),
+                    fallback_model,
+                    timeout_seconds,
+                    fallback_provider_name,
+                )
+            )
+        else:
+            clients.append(UnavailableAIClient(fallback_provider_name, fallback_model))
     if len(clients) > 1:
         return FailoverAIClient(clients)
     if clients:
         return clients[0]
-    return UnavailableAIClient()
+    return UnavailableAIClient(provider_name or "unavailable", model)
+
+
+def get_configured_ai_client(settings: Any) -> AIProvider:
+    """Build the shared provider router from canonical runtime settings."""
+    return get_ai_client(
+        settings.ai_provider,
+        settings.configured_ai_api_keys,
+        settings.resolved_ai_base_url,
+        settings.resolved_ai_model,
+        settings.ai_timeout_seconds,
+        settings.ai_fallback_provider,
+        settings.configured_ai_fallback_api_keys,
+        settings.resolved_ai_fallback_base_url,
+        settings.resolved_ai_fallback_model,
+    )
+
+
+def provider_health_report(client: AIProvider) -> ProviderHealthResponse:
+    """Return separate primary/fallback health without exposing credentials."""
+    clients = client.health_clients if isinstance(client, FailoverAIClient) else (client,)
+    results = []
+    for item in clients:
+        results.append(_health_item(item.health_check()))
+    connected = next((item for item in results if item.status == "CONNECTED"), None)
+    active_provider = connected.provider if connected else None
+    overall_status = "AVAILABLE" if connected else "UNAVAILABLE"
+    if connected and len(results) > 1 and any(item.status != "CONNECTED" for item in results):
+        overall_status = "DEGRADED"
+    return ProviderHealthResponse(
+        status=connected.status if connected else "UNAVAILABLE",
+        provider=connected.provider if connected else (results[0].provider if results else "unavailable"),
+        model=connected.model if connected else (results[0].model if results else "unavailable"),
+        configured=any(item.configured for item in results),
+        latency_ms=sum(item.latency_ms for item in results),
+        error_category=None if connected else "all_providers_unavailable",
+        retryable=None if connected else any(item.retryable for item in results),
+        detail=connected.detail if connected else "; ".join(
+            f"{item.provider}:{item.error_category or 'unavailable'}" for item in results
+        )[:500],
+        overall_status=overall_status,
+        active_provider=active_provider,
+        providers=results,
+    )
+
+
+def _health_item(result: ProviderHealthResponse | ProviderHealthItem) -> ProviderHealthItem:
+    return ProviderHealthItem(
+        status=result.status,
+        provider=result.provider,
+        model=result.model,
+        configured=result.configured,
+        latency_ms=result.latency_ms,
+        error_category=result.error_category,
+        retryable=result.retryable,
+        detail=result.detail,
+    )
 
 
 def _provider_base_url(provider_name: str, base_url: str) -> str:
     if provider_name.casefold() in {"gemini", "google"} and base_url.rstrip("/") == "https://api.openai.com/v1":
         return "https://generativelanguage.googleapis.com/v1beta/openai"
     return base_url
+
+
+def _elapsed_ms(started: float) -> int:
+    return max(0, int((time.perf_counter() - started) * 1000))
+
+
+def _all_providers_failed(error: ProviderUnavailable | None) -> ProviderUnavailable:
+    if error is None:
+        return ProviderUnavailable("All configured AI providers are unavailable.")
+    return ProviderUnavailable(
+        f"All configured AI providers are unavailable: {error}",
+        info=error.info,
+    )
+
+
+def _safe_http_detail(error: HTTPError) -> str | None:
+    """Extract provider diagnostics without retaining response bodies or credentials."""
+    try:
+        payload = json.loads(error.read().decode("utf-8", errors="replace"))
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
+        return None
+    if isinstance(payload, list) and payload and isinstance(payload[0], dict):
+        payload = payload[0]
+    provider_error = payload.get("error") if isinstance(payload, dict) else None
+    if not isinstance(provider_error, dict):
+        return None
+    parts: list[str] = []
+    status_value = provider_error.get("status")
+    if isinstance(status_value, str):
+        parts.append(status_value)
+    message = provider_error.get("message")
+    if isinstance(message, str):
+        parts.append(message.split("\n", 1)[0][:240])
+    for detail in provider_error.get("details", []):
+        if not isinstance(detail, dict):
+            continue
+        violations = detail.get("violations")
+        if isinstance(violations, list):
+            for violation in violations:
+                if not isinstance(violation, dict):
+                    continue
+                metric = violation.get("quotaMetric")
+                quota_id = violation.get("quotaId")
+                quota_value = violation.get("quotaValue")
+                if metric or quota_id or quota_value:
+                    parts.append(
+                        "quota="
+                        + ":".join(str(item) for item in (metric, quota_id, quota_value) if item)
+                    )
+        retry_delay = detail.get("retryDelay")
+        if retry_delay:
+            parts.append(f"retry_after={retry_delay}")
+    return "; ".join(parts)[:500] or None
+
+
+def _http_failure_category(status: int, detail: str | None) -> tuple[str, bool]:
+    if status == 401:
+        return "authentication", False
+    if status == 403:
+        return "forbidden", False
+    if status == 404:
+        return "model_not_found", False
+    if status == 408:
+        return "timeout", True
+    if status == 409:
+        return "temporary_provider_unavailable", True
+    if status == 429:
+        # Provider quota exhaustion is a configuration/account limit, not a
+        # transient rate limit. Do not retry it repeatedly or hide it via failover.
+        if detail and ("quota=" in detail or "RESOURCE_EXHAUSTED" in detail):
+            return "quota_exhausted", False
+        return "rate_limited", True
+    if status >= 500:
+        return "transient_server_error", True
+    return f"http_{status}", False

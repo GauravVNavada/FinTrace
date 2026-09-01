@@ -5,11 +5,62 @@ from app.financial_investigations.files import UploadValidationError
 from app.financial_investigations.schemas import SourceType
 from app.main import app
 from app.source_analysis.analyzer import analyze_content
-from app.source_analysis.provider import OfflineSourceAnalysisProvider
+from app.source_analysis.provider import (
+    ClassificationResult,
+    FailoverSourceAnalysisProvider,
+    OfflineSourceAnalysisProvider,
+    SourceAnalysisProviderUnavailable,
+)
 
 
 def _headers(role: str = "CONTROLLER") -> dict[str, str]:
     return {"X-Organization-Id": "ORG-001", "X-Actor-Id": "sprint2-user", "X-Actor-Role": role}
+
+
+class _FailingSourceProvider:
+    def __init__(self, *, retryable: bool) -> None:
+        self.calls = 0
+        self._retryable = retryable
+
+    def classify(self, filename: str, document: object) -> ClassificationResult:
+        self.calls += 1
+        raise SourceAnalysisProviderUnavailable(
+            "source provider unavailable",
+            category="rate_limited" if self._retryable else "forbidden",
+            retryable=self._retryable,
+        )
+
+    def propose_mappings(self, source_type: SourceType, document: object) -> list[object]:
+        self.calls += 1
+        raise AssertionError("classify should fail before mappings are proposed")
+
+
+class _WorkingSourceProvider:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def classify(self, filename: str, document: object) -> ClassificationResult:
+        self.calls += 1
+        return ClassificationResult(SourceType.ORDERS, 0.9, "bounded", "AI_PROVIDER", "fallback", "model")
+
+    def propose_mappings(self, source_type: SourceType, document: object) -> list[object]:
+        self.calls += 1
+        return []
+
+
+def test_source_analysis_failover_is_transient_only() -> None:
+    fallback = _WorkingSourceProvider()
+    transient = _FailingSourceProvider(retryable=True)
+    result = FailoverSourceAnalysisProvider((transient, fallback)).classify("orders.csv", object())
+    assert result.provider == "fallback"
+    assert transient.calls == 1
+    assert fallback.calls == 1
+
+    fallback.calls = 0
+    permanent = _FailingSourceProvider(retryable=False)
+    with pytest.raises(SourceAnalysisProviderUnavailable, match="source provider unavailable"):
+        FailoverSourceAnalysisProvider((permanent, fallback)).classify("orders.csv", object())
+    assert fallback.calls == 0
 
 
 @pytest.mark.asyncio

@@ -3,6 +3,7 @@ import hashlib
 import hmac
 import json
 import time
+from io import BytesIO
 from typing import Self
 from urllib.error import HTTPError
 
@@ -10,7 +11,16 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 
 from app.core.config import Settings, get_settings
-from app.investigations.provider import FailoverAIClient, OpenAICompatibleAIClient, get_ai_client
+from app.investigations.provider import (
+    AgentDecision,
+    FailoverAIClient,
+    GeminiProvider,
+    GroqProvider,
+    OpenAICompatibleAIClient,
+    ProviderFailureInfo,
+    ProviderUnavailable,
+    get_ai_client,
+)
 from app.main import app
 
 
@@ -123,17 +133,18 @@ def test_auth_mode_is_normalized_before_release_validation() -> None:
 def test_provider_key_slots_select_first_configured_key_and_support_aliases() -> None:
     settings = Settings(
         ai_provider="gemini",
+        gemini_api_key="gemini-direct",
         gemini_api_key_1="gemini-key-1",
         gemini_api_key_2="gemini-key-2",
+        groq_api_key="groq-direct",
         groq_api_key_1="groq-key-1",
         groq_api_key_2="groq-key-2",
         ai_fallback_provider="groq",
     )
-    assert settings.ai_api_key == "gemini-key-1"
-    assert settings.configured_ai_api_keys == ("gemini-key-1", "gemini-key-2")
-    assert settings.configured_ai_fallback_api_keys == ("groq-key-1", "groq-key-2")
-    assert isinstance(get_ai_client("gemini", settings.ai_api_key), OpenAICompatibleAIClient)
-    assert isinstance(get_ai_client("groq", "groq-key"), OpenAICompatibleAIClient)
+    assert settings.configured_ai_api_keys == ("gemini-direct", "gemini-key-1", "gemini-key-2")
+    assert settings.configured_ai_fallback_api_keys == ("groq-direct", "groq-key-1", "groq-key-2")
+    assert isinstance(get_ai_client("gemini", settings.configured_ai_api_keys), GeminiProvider)
+    assert isinstance(get_ai_client("groq", "groq-key"), GroqProvider)
     assert isinstance(
         get_ai_client(
             "gemini",
@@ -173,3 +184,153 @@ def test_provider_retries_next_key_after_rate_limit(monkeypatch: pytest.MonkeyPa
 
     assert client._chat("test", {}) == {"ok": True}
     assert calls == ["Bearer first-key", "Bearer second-key"]
+
+
+def test_provider_health_classifies_malformed_success_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"choices":[{"message":{"role":"assistant"}}]}'
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", lambda *args, **kwargs: FakeResponse())
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+
+    result = client.health_check()
+
+    assert result.status == "UNAVAILABLE"
+    assert result.error_category == "invalid_response"
+    assert result.retryable is False
+
+
+def test_provider_health_requires_structured_tool_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"choices":[{"message":{"tool_calls":[{"function":{"name":"fintrace_health_probe","arguments":"{}"}}]}}]}'
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", lambda *args, **kwargs: FakeResponse())
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+
+    result = client.health_check()
+
+    assert result.status == "CONNECTED"
+    assert result.overall_status == "AVAILABLE"
+
+
+def test_provider_health_classifies_forbidden_response(monkeypatch: pytest.MonkeyPatch) -> None:
+    def forbidden(*args: object, **kwargs: object) -> None:
+        raise HTTPError("https://provider.test", 403, "Forbidden", {}, None)
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", forbidden)
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+
+    result = client.health_check()
+
+    assert result.status == "UNAVAILABLE"
+    assert result.error_category == "forbidden"
+    assert result.retryable is False
+
+
+def test_provider_health_preserves_quota_diagnostic_without_credentials(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def rate_limited(*args: object, **kwargs: object) -> None:
+        raise HTTPError(
+            "https://provider.test",
+            429,
+            "Too Many Requests",
+            {},
+            BytesIO(
+                b'{"error":{"code":429,"status":"RESOURCE_EXHAUSTED",'
+                b'"message":"quota exceeded", "details":[{"violations":['
+                b'{"quotaMetric":"generate_content_free_tier_requests",'
+                b'"quotaId":"GenerateRequestsPerDayPerProject-FreeTier",'
+                b'"quotaValue":"20"}],"retryDelay":"43s"}]}}'
+            ),
+        )
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", rate_limited)
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+
+    result = client.health_check()
+
+    assert result.error_category == "quota_exhausted"
+    assert "GenerateRequestsPerDayPerModel-FreeTier" not in (result.detail or "")
+    assert "GenerateRequestsPerDayPerProject-FreeTier" in (result.detail or "")
+    assert "key" not in (result.detail or "")
+    assert result.retryable is False
+
+
+def test_provider_specific_keys_never_cross_provider_slots() -> None:
+    settings = Settings(
+        _env_file=None,
+        ai_provider="gemini",
+        gemini_api_key="gemini-secret",
+        groq_api_key="groq-secret",
+        ai_fallback_provider="groq",
+    )
+
+    assert settings.configured_ai_api_keys == ("gemini-secret",)
+    assert settings.configured_ai_fallback_api_keys == ("groq-secret",)
+
+    groq_settings = Settings(
+        _env_file=None,
+        ai_provider="groq",
+        ai_model="ignored-generic-model",
+        groq_model="configured-groq-model",
+        groq_api_key="groq-secret",
+    )
+    assert groq_settings.resolved_ai_model == "configured-groq-model"
+    assert groq_settings.resolved_ai_base_url == "https://api.groq.com/openai/v1"
+
+
+def test_failover_only_uses_fallback_for_retryable_provider_failures() -> None:
+    class FailingProvider:
+        provider = "gemini"
+        model = "gemini-model"
+
+        def __init__(self, category: str, retryable: bool) -> None:
+            self.error = ProviderUnavailable(
+                "provider failure",
+                info=ProviderFailureInfo(category, retryable),
+            )
+
+        def next_step(self, *args: object, **kwargs: object) -> AgentDecision:
+            raise self.error
+
+    class FallbackProvider:
+        provider = "groq"
+        model = "groq-model"
+        calls = 0
+
+        def next_step(self, *args: object, **kwargs: object) -> AgentDecision:
+            self.calls += 1
+            return AgentDecision("final", candidate={
+                "status": "UNRESOLVED",
+                "summary": "manual review",
+                "requires_human_review": True,
+            })
+
+    fallback = FallbackProvider()
+    retryable = FailoverAIClient((FailingProvider("rate_limited", True), fallback))
+    decision = retryable.next_step(None, [], [], [], [])
+    assert decision.action == "final"
+    assert retryable.provider == "groq"
+    assert retryable.fallback_used is True
+    assert retryable.fallback_reason == "rate_limited"
+
+    fallback.calls = 0
+    non_retryable = FailoverAIClient((FailingProvider("forbidden", False), fallback))
+    with pytest.raises(ProviderUnavailable):
+        non_retryable.next_step(None, [], [], [], [])
+    assert fallback.calls == 0

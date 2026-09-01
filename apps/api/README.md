@@ -13,6 +13,7 @@ FastAPI service boundary for FinTrace. Deterministic financial rules remain in a
 | POST | `/api/v1/exceptions/{exception_id}/investigations` | Bounded evidence investigation; requires tenant context and idempotency key |
 | GET | `/api/v1/investigations/{investigation_id}` | Retrieve an investigation result |
 | GET | `/api/v1/investigations/{investigation_id}/tool-calls` | Retrieve bounded tool-call evidence |
+| GET | `/api/v1/ai/provider-health` | Check configured provider credentials/model reachability with a minimal structured request |
 | POST | `/api/v1/exceptions/{exception_id}/resolution-request` | Create an idempotent simulated approval request |
 | POST | `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/resolution-request` | Create an idempotent approval request for an uploaded exception result |
 | POST | `/api/v1/approvals/{request_id}/approve` | Apply one capability-authorized simulated approval |
@@ -43,13 +44,15 @@ POST  /api/v1/financial-investigations/{id}/sources/{source_id}/mappings/confirm
 PATCH /api/v1/financial-investigations/{id}/sources/{source_id}/classification
 ```
 
-The default `stub` provider is explicitly offline/deterministic. A configured OpenAI-compatible provider receives bounded metadata and samples only, selects from the server allowlist of read-only tools, and has its output validated; it cannot normalize records or mutate financial state. `gemini`, `google`, and `groq` are supported aliases for this adapter. Staging and production settings reject the offline provider and require `AI_API_KEY`. For local convenience, `apps/api/.env` contains two Gemini and two Groq key slots; the first non-empty slot for the selected provider is used when `AI_API_KEY` is blank, and requests retry remaining keys after rate-limit, transient, or authentication failures. Set `AI_FALLBACK_PROVIDER` to explicitly fail over to the other provider after the primary provider is exhausted. Automated tests force the deterministic stub and do not consume live quota.
+The default demo provider is Gemini with model `gemini-2.5-flash-lite`; Groq with model `openai/gpt-oss-120b` is the optional fallback. A configured OpenAI-compatible provider receives bounded metadata and samples only, selects from the server allowlist of read-only tools, and has its output validated; it cannot normalize records or mutate financial state. `GeminiProvider` reads `GEMINI_API_KEY` and `GroqProvider` reads `GROQ_API_KEY`; legacy numbered slots remain supported for existing local deployments. The runtime model and endpoint are configurable. Authentication, authorization, unsupported-model, and malformed-output failures are surfaced immediately; only bounded transient failures can trigger explicit fallback. Automated tests force the deterministic stub and do not consume live quota.
 
 ## Run
 
 ## P0 live-provider contract
 
-Set `AI_PROVIDER=gemini`, `AI_MODEL`, and a server-side Gemini key (`GEMINI_API_KEY_1` or `AI_API_KEY`) for the buildathon path. Source analysis sends only the filename, headers, inferred types, row count, bounded sample rows, and basic statistics. Exception investigation receives deterministic findings and returned evidence, then chooses one allowlisted read-only tool per turn up to eight calls. Outputs are schema-validated and fact-verified. A provider outage returns an explicit unavailable status or persisted `FAILED` investigation; it never silently becomes stub output, while deterministic reconciliation remains available. The AI benchmark is exposed separately at `/api/v1/evaluation/ai/run` and `/api/v1/evaluation/ai/latest`.
+Set `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, `GEMINI_API_KEY`, `AI_FALLBACK_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY` for the buildathon path. Check `/api/v1/ai/provider-health` before starting a demo; it reports primary and fallback separately and caches the result briefly. Source analysis sends only the filename, headers, inferred types, row count, bounded sample rows, and basic statistics. Exception investigation receives deterministic findings and returned evidence, then chooses one allowlisted read-only tool per turn up to eight calls. Outputs are schema-validated and fact-verified. A provider outage returns an explicit `UNAVAILABLE` health result and persisted `FAILED` investigation with provider, model, error category, retryability, request stage, iteration, and latency; it never silently becomes stub output or `UNRESOLVED`, while deterministic reconciliation remains available. Live requests require explicit use of the live configuration; the AI benchmark is exposed separately at `/api/v1/evaluation/ai/run` and `/api/v1/evaluation/ai/latest`.
+
+The explicit live smoke is `RUN_LIVE_AI_TESTS=1 python scripts/live_ai_smoke.py` from the repository root (on Windows, set `$env:RUN_LIVE_AI_TESTS="1"` first). It performs provider health, one source analysis, and one complete investigation; it never prints credentials. Normal pytest/CI paths force the stub and do not call live APIs.
 
 ```bash
 python -m venv .venv
@@ -67,4 +70,4 @@ Development requests may use `X-Organization-Id`, `X-Actor-Id`, and `X-Actor-Rol
 - Repositories require organization scope.
 - Demo repository is deterministic and process-local; PostgreSQL is the durable runtime.
 - No route accepts organization scope from a request body.
-- Migrations 004–011 persist investigation/evaluation/control workflow snapshots, idempotency responses, ordered tool calls, FinancialInvestigation workspaces, source metadata, source analyses, mapping proposals, immutable normalized datasets, reconciliation runs/results, uploaded investigations, and approval requests. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.
+- Migrations 004–013 persist investigation/evaluation/control workflow snapshots, idempotency responses, ordered tool calls, FinancialInvestigation workspaces, source metadata, source analyses, mapping proposals, immutable normalized datasets, reconciliation runs/results, uploaded investigations, approval requests, and live-provider diagnostics. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.

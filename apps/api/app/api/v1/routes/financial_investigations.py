@@ -36,7 +36,7 @@ from app.financial_investigations.service import (
     FinancialInvestigationService,
     SourceFileNotFound,
 )
-from app.investigations.provider import get_ai_client
+from app.investigations.provider import get_configured_ai_client
 from app.investigations.schemas import InvestigationResponse
 from app.normalization.schemas import DatasetVersionResponse, NormalizedRecordResponse
 from app.normalization.service import (
@@ -88,17 +88,7 @@ reconciliation_service = ReconciliationService(cast(WorkflowRepository, get_repo
 _settings = get_settings()
 financial_exception_service = FinancialExceptionInvestigationService(
     cast(WorkflowRepository, get_repository()),
-    get_ai_client(
-        _settings.ai_provider,
-        _settings.configured_ai_api_keys,
-        _settings.ai_base_url,
-        _settings.ai_model,
-        _settings.ai_timeout_seconds,
-        _settings.ai_fallback_provider,
-        _settings.configured_ai_fallback_api_keys,
-        _settings.ai_fallback_base_url,
-        _settings.ai_fallback_model,
-    ),
+    get_configured_ai_client(_settings),
 )
 pattern_service = FinancialInvestigationPatternService(cast(WorkflowRepository, get_repository()))
 demo_data_service = DemoDataService(cast(WorkflowRepository, get_repository()))

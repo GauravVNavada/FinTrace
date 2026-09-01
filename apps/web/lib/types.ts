@@ -249,6 +249,33 @@ export interface ApiInvestigation {
   verifier_passed: boolean;
   verifier_issues: string[];
   rejected_evidence: { source: string; record_id?: string | null; fact: string; verification_issue?: string | null }[];
+  provider_error_category?: string | null;
+  provider_retryable?: boolean | null;
+  failure_stage?: string | null;
+  failure_iteration?: number | null;
+  failure_detail?: string | null;
+  originally_requested_provider?: string | null;
+  actual_provider_used?: string | null;
+  model_used?: string | null;
+  fallback_used?: boolean;
+  fallback_reason?: string | null;
+}
+
+export interface ApiProviderHealthItem {
+  status: "CONNECTED" | "UNAVAILABLE" | "NOT_CONFIGURED";
+  provider: string;
+  model: string;
+  configured: boolean;
+  latency_ms: number;
+  error_category: string | null;
+  retryable: boolean | null;
+  detail: string | null;
+}
+
+export interface ApiProviderHealth extends ApiProviderHealthItem {
+  overall_status: "AVAILABLE" | "DEGRADED" | "UNAVAILABLE";
+  active_provider: string | null;
+  providers: ApiProviderHealthItem[];
 }
 
 export type FinancialInvestigationStatus = "DRAFT" | "SOURCES_UPLOADED" | "MAPPING_REQUIRED" | "RELATIONSHIP_REVIEW" | "READY_TO_BUILD" | "PROCESSING" | "RECONCILED" | "FAILED";

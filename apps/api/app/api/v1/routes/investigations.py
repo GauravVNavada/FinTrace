@@ -6,8 +6,8 @@ from fastapi.responses import JSONResponse
 from app.api.deps import get_actor_context
 from app.controls.schemas import ActorContext, Capability
 from app.core.config import get_settings
-from app.investigations.provider import get_ai_client
-from app.investigations.schemas import InvestigationResponse, ToolCall
+from app.investigations.provider import get_configured_ai_client, provider_health_report
+from app.investigations.schemas import InvestigationResponse, ProviderHealthResponse, ToolCall
 from app.investigations.service import (
     IdempotencyConflictError,
     InvestigationNotFoundError,
@@ -17,20 +17,14 @@ from app.repositories.factory import get_repository
 
 router = APIRouter()
 _settings = get_settings()
-investigation_service = InvestigationService(
-    get_repository(),
-    get_ai_client(
-        _settings.ai_provider,
-        _settings.configured_ai_api_keys,
-        _settings.ai_base_url,
-        _settings.ai_model,
-        _settings.ai_timeout_seconds,
-        _settings.ai_fallback_provider,
-        _settings.configured_ai_fallback_api_keys,
-        _settings.ai_fallback_base_url,
-        _settings.ai_fallback_model,
-    ),
-)
+ai_client = get_configured_ai_client(_settings)
+investigation_service = InvestigationService(get_repository(), ai_client)
+
+
+@router.get("/ai/provider-health", response_model=ProviderHealthResponse)
+def get_provider_health() -> ProviderHealthResponse:
+    """Check the configured live provider before an investigation is started."""
+    return provider_health_report(ai_client)
 
 
 @router.post(

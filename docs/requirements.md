@@ -74,7 +74,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | INV-003 | Verify citations | Cited records exist, belong to the tenant, and support the root-cause code. |
 | INV-004 | Recommend only controlled actions | Free-text actions are not executable; action codes are allowlisted. |
 | INV-005 | Audit the investigation | Investigation start, tool calls, result validation, and review request are logged. |
-| INV-006 | Fail safely when the provider is unavailable | The API retries explicitly configured keys/providers, then returns a typed failed investigation if all are unavailable; deterministic evidence remains accessible and no resolution or source-system mutation occurs. |
+| INV-006 | Fail safely when the provider is unavailable | The API retries explicit provider key pools only for bounded transient failures, can continue the same conversation/tool state through an explicitly configured fallback, and returns a typed failed investigation otherwise; deterministic evidence remains accessible and no resolution or source-system mutation occurs. |
 | INV-007 | Retrieve a validated investigation trace | Implemented Sprint 5 slice; a tenant-scoped run/result route returns the persisted status, deterministic evidence score, citations, review requirement, and ordered read-only tool calls. |
 
 ### SAFE — Safety and controls
@@ -92,7 +92,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 ## 4. Non-functional requirements
 
 - **Security:** No secrets in source; API input validation; tenant isolation; server-side authorization; safe error envelope.
-- **Reliability:** Deterministic calculations; bounded timeouts; no action on provider failure; append-only audit events.
+- **Reliability:** Deterministic calculations; bounded timeouts; conservative transient-only failover; no action on provider failure; append-only audit events.
 - **Performance:** Dashboard reads should be aggregate-backed; reconciliation throughput is measured separately from AI latency; exception lists are paginated in the API.
 - **Accessibility:** Keyboard-visible focus, semantic headings, accessible contrast, status labels not conveyed by color alone, and useful empty/error states.
 - **Observability:** Correlate request, organization, run, exception, and investigation IDs without logging sensitive payloads.

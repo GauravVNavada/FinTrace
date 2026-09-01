@@ -10,6 +10,27 @@ class InvestigationStatus(StrEnum):
     FAILED = "FAILED"
 
 
+class ProviderHealthItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str = Field(pattern=r"^(CONNECTED|UNAVAILABLE|NOT_CONFIGURED)$")
+    provider: str = Field(min_length=1, max_length=64)
+    model: str = Field(min_length=1, max_length=128)
+    configured: bool
+    latency_ms: int = Field(ge=0)
+    error_category: str | None = Field(default=None, max_length=100)
+    retryable: bool | None = None
+    detail: str | None = Field(default=None, max_length=500)
+
+
+class ProviderHealthResponse(ProviderHealthItem):
+    """Backward-compatible active-provider fields plus a primary/fallback report."""
+
+    overall_status: str = Field(pattern=r"^(AVAILABLE|DEGRADED|UNAVAILABLE)$")
+    active_provider: str | None = Field(default=None, max_length=64)
+    providers: list[ProviderHealthItem] = Field(default_factory=list, max_length=4)
+
+
 class EvidenceSource(StrEnum):
     ORDER = "order"
     PAYMENT = "payment"
@@ -93,6 +114,8 @@ class ToolCall(BaseModel):
     arguments: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     result_record_ids: list[str] = Field(default_factory=list, max_length=100)
     result_summary: str = ""
+    provider: str = "unknown"
+    model: str = "unknown"
 
 
 class InvestigationResponse(InvestigationCandidate):
@@ -110,3 +133,13 @@ class InvestigationResponse(InvestigationCandidate):
     verifier_passed: bool = False
     verifier_issues: list[str] = Field(default_factory=list, max_length=50)
     rejected_evidence: list[EvidenceItem] = Field(default_factory=list, max_length=30)
+    provider_error_category: str | None = Field(default=None, max_length=100)
+    provider_retryable: bool | None = None
+    failure_stage: str | None = Field(default=None, max_length=100)
+    failure_iteration: int | None = Field(default=None, ge=1, le=8)
+    failure_detail: str | None = Field(default=None, max_length=500)
+    originally_requested_provider: str | None = Field(default=None, max_length=64)
+    actual_provider_used: str | None = Field(default=None, max_length=64)
+    model_used: str | None = Field(default=None, max_length=128)
+    fallback_used: bool = False
+    fallback_reason: str | None = Field(default=None, max_length=100)

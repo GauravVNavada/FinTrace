@@ -119,7 +119,9 @@ GET  /api/v1/evaluation/latest
 
 ## Investigation contract
 
-The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. Key pools retry in order for safe provider failures; an explicitly configured fallback provider can be tried after the primary pool is exhausted. The deterministic provider is the default local implementation.
+The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. `AI_PROVIDER`/`AI_MODEL` select the primary at runtime; `AI_FALLBACK_PROVIDER`, `GROQ_MODEL`, and provider-specific credentials select an explicit fallback. Key pools retry in order only for bounded transient failures; quota, authorization, unsupported-capability, and malformed-output failures are not hidden. Investigation persistence includes `originally_requested_provider`, `actual_provider_used`, `model_used`, `fallback_used`, and `fallback_reason`. The deterministic provider is the default local implementation for tests/offline operation only.
+
+`GET /api/v1/ai/provider-health` returns compatibility fields for the active provider plus `overall_status`, `active_provider`, and a `providers` array containing separate configured model, reachability, latency, and redacted error-category entries for primary and fallback. Health uses one minimal structured/tool-capability probe per provider and caches results briefly so UI reads do not poll generation endpoints.
 
 ## Caching and freshness
 

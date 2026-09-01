@@ -73,13 +73,13 @@ class SourceAnalysisService:
             provider = get_source_analysis_provider(
                 settings.ai_provider,
                 settings.configured_ai_api_keys,
-                settings.ai_base_url,
-                settings.ai_model,
+                settings.resolved_ai_base_url,
+                settings.resolved_ai_model,
                 settings.ai_timeout_seconds,
                 settings.ai_fallback_provider,
                 settings.configured_ai_fallback_api_keys,
-                settings.ai_fallback_base_url,
-                settings.ai_fallback_model,
+                settings.resolved_ai_fallback_base_url,
+                settings.resolved_ai_fallback_model,
             )
             classification = provider.classify(str(source["original_filename"]), document)
             mappings = provider.propose_mappings(classification.source_type, document)

@@ -67,6 +67,19 @@ async def test_investigation_requires_tenant_and_idempotency(client: AsyncClient
     assert other_tenant.status_code == 404
 
 
+@pytest.mark.asyncio
+async def test_provider_health_is_visible_before_investigation(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/ai/provider-health")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "CONNECTED"
+    assert response.json()["provider"] == "stub"
+    assert response.json()["detail"] == "TEST FIXTURE / NON-LIVE"
+    assert response.json()["overall_status"] == "AVAILABLE"
+    assert response.json()["active_provider"] == "stub"
+    assert response.json()["providers"][0]["provider"] == "stub"
+
+
 def test_provider_failure_is_safe() -> None:
     service = InvestigationService(demo_repository, UnavailableAIClient())
     result = service.start("ORG-001", "EXC-1042", "sprint3-provider-failure-001")
@@ -75,6 +88,9 @@ def test_provider_failure_is_safe() -> None:
     assert result.requires_human_review is True
     assert result.recommended_action_code is None
     assert result.evidence_score == 0
+    assert result.originally_requested_provider == "unavailable"
+    assert result.actual_provider_used == "unavailable"
+    assert result.fallback_used is False
 
 
 class InvalidProvider:

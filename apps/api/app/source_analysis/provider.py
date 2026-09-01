@@ -13,6 +13,17 @@ from app.source_analysis.analyzer import AnalysisDocument
 class SourceAnalysisProviderUnavailable(RuntimeError):
     """The configured source-analysis provider cannot safely answer."""
 
+    def __init__(
+        self,
+        message: str,
+        *,
+        category: str = "invalid_response",
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.category = category
+        self.retryable = retryable
+
 
 class ClassificationResult:
     def __init__(
@@ -260,8 +271,12 @@ class FailoverSourceAnalysisProvider:
                 return provider.classify(filename, document)
             except SourceAnalysisProviderUnavailable as error:
                 last_error = error
+                if not error.retryable:
+                    raise
         raise SourceAnalysisProviderUnavailable(
-            "All configured AI providers are unavailable"
+            "All configured AI providers are unavailable",
+            category=last_error.category if last_error else "temporary_provider_unavailable",
+            retryable=last_error.retryable if last_error else True,
         ) from last_error
 
     def propose_mappings(
@@ -273,8 +288,12 @@ class FailoverSourceAnalysisProvider:
                 return provider.propose_mappings(source_type, document)
             except SourceAnalysisProviderUnavailable as error:
                 last_error = error
+                if not error.retryable:
+                    raise
         raise SourceAnalysisProviderUnavailable(
-            "All configured AI providers are unavailable"
+            "All configured AI providers are unavailable",
+            category=last_error.category if last_error else "temporary_provider_unavailable",
+            retryable=last_error.retryable if last_error else True,
         ) from last_error
 
 
@@ -320,7 +339,8 @@ class OpenAICompatibleSourceAnalysisProvider:
             )
         except (KeyError, TypeError, ValueError) as error:
             raise SourceAnalysisProviderUnavailable(
-                "AI classification returned invalid structured output"
+                "AI classification returned invalid structured output",
+                category="invalid_response",
             ) from error
 
     def propose_mappings(
@@ -367,7 +387,8 @@ class OpenAICompatibleSourceAnalysisProvider:
             return mapped
         except (KeyError, TypeError, ValueError) as error:
             raise SourceAnalysisProviderUnavailable(
-                "AI mapping returned invalid structured output"
+                "AI mapping returned invalid structured output",
+                category="invalid_response",
             ) from error
 
     def _json_request(self, instruction: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -387,6 +408,8 @@ class OpenAICompatibleSourceAnalysisProvider:
             }
         ).encode()
         last_error: BaseException | None = None
+        last_category = "temporary_provider_unavailable"
+        last_retryable = True
         for api_key in self._api_keys:
             request_object = request.Request(
                 f"{self._base_url}/chat/completions",
@@ -401,15 +424,45 @@ class OpenAICompatibleSourceAnalysisProvider:
                 return json.loads(re.sub(r"^```(?:json)?|```$", "", str(content).strip()).strip())
             except HTTPError as error:
                 last_error = error
-                if error.code not in {401, 403, 408, 409, 429} and error.code < 500:
+                last_category, last_retryable = _http_failure(error.code)
+                if not last_retryable:
                     break
             except (URLError, TimeoutError) as error:
                 last_error = error
+                last_category, last_retryable = "temporary_provider_unavailable", True
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
                 last_error = error
+                last_category, last_retryable = "invalid_response", False
+                break
         raise SourceAnalysisProviderUnavailable(
-            "AI source-analysis provider is unavailable"
+            "AI source-analysis provider is unavailable",
+            category=last_category,
+            retryable=last_retryable,
         ) from last_error
+
+
+class UnavailableSourceAnalysisProvider:
+    """A configured provider slot that is missing its required API key."""
+
+    def __init__(self, provider: str, model: str) -> None:
+        self.provider = provider
+        self.model = model
+
+    def classify(self, filename: str, document: AnalysisDocument) -> ClassificationResult:
+        raise SourceAnalysisProviderUnavailable(
+            f"{self.provider} source-analysis provider is not configured",
+            category="not_configured",
+            retryable=False,
+        )
+
+    def propose_mappings(
+        self, source_type: SourceType, document: AnalysisDocument
+    ) -> list[MappingResult]:
+        raise SourceAnalysisProviderUnavailable(
+            f"{self.provider} source-analysis provider is not configured",
+            category="not_configured",
+            retryable=False,
+        )
 
 
 def get_source_analysis_provider(
@@ -426,10 +479,8 @@ def get_source_analysis_provider(
     if provider_name.casefold() in {"stub", "offline", "deterministic"}:
         return OfflineSourceAnalysisProvider()
     providers: list[SourceAnalysisProvider] = []
-    if (
-        provider_name.casefold() in {"openai", "openai_compatible", "gemini", "google", "groq"}
-        and api_key
-    ):
+    supported = {"openai", "openai_compatible", "gemini", "google", "groq"}
+    if provider_name.casefold() in supported:
         providers.append(
             OpenAICompatibleSourceAnalysisProvider(
                 api_key,
@@ -438,11 +489,12 @@ def get_source_analysis_provider(
                 timeout_seconds,
                 provider_name,
             )
+            if api_key
+            else UnavailableSourceAnalysisProvider(provider_name, model)
         )
     if (
         fallback_provider_name.casefold()
         in {"openai", "openai_compatible", "gemini", "google", "groq"}
-        and fallback_api_key
     ):
         providers.append(
             OpenAICompatibleSourceAnalysisProvider(
@@ -452,12 +504,16 @@ def get_source_analysis_provider(
                 timeout_seconds,
                 fallback_provider_name,
             )
+            if fallback_api_key
+            else UnavailableSourceAnalysisProvider(fallback_provider_name, fallback_model)
         )
     if len(providers) > 1:
         return FailoverSourceAnalysisProvider(providers)
     if providers:
         return providers[0]
-    raise SourceAnalysisProviderUnavailable("AI provider unavailable")
+    raise SourceAnalysisProviderUnavailable(
+        "AI provider unavailable", category="not_configured", retryable=False
+    )
 
 
 def _normalize(value: str) -> str:
@@ -468,3 +524,21 @@ def _provider_base_url(provider_name: str, base_url: str) -> str:
     if provider_name.casefold() in {"gemini", "google"} and base_url.rstrip("/") == "https://api.openai.com/v1":
         return "https://generativelanguage.googleapis.com/v1beta/openai"
     return base_url
+
+
+def _http_failure(status_code: int) -> tuple[str, bool]:
+    if status_code == 401:
+        return "authentication", False
+    if status_code == 403:
+        return "forbidden", False
+    if status_code == 404:
+        return "model_not_found", False
+    if status_code == 408:
+        return "timeout", True
+    if status_code == 409:
+        return "temporary_provider_unavailable", True
+    if status_code == 429:
+        return "rate_limited", True
+    if status_code >= 500:
+        return "transient_server_error", True
+    return f"http_{status_code}", False

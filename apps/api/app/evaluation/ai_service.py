@@ -10,7 +10,7 @@ from app.core.config import get_settings
 from app.domain.lifecycle import CanonicalLifecycle
 from app.domain.schemas import ExceptionStatus, ExceptionSummary, ExceptionType, Severity
 from app.evaluation.schemas import AIEvaluationReportResponse, AIEvaluationResponse
-from app.investigations.provider import get_ai_client
+from app.investigations.provider import get_configured_ai_client
 from app.investigations.service import InvestigationService
 
 
@@ -22,17 +22,7 @@ class AIEvaluationService:
         if not idempotency_key or len(idempotency_key) > 128:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
         settings = get_settings()
-        provider = get_ai_client(
-            settings.ai_provider,
-            settings.configured_ai_api_keys,
-            settings.ai_base_url,
-            settings.ai_model,
-            settings.ai_timeout_seconds,
-            settings.ai_fallback_provider,
-            settings.configured_ai_fallback_api_keys,
-            settings.ai_fallback_base_url,
-            settings.ai_fallback_model,
-        )
+        provider = get_configured_ai_client(settings)
         investigator = InvestigationService(self._repository, provider)
         cases = _cases(organization_id)
         durations: list[int] = []
