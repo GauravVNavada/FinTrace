@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 import pytest
 
 from app.domain.lifecycle import CanonicalLifecycle
@@ -59,6 +61,35 @@ def test_missing_uploaded_gateway_fee_is_a_controlled_result() -> None:
     result = reconcile_lifecycle(lifecycle)
     assert result.status == "EXCEPTION"
     assert result.exception_type == "PAYMENT_FEE_MISSING"
+
+
+def test_reconcile_lifecycle_accepts_timezone_aware_datetime_timestamps() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-DATETIME", "amount_minor": 10000},
+        payments=(
+            {
+                "payment_id": "PAY-DATETIME",
+                "amount_minor": 10000,
+                "gateway_fee_minor": 180,
+                "captured_at": datetime(2026, 8, 1, tzinfo=UTC),
+            },
+        ),
+        settlements=(
+            {
+                "settlement_id": "SET-DATETIME",
+                "fees_minor": 180,
+                "settled_at": datetime(2026, 8, 2, tzinfo=UTC),
+            },
+        ),
+        invoices=({"invoice_id": "INV-DATETIME", "gross_minor": 10000, "status": "ACTIVE"},),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+
+    result = reconcile_lifecycle(lifecycle)
+
+    assert result.status == "RECONCILED"
 
 
 def test_timezone_naive_timestamps_are_rejected_before_subtraction():

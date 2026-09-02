@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { LucideIcon } from "lucide-react";
-import { Bell, ChevronDown, CircleHelp, FileBarChart, FolderSearch, LayoutDashboard, Network, Search, Settings2, ShieldCheck, WalletCards } from "lucide-react";
+import { Bell, ChevronDown, CircleAlert, CircleHelp, FileBarChart, FolderSearch, LayoutDashboard, Network, Search, Settings2, ShieldCheck, WalletCards } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -14,7 +14,7 @@ type NavItem = { label: string; href: string; icon: LucideIcon };
 type Panel = "workspace" | "notifications" | "help" | null;
 
 const navGroups: Array<{ label: string; items: NavItem[] }> = [
-  { label: "Workspace", items: [{ label: "Overview", href: "/", icon: LayoutDashboard }, { label: "Investigations", href: "/investigations", icon: FolderSearch }, { label: "Patterns", href: "/patterns", icon: Network }] },
+  { label: "Workspace", items: [{ label: "Overview", href: "/", icon: LayoutDashboard }, { label: "Investigations", href: "/investigations", icon: FolderSearch }, { label: "Exceptions", href: "/exceptions", icon: CircleAlert }, { label: "Patterns", href: "/patterns", icon: Network }] },
   { label: "Controls", items: [{ label: "Reconciliation runs", href: "/runs", icon: WalletCards }, { label: "Evaluations", href: "/evaluations", icon: FileBarChart }, { label: "Audit trail", href: "/audit", icon: ShieldCheck }] }
 ];
 

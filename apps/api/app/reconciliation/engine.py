@@ -25,9 +25,12 @@ class ReconciliationResult:
 
 
 def _timestamp(value: Any) -> datetime:
-    if not isinstance(value, str):
-        raise TypeError("timestamp must be an ISO string")
-    parsed = datetime.fromisoformat(value)
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str):
+        parsed = datetime.fromisoformat(value)
+    else:
+        raise TypeError("timestamp must be an ISO string or datetime")
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise ValueError("timestamp must include a timezone offset")
     return parsed

@@ -94,7 +94,12 @@ class AIEvaluationService:
 
     def latest(self, organization_id: str) -> AIEvaluationResponse | None:
         data = self._repository.get_latest_ai_evaluation(organization_id)
-        return AIEvaluationResponse.model_validate(data) if data else None
+        if not data:
+            return None
+        response_fields = AIEvaluationResponse.model_fields
+        return AIEvaluationResponse.model_validate(
+            {key: value for key, value in data.items() if key in response_fields}
+        )
 
 
 def _percent(numerator: int, denominator: int) -> float:

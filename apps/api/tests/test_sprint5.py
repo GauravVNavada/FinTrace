@@ -1,7 +1,9 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
 
+from app.evaluation.ai_service import AIEvaluationService
 from app.main import app
+from app.repositories.demo import DemoRepository
 
 
 @pytest.fixture
@@ -88,3 +90,12 @@ async def test_evaluation_report_is_idempotent_and_hidden_labels_stay_internal(
     assert latest.status_code == 200
     assert latest.json()["evaluation_id"] == first.json()["evaluation_id"]
     assert analyst.status_code == 403
+
+
+def test_ai_evaluation_round_trip_returns_latest_stored_record() -> None:
+    service = AIEvaluationService(DemoRepository())
+
+    created = service.run("ORG-001", "sprint5-ai-evaluation-round-trip")
+    latest = service.latest("ORG-001")
+
+    assert latest == created
