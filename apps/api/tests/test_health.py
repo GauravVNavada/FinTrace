@@ -35,6 +35,23 @@ async def test_dashboard_is_organization_scoped(client: AsyncClient) -> None:
     assert response.json()["organization_id"] == "ORG-001"
 
 
+async def test_demo_adapter_does_not_project_flagship_data_into_other_tenant(
+    client: AsyncClient,
+) -> None:
+    dashboard = await client.get(
+        "/api/v1/dashboard/summary", headers={"X-Organization-Id": "ORG-OTHER"}
+    )
+    exceptions = await client.get(
+        "/api/v1/exceptions", headers={"X-Organization-Id": "ORG-OTHER"}
+    )
+
+    assert dashboard.status_code == 200
+    assert dashboard.json()["lifecycle_count"] == 0
+    assert dashboard.json()["exception_count"] == 0
+    assert exceptions.status_code == 200
+    assert exceptions.json() == []
+
+
 async def test_lifecycle_is_returned_for_scoped_order(client: AsyncClient) -> None:
     response = await client.get(
         "/api/v1/lifecycles/ORD-10000", headers={"X-Organization-Id": "ORG-001"}

@@ -121,7 +121,9 @@ GET  /api/v1/evaluation/latest
 
 The server sends exception metadata and tool definitions to the provider. It does not send every table. Each tool returns structured JSON and is scoped to the authenticated organization. The server validates the model result, verifies evidence existence and support, computes the evidence score, and persists the validated result plus ordered tool calls in PostgreSQL mode. `AI_PROVIDER`/`AI_MODEL` select the primary at runtime; `AI_FALLBACK_PROVIDER`, `GROQ_MODEL`, and provider-specific credentials select an explicit fallback. Key pools retry in order only for bounded transient failures; quota, authorization, unsupported-capability, and malformed-output failures are not hidden. Investigation persistence includes `originally_requested_provider`, `actual_provider_used`, `model_used`, `fallback_used`, and `fallback_reason`. The deterministic provider is the default local implementation for tests/offline operation only.
 
-`GET /api/v1/ai/provider-health` returns compatibility fields for the active provider plus `overall_status`, `active_provider`, and a `providers` array containing separate configured model, reachability, latency, and redacted error-category entries for primary and fallback. Health uses one minimal structured/tool-capability probe per provider and caches results briefly so UI reads do not poll generation endpoints.
+`GET /api/v1/ai/provider-health` requires the authenticated `financial_investigation.read` capability and returns compatibility fields for the active provider plus `overall_status`, `active_provider`, and a `providers` array containing separate configured model, reachability, latency, and redacted error-category entries for primary and fallback. Health uses one minimal structured/tool-capability probe per provider and caches results briefly so UI reads do not poll generation endpoints.
+
+Relationship discovery and relationship decisions require `Idempotency-Key`. Reusing a key with the same operation replays the original proposal/decision; a different operation conflicts. Accepted or rejected proposals are audited, and normalization remains blocked until every proposal has an explicit decision.
 
 ## Caching and freshness
 
@@ -231,7 +233,7 @@ The development actor context supports `ANALYST`, `FINANCE_MANAGER`, `CONTROLLER
 **Auth:** `analytics.read`.  
 **Headers:** `Idempotency-Key` required.  
 **Body:** `{ "orders": 1..10000, "seed": 0..2147483647, "anomaly_rate": 0..1 }`; defaults are 1000, 42, and 0.30.  
-**Response:** evaluation ID, organization ID, run parameters, creation time, and the public metric report. The report includes lifecycle count, reconciliation counts, match rate, precision, exception recall, throughput, and unresolved exceptions. It never includes hidden labels or `ground_truth.json`.  
+**Response:** evaluation ID, organization ID, run parameters, creation time, and the public metric report. The report includes lifecycle count, reconciliation counts, match rate, match precision, exception precision (status and type), exception recall, severity accuracy, throughput, unresolved exceptions, and an explicit unsafe-resolution metric state. Unsafe resolution is `null` with zero decisions when the benchmark contains no approval decisions; it is not presented as a measured zero. It never includes hidden labels or `ground_truth.json`.
 **Behavior:** runs the deterministic evaluator in process for the demo boundary and returns the same result when the same idempotency key and request are replayed. A reused key with a different request returns `IDEMPOTENCY_CONFLICT`.
 
 ### `GET /api/v1/evaluation/latest`

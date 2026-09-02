@@ -164,7 +164,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, min(max(limit, 1), 1000)),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def get_financial_investigation(
         self, organization_id: str, investigation_id: str
@@ -188,7 +188,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, investigation_id),
             ).fetchone()
-            return dict(row) if row else None
+            return self._public_organization(row, organization_id) if row else None
 
     def update_financial_investigation_status(
         self, organization_id: str, investigation_id: str, status: str
@@ -273,7 +273,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, investigation_id, min(max(limit, 1), 1000)),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def delete_source_file(
         self, organization_id: str, investigation_id: str, source_file_id: str
@@ -339,7 +339,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, investigation_id, source_file_id),
             ).fetchone()
-            return dict(row) if row else None
+            return self._public_organization(row, organization_id) if row else None
 
     def update_source_analysis_state(
         self,
@@ -469,7 +469,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, investigation_id, source_file_id),
             ).fetchone()
-            return dict(row) if row else None
+            return self._public_organization(row, organization_id) if row else None
 
     def list_source_mappings(
         self, organization_id: str, investigation_id: str, source_file_id: str
@@ -496,7 +496,7 @@ class PostgresRepository:
                 """,
                 (org_uuid, investigation_id, source_file_id),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def save_source_mappings(
         self,
@@ -654,7 +654,7 @@ class PostgresRepository:
                 """SELECT rp.id, rp.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rp.source_file_id, rp.target_source_file_id, rp.join_fields, rp.evidence_summary, rp.confidence, rp.status, rp.confidence_label, rp.left_columns, rp.right_columns, rp.value_overlap_percent, rp.duplicate_key_rate_percent, rp.cardinality, rp.type_compatibility, rp.temporal_consistency_percent, rp.amount_agreement_percent, rp.updated_at FROM relationship_proposals rp JOIN financial_investigations fi ON fi.id = rp.financial_investigation_id AND fi.organization_id = rp.organization_id WHERE rp.organization_id = %s AND fi.source_investigation_id = %s ORDER BY rp.updated_at DESC""",
                 (org_uuid, investigation_id),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def save_relationship_proposals(
         self, organization_id: str, investigation_id: str, proposals: list[dict[str, Any]]
@@ -776,7 +776,7 @@ class PostgresRepository:
                 "SELECT dv.id, dv.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, dv.version_no, dv.status, dv.record_count, dv.source_count, dv.created_at FROM dataset_versions dv JOIN financial_investigations fi ON fi.id = dv.financial_investigation_id AND fi.organization_id = dv.organization_id WHERE dv.organization_id = %s AND fi.source_investigation_id = %s ORDER BY dv.version_no DESC LIMIT 1",
                 (org_uuid, investigation_id),
             ).fetchone()
-            return dict(row) if row else None
+            return self._public_organization(row, organization_id) if row else None
 
     def list_dataset_versions(
         self, organization_id: str, investigation_id: str
@@ -787,7 +787,7 @@ class PostgresRepository:
                 "SELECT dv.id, dv.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, dv.version_no, dv.status, dv.record_count, dv.source_count, dv.created_at FROM dataset_versions dv JOIN financial_investigations fi ON fi.id = dv.financial_investigation_id AND fi.organization_id = dv.organization_id WHERE dv.organization_id = %s AND fi.source_investigation_id = %s ORDER BY dv.version_no DESC",
                 (org_uuid, investigation_id),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def list_normalized_records(
         self,
@@ -802,7 +802,7 @@ class PostgresRepository:
                 "SELECT nr.id, nr.source_file_id, nr.source_row_number, nr.source_record_id, nr.source_type, nr.values, nr.lineage FROM normalized_records nr JOIN dataset_versions dv ON dv.id = nr.dataset_version_id AND dv.organization_id = nr.organization_id JOIN financial_investigations fi ON fi.id = dv.financial_investigation_id AND fi.organization_id = dv.organization_id WHERE nr.organization_id = %s AND fi.source_investigation_id = %s AND nr.dataset_version_id = %s ORDER BY nr.source_file_id, nr.source_row_number LIMIT %s",
                 (org_uuid, investigation_id, dataset_version_id, max(limit, 1)),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def save_reconciliation_run(
         self, organization_id: str, run: dict[str, Any], results: list[dict[str, Any]]
@@ -868,7 +868,7 @@ class PostgresRepository:
                 "SELECT rr.id, rr.organization_id::text AS organization_id, fi.source_investigation_id AS financial_investigation_id, rr.dataset_version_id, rr.status, rr.records_expected, rr.records_loaded, rr.records_consumed, rr.orphan_record_count, rr.rejected_record_count, rr.failure_reason, rr.is_stale, rr.stale_reason, rr.lifecycle_count, rr.reconciled_count, rr.exception_count, rr.ambiguous_count, rr.open_exposure_minor, rr.started_at, rr.completed_at FROM financial_reconciliation_runs rr JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE rr.organization_id = %s AND fi.source_investigation_id = %s AND rr.is_stale = false ORDER BY rr.started_at DESC LIMIT 1",
                 (org_uuid, investigation_id),
             ).fetchone()
-            return dict(row) if row else None
+            return self._public_organization(row, organization_id) if row else None
 
     def list_reconciliation_results(
         self, organization_id: str, investigation_id: str, run_id: str, limit: int = 1000
@@ -879,7 +879,7 @@ class PostgresRepository:
                 "SELECT r.id, r.run_id, r.order_id, r.status, r.exception_type, r.severity, r.exposure_minor, r.exposure_category, r.findings FROM financial_reconciliation_results r JOIN financial_reconciliation_runs rr ON rr.id = r.run_id AND rr.organization_id = r.organization_id JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE r.organization_id = %s AND fi.source_investigation_id = %s AND r.run_id = %s ORDER BY r.order_id LIMIT %s",
                 (org_uuid, investigation_id, run_id, min(max(limit, 1), 10000)),
             ).fetchall()
-            return [dict(row) for row in rows]
+            return [self._public_organization(row, organization_id) for row in rows]
 
     def get_reconciliation_result(
         self, organization_id: str, investigation_id: str, run_id: str, result_id: str
@@ -1617,6 +1617,84 @@ class PostgresRepository:
                 (org_uuid, request["id"], approval_id, actor_id, decision, decided_at),
             ).fetchone()
             return inserted is not None
+
+    def apply_approval_decision(
+        self,
+        organization_id: str,
+        request_id: str,
+        actor_id: str,
+        decision: str,
+        approval_id: str,
+        decided_at: str,
+    ) -> dict[str, Any] | None:
+        """Insert a decision and derive request state under one row lock."""
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            request = conn.execute(
+                """
+                SELECT id, status, required_approvals
+                FROM approval_requests
+                WHERE organization_id = %s AND source_request_id = %s
+                FOR UPDATE
+                """,
+                (org_uuid, request_id),
+            ).fetchone()
+            if request is None:
+                return None
+            if request["status"] != "PENDING_APPROVAL":
+                return {"applied": False, "reason": "not_pending"}
+            inserted = conn.execute(
+                """
+                INSERT INTO approval_decisions
+                  (organization_id, approval_request_id, source_approval_id, actor_id, decision, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (organization_id, approval_request_id, actor_id) DO NOTHING
+                RETURNING id
+                """,
+                (org_uuid, request["id"], approval_id, actor_id, decision, decided_at),
+            ).fetchone()
+            if inserted is None:
+                return {"applied": False, "reason": "duplicate"}
+            counts = conn.execute(
+                """
+                SELECT COUNT(*) FILTER (WHERE decision = 'APPROVED') AS approvals_received
+                FROM approval_decisions
+                WHERE organization_id = %s AND approval_request_id = %s
+                """,
+                (org_uuid, request["id"]),
+            ).fetchone()
+            approvals_received = int(counts["approvals_received"])
+            updated_status = (
+                "REJECTED"
+                if decision == "REJECTED"
+                else (
+                    "APPROVED"
+                    if approvals_received >= int(request["required_approvals"])
+                    else "PENDING_APPROVAL"
+                )
+            )
+            conn.execute(
+                """
+                UPDATE approval_requests
+                SET status = %s, approvals_received = %s, updated_at = now()
+                WHERE organization_id = %s AND id = %s
+                """,
+                (updated_status, approvals_received, org_uuid, request["id"]),
+            )
+            return {
+                "applied": True,
+                "status": updated_status,
+                "approvals_received": approvals_received,
+            }
+
+    @staticmethod
+    def _public_organization(row: Any, organization_id: str) -> dict[str, Any]:
+        result = dict(row)
+        if "organization_id" in result:
+            result["organization_id"] = organization_id
+        return result
 
     @staticmethod
     def _rows(

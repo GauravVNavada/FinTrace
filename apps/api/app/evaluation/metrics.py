@@ -13,7 +13,11 @@ class EvaluationReport:
     ambiguous: int
     match_rate: float
     match_precision: float
+    exception_precision: float
     exception_recall: float
+    severity_accuracy: float
+    unsafe_resolution_rate: float | None
+    resolution_decisions_evaluated: int
     throughput_per_second: float
     unresolved_exceptions: int
 
@@ -27,6 +31,7 @@ def evaluate_dataset(dataset: Any) -> tuple[EvaluationReport, list[Reconciliatio
     results = reconcile_dataset(dataset)
     duration = max(perf_counter() - started, 0.000001)
     truth_by_order = {item["order_id"]: item for item in dataset.ground_truth}
+    result_by_order = {result.order_id: result for result in results}
     matched = [
         result for result in results if result.status in {"RECONCILED", "RECONCILED_WITH_VARIANCE"}
     ]
@@ -44,6 +49,16 @@ def evaluate_dataset(dataset: Any) -> tuple[EvaluationReport, list[Reconciliatio
         1
         for result in detected_exceptions
         if truth_by_order[result.order_id]["expected_status"] == "EXCEPTION"
+        and truth_by_order[result.order_id].get("exception_type") == result.exception_type
+    )
+    actual_severity_cases = [
+        item for item in dataset.ground_truth if item["expected_status"] == "EXCEPTION"
+    ]
+    correct_severity = sum(
+        1
+        for item in actual_severity_cases
+        if truth_by_order[item["order_id"]]["severity"]
+        == result_by_order[item["order_id"]].severity
     )
     return EvaluationReport(
         lifecycles=len(results),
@@ -52,7 +67,13 @@ def evaluate_dataset(dataset: Any) -> tuple[EvaluationReport, list[Reconciliatio
         ambiguous=sum(result.status == "AMBIGUOUS" for result in results),
         match_rate=_ratio(len(matched), len(results)),
         match_precision=_ratio(correct_matches, len(matched)),
+        exception_precision=_ratio(correct_exceptions, len(detected_exceptions)),
         exception_recall=_ratio(correct_exceptions, len(actual_exceptions)),
+        severity_accuracy=_ratio(correct_severity, len(actual_severity_cases)),
+        # The reconciliation benchmark intentionally does not execute financial
+        # resolutions. Keep this explicit instead of presenting a hollow zero.
+        unsafe_resolution_rate=None,
+        resolution_decisions_evaluated=0,
         throughput_per_second=round(len(results) / duration, 2),
         unresolved_exceptions=sum(
             result.status in {"EXCEPTION", "AMBIGUOUS"} for result in results

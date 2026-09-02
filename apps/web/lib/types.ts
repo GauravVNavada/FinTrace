@@ -134,7 +134,11 @@ export interface ApiEvaluation {
     ambiguous: number;
     match_rate: number;
     match_precision: number;
+    exception_precision: number;
     exception_recall: number;
+    severity_accuracy: number;
+    unsafe_resolution_rate: number | null;
+    resolution_decisions_evaluated: number;
     throughput_per_second: number;
     unresolved_exceptions: number;
   };
@@ -194,6 +198,17 @@ export interface ApiResolutionRequest {
   approvals_received: number;
   requester_id: string;
   created_at: string;
+}
+
+export interface ApiApprovalResponse {
+  approval_id: string;
+  request_id: string;
+  decision: "APPROVED" | "REJECTED";
+  request_status: "PENDING_APPROVAL" | "APPROVED" | "REJECTED";
+  required_approvals: number;
+  approvals_received: number;
+  actor_id: string;
+  decided_at: string;
 }
 
 export interface EvaluationRunRequest {

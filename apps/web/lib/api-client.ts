@@ -3,7 +3,7 @@ import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiDemoData
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
 const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "ORG-001";
 const actorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
-const actorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "CONTROLLER";
+const actorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "ANALYST";
 
 export class ApiClientError extends Error {
   constructor(public readonly status: number, message: string) {
@@ -78,9 +78,18 @@ async function postForm<T>(path: string, body: FormData, idempotencyKey: string)
   return response.json() as Promise<T>;
 }
 
-async function patchJson<T>(path: string, body: unknown): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, { method: "PATCH", headers: { "Content-Type": "application/json", "X-Organization-Id": organizationId, "X-Actor-Id": actorId, "X-Actor-Role": actorRole }, body: JSON.stringify(body), cache: "no-store" });
-  if (!response.ok) throw new ApiClientError(response.status, `API request failed with status ${response.status}`);
+async function patchJson<T>(path: string, body: unknown, idempotencyKey?: string): Promise<T> {
+  const headers: Record<string, string> = { "Content-Type": "application/json", "X-Organization-Id": organizationId, "X-Actor-Id": actorId, "X-Actor-Role": actorRole };
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
+  const response = await fetch(`${apiBaseUrl}${path}`, { method: "PATCH", headers, body: JSON.stringify(body), cache: "no-store" });
+  if (!response.ok) {
+    let message = `API request failed with status ${response.status}`;
+    try {
+      const detail = await response.json() as { detail?: { message?: string } | string };
+      message = typeof detail.detail === "string" ? detail.detail : detail.detail?.message ?? message;
+    } catch { /* Keep the status message when the response is not JSON. */ }
+    throw new ApiClientError(response.status, message);
+  }
   return response.json() as Promise<T>;
 }
 
@@ -118,6 +127,14 @@ export function startInvestigation(exceptionId: string, idempotencyKey: string) 
 
 export function requestResolution(exceptionId: string, actionCode: ResolutionActionCode, idempotencyKey: string) {
   return post<ApiResolutionRequest>(`/api/v1/exceptions/${encodeURIComponent(exceptionId)}/resolution-request`, { action_code: actionCode }, idempotencyKey);
+}
+
+export function approveResolution(requestId: string, idempotencyKey: string) {
+  return post<import("./types").ApiApprovalResponse>(`/api/v1/approvals/${encodeURIComponent(requestId)}/approve`, {}, idempotencyKey);
+}
+
+export function rejectResolution(requestId: string, idempotencyKey: string) {
+  return post<import("./types").ApiApprovalResponse>(`/api/v1/approvals/${encodeURIComponent(requestId)}/reject`, {}, idempotencyKey);
 }
 
 export function fetchPatterns(limit = 20) {
@@ -213,7 +230,7 @@ export function fetchRelationships(investigationId: string) {
 }
 
 export function decideRelationship(investigationId: string, relationshipId: string, status: "ACCEPTED" | "REJECTED") {
-  return patchJson<ApiRelationshipProposal>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/relationships/${encodeURIComponent(relationshipId)}`, { status });
+  return patchJson<ApiRelationshipProposal>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/relationships/${encodeURIComponent(relationshipId)}`, { status }, requestId());
 }
 
 export function normalizeDataset(investigationId: string) {

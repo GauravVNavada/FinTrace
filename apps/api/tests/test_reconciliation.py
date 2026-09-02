@@ -42,7 +42,11 @@ def test_evaluation_is_reproducible_and_reports_throughput() -> None:
     assert first.ambiguous == second.ambiguous
     assert first.match_rate == second.match_rate
     assert first.match_precision == second.match_precision
+    assert first.exception_precision == second.exception_precision
     assert first.exception_recall == second.exception_recall
+    assert first.severity_accuracy == second.severity_accuracy
+    assert first.unsafe_resolution_rate is None
+    assert first.resolution_decisions_evaluated == 0
     assert first.throughput_per_second > 0
 
 

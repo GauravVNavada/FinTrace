@@ -31,7 +31,7 @@ Terminal 2:
 pnpm --filter @fintrace/web dev -- --port 3002
 ```
 
-Open `http://localhost:3000`.
+Open `http://localhost:3002`.
 
 ## Five-minute walkthrough
 

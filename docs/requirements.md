@@ -52,7 +52,7 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | RECON-004 | Assign one lifecycle status | Each lifecycle is `RECONCILED`, `RECONCILED_WITH_VARIANCE`, `EXCEPTION`, `AMBIGUOUS`, or `PENDING`. |
 | RECON-005 | Preserve ground truth isolation | The investigator cannot access `ground_truth.json`; only evaluation code can. |
 | RECON-006 | Query a canonical lifecycle | A tenant-scoped order lookup returns all related source records or a safe not-found response. |
-| RECON-007 | Produce reproducible evaluation metrics | A seeded run reports match rate, precision/recall, throughput, and unresolved cases without AI. |
+| RECON-007 | Produce reproducible evaluation metrics | A seeded run reports match rate, match precision, exception precision and recall using status plus type, severity accuracy, throughput, and unresolved cases without AI. Unsafe resolution rate is explicit as not measured until approval decisions are included in the benchmark. |
 | RECON-008 | Keep investigation metrics API-backed | Implemented Sprint 4; investigation overview, runs, patterns, and source/detail surfaces read persisted API results and expose honest loading, empty, and unavailable states without fixture substitution. |
 
 ### EXC — Exceptions
@@ -85,9 +85,9 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | SAFE-002 | Never move real money in MVP | Resolution is simulated and produces an audit event only. |
 | SAFE-003 | Prevent cross-tenant access | Every business query receives authenticated organization context. |
 | SAFE-004 | Keep finance available if AI fails | Deterministic reconciliation and manual review remain usable. |
-| SAFE-005 | Make retry-safe writes | Reconciliation, uploaded-exception investigation, and resolution writes require idempotency keys and replay stable responses. |
-| SAFE-006 | Enforce capability-level approval | Approval and rejection are authorized against server-side capability and threshold policy, not UI role visibility. |
-| SAFE-007 | Prevent duplicate approval effects | Same-key replay is stable, different request reuse conflicts, and concurrent duplicate decisions are rejected. |
+| SAFE-005 | Make retry-safe writes | Reconciliation, source relationship transitions, uploaded-exception investigation, and resolution writes require idempotency keys and replay stable responses. |
+| SAFE-006 | Enforce capability-level approval | Approval and rejection are authorized against server-side capability, threshold, requester/approver separation, and current-state policy, not UI role visibility. |
+| SAFE-007 | Prevent duplicate approval effects | Same-key replay is stable, different request reuse conflicts, concurrent duplicate decisions are rejected, and durable approval counts are derived atomically. |
 
 ## 4. Non-functional requirements
 

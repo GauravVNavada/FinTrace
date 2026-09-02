@@ -109,6 +109,26 @@ async def test_resolution_request_rejects_unauthorized_action_and_key_conflict(
 
 
 @pytest.mark.asyncio
+async def test_requester_cannot_approve_own_resolution_request(client: AsyncClient) -> None:
+    request = await client.post(
+        "/api/v1/exceptions/EXC-1042/resolution-request",
+        headers=_headers(role="CONTROLLER", actor="maker-controller", key="maker-request-001"),
+        json={"action_code": "REQUEST_INVENTORY_VERIFICATION"},
+    )
+    request_id = request.json()["request_id"]
+
+    approval = await client.post(
+        f"/api/v1/approvals/{request_id}/approve",
+        headers=_headers(
+            role="CONTROLLER", actor="maker-controller", key="maker-approval-001"
+        ),
+    )
+
+    assert approval.status_code == 403
+    assert approval.json()["detail"]["message"] == "The requester cannot approve their own request"
+
+
+@pytest.mark.asyncio
 async def test_rejection_is_simulated_and_does_not_change_exception_state(
     client: AsyncClient,
 ) -> None:

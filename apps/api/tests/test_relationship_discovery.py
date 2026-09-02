@@ -69,16 +69,29 @@ async def test_relationship_discovery_requires_confirmed_mappings_and_is_reviewa
             ).status_code == 200
         discovered = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/relationships/discover",
-            headers=headers(),
+            headers=headers(key="rel-discover"),
         )
         assert discovered.status_code == 200
         assert discovered.json()[0]["status"] == "PROPOSED"
         assert "order_id" in discovered.json()[0]["join_fields"]
+        replayed_discovery = await client.post(
+            f"/api/v1/financial-investigations/{investigation_id}/relationships/discover",
+            headers=headers(key="rel-discover"),
+        )
+        assert replayed_discovery.status_code == 200
+        assert replayed_discovery.json() == discovered.json()
         relationship_id = discovered.json()[0]["id"]
         accepted = await client.patch(
             f"/api/v1/financial-investigations/{investigation_id}/relationships/{relationship_id}",
-            headers=headers(),
+            headers=headers(key="rel-accept"),
             json={"status": "ACCEPTED"},
         )
         assert accepted.status_code == 200
         assert accepted.json()["status"] == "ACCEPTED"
+        replayed_acceptance = await client.patch(
+            f"/api/v1/financial-investigations/{investigation_id}/relationships/{relationship_id}",
+            headers=headers(key="rel-accept"),
+            json={"status": "ACCEPTED"},
+        )
+        assert replayed_acceptance.status_code == 200
+        assert replayed_acceptance.json() == accepted.json()

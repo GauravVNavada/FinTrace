@@ -15,6 +15,8 @@ from app.domain.schemas import (
 )
 from app.simulator.generator import GeneratorConfig, generate_dataset
 
+DEMO_ORGANIZATION_ID = "ORG-001"
+
 
 class DemoRepository:
     """Temporary read-only adapter used until the PostgreSQL repository is wired.
@@ -123,6 +125,17 @@ class DemoRepository:
         )
 
     def dashboard_summary(self, organization_id: str) -> DashboardSummary:
+        if organization_id != DEMO_ORGANIZATION_ID:
+            return DashboardSummary(
+                organization_id=organization_id,
+                reconciliation_run_id="",
+                lifecycle_count=0,
+                auto_reconciled_count=0,
+                exception_count=0,
+                open_exposure=Decimal(0),
+                requires_review_count=0,
+                generated_at=datetime.now(UTC),
+            )
         return DashboardSummary(
             organization_id=organization_id,
             reconciliation_run_id="RUN-024",
@@ -135,6 +148,8 @@ class DemoRepository:
         )
 
     def list_exceptions(self, organization_id: str, limit: int = 100) -> list[ExceptionSummary]:
+        if organization_id != DEMO_ORGANIZATION_ID:
+            return []
         return [
             ExceptionSummary(
                 id="EXC-1042",
@@ -162,7 +177,7 @@ class DemoRepository:
         return self._dataset.lifecycle_store().get_by_order(organization_id, order_id)
 
     def list_lifecycles(self, organization_id: str, limit: int = 1000) -> list[CanonicalLifecycle]:
-        if organization_id != "ORG-001":
+        if organization_id != DEMO_ORGANIZATION_ID:
             return []
         lifecycles: list[CanonicalLifecycle] = []
         for order in self._dataset.records["orders"][:limit]:
@@ -176,7 +191,7 @@ class DemoRepository:
         return lifecycles
 
     def get_exception(self, organization_id: str, exception_id: str) -> ExceptionSummary | None:
-        if organization_id != "ORG-001" or exception_id != "EXC-1042":
+        if organization_id != DEMO_ORGANIZATION_ID or exception_id != "EXC-1042":
             return None
         return self.list_exceptions(organization_id)[0]
 
@@ -757,6 +772,45 @@ class DemoRepository:
             }
         )
         return True
+
+    def apply_approval_decision(
+        self,
+        organization_id: str,
+        request_id: str,
+        actor_id: str,
+        decision: str,
+        approval_id: str,
+        decided_at: str,
+    ) -> dict[str, object] | None:
+        request = self._resolution_requests.get((organization_id, request_id))
+        if request is None:
+            return None
+        if request.get("status") != "PENDING_APPROVAL":
+            return {"applied": False, "reason": "not_pending"}
+        if not self.save_approval_decision(
+            organization_id, request_id, actor_id, decision, approval_id, decided_at
+        ):
+            return {"applied": False, "reason": "duplicate"}
+        decisions = self._approval_decisions.get((organization_id, request_id), [])
+        approvals_received = sum(
+            decision_row.get("decision") == "APPROVED" for decision_row in decisions
+        )
+        updated_status = (
+            "REJECTED"
+            if decision == "REJECTED"
+            else (
+                "APPROVED"
+                if approvals_received >= int(request["required_approvals"])
+                else "PENDING_APPROVAL"
+            )
+        )
+        request["status"] = updated_status
+        request["approvals_received"] = approvals_received
+        return {
+            "applied": True,
+            "status": updated_status,
+            "approvals_received": approvals_received,
+        }
 
 
 demo_repository = DemoRepository()

@@ -73,6 +73,7 @@ export function PageHeading({ eyebrow, title, description, children }: { eyebrow
 }
 
 export function Overview() {
+  const [investigations, setInvestigations] = React.useState<ApiFinancialInvestigation[]>([]);
   const [selected, setSelected] = React.useState<ApiFinancialInvestigation | null>(null);
   const [run, setRun] = React.useState<ApiReconciliationRun | null>(null);
   const [patterns, setPatterns] = React.useState<ApiFinancialInvestigationPattern[]>([]);
@@ -84,7 +85,9 @@ export function Overview() {
     fetchFinancialInvestigations()
       .then(items => {
         if (!active) return;
-        const current = items[0] ?? null;
+        setInvestigations(items);
+        const requestedId = new URLSearchParams(window.location.search).get("investigation");
+        const current = items.find(item => item.id === requestedId) ?? (items.length === 1 ? items[0] : null);
         setSelected(current);
         if (!current) return;
         return Promise.all([
@@ -114,7 +117,7 @@ export function Overview() {
 
   if (loading) return <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading live investigation metrics…</div>;
   if (unavailable) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="The dashboard reads persisted investigation data from the API." /><Alert variant="destructive">The API is unavailable. No stale dashboard snapshot has been substituted.</Alert></>;
-  if (!selected) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="Create an investigation to start a controlled source-to-reconciliation workflow."><Button asChild size="sm"><Link href="/investigations/new">Create investigation</Link></Button></PageHeading><Card><CardContent className="py-16 text-center"><div className="text-sm font-semibold text-foreground">No financial investigation selected</div><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-muted-foreground">Upload source exports, confirm mappings, review deterministic relationships, and run reconciliation before metrics appear here.</p><Button asChild className="mt-5" size="sm"><Link href="/investigations">Open investigations</Link></Button></CardContent></Card></>;
+  if (!selected) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="Select the investigation you want to inspect. Metrics and patterns never silently switch workspaces."><Button asChild size="sm"><Link href="/investigations/new">Create investigation</Link></Button></PageHeading>{investigations.length > 1 && <Card className="mb-4"><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold text-foreground">Choose an investigation</div><p className="mt-1 text-xs text-muted-foreground">There are multiple workspaces in this organization.</p></div><Select aria-label="Select investigation" defaultValue="" onChange={event => { if (event.target.value) window.location.href = `/?investigation=${encodeURIComponent(event.target.value)}`; }} className="sm:w-80"><option value="">Select an investigation</option>{investigations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></CardContent></Card>}{investigations.length <= 1 && <Card><CardContent className="py-16 text-center"><div className="text-sm font-semibold text-foreground">No financial investigation selected</div><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-muted-foreground">Upload source exports, confirm mappings, review deterministic relationships, and run reconciliation before metrics appear here.</p><Button asChild className="mt-5" size="sm"><Link href="/investigations">Open investigations</Link></Button></CardContent></Card>}</>;
   const autoRate = run && run.lifecycle_count > 0 ? Math.round((run.reconciled_count / run.lifecycle_count) * 1000) / 10 : null;
   const metrics = [
     ["Lifecycle records", run ? run.lifecycle_count.toLocaleString() : "—", run ? "Latest run" : "Normalize and reconcile to calculate"],

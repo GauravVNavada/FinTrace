@@ -466,10 +466,20 @@ def update_source_classification(
     "/{investigation_id}/relationships/discover", response_model=list[RelationshipResponse]
 )
 def discover_relationships(
-    investigation_id: str, context: Annotated[ActorContext, Depends(get_actor_context)]
+    investigation_id: str,
+    context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> list[RelationshipResponse]:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
-    return relationship_service.discover(context, investigation_id)
+    if idempotency_key is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
+        )
+    try:
+        return relationship_service.discover(context, investigation_id, idempotency_key)
+    except RelationshipConflict as error:
+        raise HTTPException(status_code=409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": str(error)}) from error
 
 
 @router.get("/{investigation_id}/relationships", response_model=list[RelationshipResponse])
@@ -488,10 +498,18 @@ def decide_relationship(
     relationship_id: str,
     payload: RelationshipDecision,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> RelationshipResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
+        )
     try:
-        return relationship_service.decide(context, investigation_id, relationship_id, payload)
+        return relationship_service.decide(
+            context, investigation_id, relationship_id, payload, idempotency_key
+        )
     except RelationshipNotFound as error:
         raise HTTPException(
             status_code=404,

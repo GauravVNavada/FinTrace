@@ -247,6 +247,16 @@ class WorkflowRepository(LifecycleRepository, Protocol):
         decided_at: str,
     ) -> bool: ...
 
+    def apply_approval_decision(
+        self,
+        organization_id: str,
+        request_id: str,
+        actor_id: str,
+        decision: str,
+        approval_id: str,
+        decided_at: str,
+    ) -> dict[str, Any] | None: ...
+
 
 def as_json_record(record: dict[str, Any]) -> dict[str, Any]:
     """Return a detached record so repository callers cannot mutate storage state."""

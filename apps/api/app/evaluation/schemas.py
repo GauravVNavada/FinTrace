@@ -20,7 +20,11 @@ class EvaluationReportResponse(BaseModel):
     ambiguous: int = Field(ge=0)
     match_rate: float = Field(ge=0, le=100)
     match_precision: float = Field(ge=0, le=100)
+    exception_precision: float = Field(ge=0, le=100)
     exception_recall: float = Field(ge=0, le=100)
+    severity_accuracy: float = Field(ge=0, le=100)
+    unsafe_resolution_rate: float | None = Field(default=None, ge=0, le=100)
+    resolution_decisions_evaluated: int = Field(ge=0)
     throughput_per_second: float = Field(ge=0)
     unresolved_exceptions: int = Field(ge=0)
 

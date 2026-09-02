@@ -28,7 +28,43 @@ class RelationshipDiscoveryService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self._repository = repository
 
-    def discover(self, context: ActorContext, investigation_id: str) -> list[RelationshipResponse]:
+    def discover(
+        self, context: ActorContext, investigation_id: str, idempotency_key: str
+    ) -> list[RelationshipResponse]:
+        request_hash = sha256(f"relationship-discover:{investigation_id}".encode()).hexdigest()
+        replay = self._idempotency_replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return [RelationshipResponse.model_validate(item) for item in replay]
+        reserved = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
+        )
+        if reserved is not None:
+            if reserved.get("request_hash") != request_hash:
+                raise RelationshipConflict("Idempotency-Key was already used for another relationship discovery")
+            if int(reserved.get("response_status", 425)) == 425:
+                raise RelationshipConflict("An identical relationship discovery is already in progress")
+            body = reserved.get("response_body", {})
+            return [RelationshipResponse.model_validate(item) for item in body.get("relationships", [])]
+        try:
+            result = self._discover(context, investigation_id)
+            self._repository.complete_idempotency(
+                context.organization_id,
+                idempotency_key,
+                200,
+                {"relationships": [item.model_dump(mode="json") for item in result]},
+            )
+            self._repository.record_audit_event(
+                context.organization_id,
+                "RELATIONSHIPS_DISCOVERED",
+                investigation_id,
+                context.actor_id,
+            )
+            return result
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
+
+    def _discover(self, context: ActorContext, investigation_id: str) -> list[RelationshipResponse]:
         sources = self._repository.list_source_files(context.organization_id, investigation_id)
         analyses = {
             str(source["id"]): self._repository.get_source_analysis(
@@ -125,7 +161,24 @@ class RelationshipDiscoveryService:
         investigation_id: str,
         relationship_id: str,
         payload: RelationshipDecision,
+        idempotency_key: str,
     ) -> RelationshipResponse:
+        request_hash = sha256(
+            f"relationship-decision:{investigation_id}:{relationship_id}:{payload.status.value}".encode()
+        ).hexdigest()
+        replay = self._idempotency_replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return RelationshipResponse.model_validate(replay[0])
+        reserved = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
+        )
+        if reserved is not None:
+            if reserved.get("request_hash") != request_hash:
+                raise RelationshipConflict("Idempotency-Key was already used for another relationship decision")
+            if int(reserved.get("response_status", 425)) == 425:
+                raise RelationshipConflict("An identical relationship decision is already in progress")
+            body = reserved.get("response_body", {})
+            return RelationshipResponse.model_validate(body.get("relationship"))
         current = next(
             (
                 item
@@ -137,8 +190,10 @@ class RelationshipDiscoveryService:
             None,
         )
         if current is None:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise RelationshipNotFound(relationship_id)
         if current["status"] != RelationshipStatus.PROPOSED:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise RelationshipConflict("Only proposed relationships can be decided")
         updated = self._repository.update_relationship_proposal(
             context.organization_id, investigation_id, relationship_id, payload.status.value
@@ -160,7 +215,33 @@ class RelationshipDiscoveryService:
             self._repository.update_financial_investigation_status(
                 context.organization_id, investigation_id, "READY_TO_BUILD"
             )
-        return RelationshipResponse.model_validate(updated)
+        response = RelationshipResponse.model_validate(updated)
+        self._repository.complete_idempotency(
+            context.organization_id,
+            idempotency_key,
+            200,
+            {"relationship": response.model_dump(mode="json")},
+        )
+        return response
+
+    def _idempotency_replay(
+        self, context: ActorContext, idempotency_key: str, request_hash: str
+    ) -> list[dict[str, Any]] | None:
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise ValueError("Idempotency-Key must be between 1 and 128 characters")
+        previous = self._repository.get_idempotency(context.organization_id, idempotency_key)
+        if previous is None:
+            return None
+        if previous.get("request_hash") != request_hash:
+            raise RelationshipConflict("Idempotency-Key was already used for another relationship operation")
+        if int(previous.get("response_status", 425)) == 425:
+            raise RelationshipConflict("An identical relationship operation is already in progress")
+        body = previous.get("response_body", {})
+        if isinstance(body, dict) and "relationships" in body:
+            return list(body["relationships"])
+        if isinstance(body, dict) and "relationship" in body:
+            return [body["relationship"]]
+        return []
 
 
 def _profile_source(

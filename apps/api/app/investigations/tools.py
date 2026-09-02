@@ -7,7 +7,10 @@ from app.domain.lifecycle import CanonicalLifecycle
 from app.investigations.schemas import EvidenceItem, EvidenceOperator, EvidenceSource, ToolCall
 from app.repositories.contracts import LifecycleRepository
 
-_ID_PATTERN = re.compile(r"^[A-Z][A-Z0-9-]{2,99}$")
+# IDs are external identifiers from uploaded systems.  They may be lowercase,
+# digit-leading, or shorter than the demo's ORD-/PAY- convention, but must stay
+# bounded and single-token so they are safe to cite and verify.
+_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,16 +59,12 @@ class EvidenceToolRegistry:
         elif name == "get_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = (lifecycle.payments[0],)
-            evidence = [
-                _evidence(EvidenceSource.PAYMENT, payment_id, "status", "equals", "CAPTURED",
-                    "Payment status is CAPTURED.")
-            ]
+            evidence = [_status_evidence(EvidenceSource.PAYMENT, lifecycle.payments[0], payment_id)]
             target = payment_id
         elif name == "get_payments_for_order":
             values = lifecycle.payments
             evidence = [
-                _evidence(EvidenceSource.PAYMENT, str(item["payment_id"]), "status", "equals",
-                    "CAPTURED", "Payment status is CAPTURED.")
+                _status_evidence(EvidenceSource.PAYMENT, item, str(item["payment_id"]))
                 for item in values
             ]
             target = order_id
@@ -75,25 +74,20 @@ class EvidenceToolRegistry:
             settlement_id = str(lifecycle.settlements[0]["settlement_id"])
             _validate_id(settlement_id, "settlement_id")
             values = (lifecycle.settlements[0],)
-            evidence = [
-                _evidence(EvidenceSource.SETTLEMENT, settlement_id, "status", "equals", "RECEIVED",
-                    "Settlement status is RECEIVED.")
-            ]
+            evidence = [_status_evidence(EvidenceSource.SETTLEMENT, lifecycle.settlements[0], settlement_id)]
             target = settlement_id
         elif name == "get_settlements_for_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.settlements
             evidence = [
-                _evidence(EvidenceSource.SETTLEMENT, str(item["settlement_id"]), "status", "equals",
-                    "RECEIVED", "Settlement status is RECEIVED.")
+                _status_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
                 for item in values
             ]
             target = payment_id
         elif name == "get_settlements_for_order":
             values = lifecycle.settlements
             evidence = [
-                _evidence(EvidenceSource.SETTLEMENT, str(item["settlement_id"]), "status", "equals",
-                    "RECEIVED", "Settlement status is RECEIVED.")
+                _status_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
                 for item in values
             ]
             target = order_id
@@ -101,24 +95,21 @@ class EvidenceToolRegistry:
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.refunds
             evidence = [
-                _evidence(EvidenceSource.REFUND, str(item["refund_id"]), "status", "equals",
-                    "PROCESSED", "Refund status is PROCESSED.")
+                _status_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
                 for item in values
             ]
             target = payment_id
         elif name == "get_refunds_for_order":
             values = lifecycle.refunds
             evidence = [
-                _evidence(EvidenceSource.REFUND, str(item["refund_id"]), "status", "equals",
-                    "PROCESSED", "Refund status is PROCESSED.")
+                _status_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
                 for item in values
             ]
             target = order_id
         elif name == "get_invoice_for_order":
             values = lifecycle.invoices
             evidence = [
-                _evidence(EvidenceSource.INVOICE, str(item["invoice_id"]), "status", "equals", "ACTIVE",
-                    "Invoice status is ACTIVE.")
+                _status_evidence(EvidenceSource.INVOICE, item, str(item["invoice_id"]))
                 for item in values
             ]
             target = order_id
@@ -209,6 +200,31 @@ def _evidence(
         operator=EvidenceOperator(operator),
         expected_value=expected_value,
         fact=fact,
+    )
+
+
+def _status_evidence(
+    source: EvidenceSource, record: dict[str, Any], record_id: str
+) -> EvidenceItem:
+    """Create a status claim from the record, never from a lifecycle assumption."""
+    status = record.get("status")
+    label = source.value.replace("_", " ").title()
+    if status is None:
+        return _evidence(
+            source,
+            record_id,
+            "status",
+            EvidenceOperator.EXISTS,
+            None,
+            f"{label} record exists but has no status value.",
+        )
+    return _evidence(
+        source,
+        record_id,
+        "status",
+        EvidenceOperator.EQUALS,
+        str(status),
+        f"{label} status is {status}.",
     )
 
 

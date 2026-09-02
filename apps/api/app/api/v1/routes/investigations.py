@@ -22,8 +22,14 @@ investigation_service = InvestigationService(get_repository(), ai_client)
 
 
 @router.get("/ai/provider-health", response_model=ProviderHealthResponse)
-def get_provider_health() -> ProviderHealthResponse:
+def get_provider_health(
+    context: Annotated[ActorContext, Depends(get_actor_context)],
+) -> ProviderHealthResponse:
     """Check the configured live provider before an investigation is started."""
+    if Capability.FINANCIAL_INVESTIGATION_READ not in context.capabilities:
+        raise HTTPException(
+            status_code=403, detail={"code": "FORBIDDEN", "message": "Capability is required"}
+        )
     return provider_health_report(ai_client)
 
 

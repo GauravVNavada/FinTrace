@@ -4,7 +4,7 @@
 
 ## Evaluation boundary
 
-`EvaluationRun` is a benchmark execution and is not a `ReconciliationRun` or an `ExceptionInvestigation`. The reconciliation benchmark measures fresh generated batches against generator labels. The AI benchmark uses independently authored controlled lifecycle cases and the configured provider; it reports root-cause accuracy, resolution correctness, escalation accuracy, citation validity, unsupported claims, structured validity, tool calls, p50/p95 latency, and provider failures. It does not claim that the deterministic benchmark measures Gemini accuracy.
+`EvaluationRun` is a benchmark execution and is not a `ReconciliationRun` or an `ExceptionInvestigation`. The reconciliation benchmark measures fresh generated batches against generator labels. The AI benchmark uses independently authored controlled lifecycle cases and the configured provider; it reports root-cause accuracy, resolution correctness, escalation accuracy, citation validity, unsupported claims, structured validity, tool calls, p50/p95 latency, and provider failures. It does not claim that the deterministic benchmark measures Gemini accuracy. The reconciliation benchmark does not execute approval decisions, so unsafe resolution rate is reported as unmeasured rather than fabricated.
 
 ## Purpose
 
@@ -23,7 +23,10 @@ The evaluator measures deterministic reconciliation against hidden synthetic gro
 
 - **Match rate:** lifecycles with `RECONCILED` or `RECONCILED_WITH_VARIANCE` divided by total lifecycles.
 - **Match precision:** correctly matched lifecycles divided by lifecycles classified as matched.
-- **Exception recall:** actual labeled exceptions detected divided by all actual labeled exceptions.
+- **Exception precision:** detected exceptions with both the correct exception status and exact exception type divided by all detected exceptions.
+- **Exception recall:** actual labeled exceptions detected with both the correct status and exact exception type divided by all actual labeled exceptions.
+- **Severity accuracy:** generated exception cases whose deterministic severity matches the hidden label divided by labeled exception cases.
+- **Unsafe resolution rate:** intentionally explicit as not measured by the reconciliation-only benchmark; it becomes measurable when a reviewed approval-decision corpus is supplied. The API returns `null` rather than claiming a zero with no denominator.
 - **Throughput:** reconciled lifecycles per second, excluding future AI/provider latency.
 - **Unresolved exceptions:** `EXCEPTION` plus `AMBIGUOUS` results requiring review.
 

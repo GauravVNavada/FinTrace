@@ -23,7 +23,7 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3000` (or `http://127.0.0.1:3002` when using the alternate local web port).
+Open `http://localhost:3002` when following the demo script.
 
 The local demo supports either uploaded synthetic-compatible exports or fresh generated source files. The generator is bounded, reproducible, and passes through the same upload, mapping, normalization, reconciliation, and investigation workflow. All demo records are synthetic; do not use production data in this development setup.
 

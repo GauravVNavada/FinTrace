@@ -73,7 +73,7 @@ All current records are synthetic. A production implementation must classify PII
 ## 4. Security verification checklist
 
 - [x] Authenticated request claims are verified when bearer authentication is used; required mode rejects header-only context.
-- [ ] Object-level tenant filter is present on every repository query.
+- [x] Object-level tenant filter is present on every repository query; the demo adapter also returns no seeded data for unknown tenants.
 - [x] Approval thresholds are tested server-side.
 - [x] Replay with the same idempotency key is harmless.
 - [x] Prompt-injection fixture has no effect.

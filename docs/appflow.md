@@ -68,6 +68,7 @@ Authenticated workspace
 4. Priority exceptions link to the canonical detail view.
 5. Pattern cards show correlation signals and a recommended control.
 6. Export report downloads the current investigation summary as a CSV; the investigation control invokes persisted deterministic normalization/reconciliation and reports completion or failure in place. Benchmark evaluation is a separate control under Evaluations.
+7. The reconciliation panel lists every exception and ambiguous result, lets the user select one, investigates it, and requests controlled human review without silently choosing the first result.
 
 Empty state: “No unresolved exceptions. All lifecycles reconciled for this batch.”  
 Failure state: “Dashboard unavailable. Try again. Existing run history remains available.”

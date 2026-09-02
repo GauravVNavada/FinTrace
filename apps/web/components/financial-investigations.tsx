@@ -5,11 +5,14 @@ import { ArrowLeft, ArrowRight, CheckCircle2, FileSpreadsheet, FileText, FolderS
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Alert, AlertDescription, AlertTitle, Badge, Button, Card, CardContent, CardDescription, CardHeader, CardTitle, FileInput, Input, Select, Textarea } from "@fintrace/ui";
-import { analyzeSourceFile, ApiClientError, confirmSourceMappings, createFinancialInvestigation, decideRelationship, deleteSourceFile, discoverRelationships, editSourceMapping, fetchFinancialInvestigation, fetchFinancialInvestigationPatterns, fetchFinancialInvestigations, fetchLatestReconciliation, fetchProviderHealth, fetchReconciliationResults, fetchReconciliationInvestigation, fetchRelationships, fetchSourceAnalysis, fetchSourceFiles, fetchSourceMappings, generateDemoData, investigateReconciliationResult, normalizeDataset, requestFinancialResolution, runInvestigationReconciliation, updateSourceClassification, uploadSourceFile } from "../lib/api-client";
+import { analyzeSourceFile, ApiClientError, approveResolution, confirmSourceMappings, createFinancialInvestigation, decideRelationship, deleteSourceFile, discoverRelationships, editSourceMapping, fetchFinancialInvestigation, fetchFinancialInvestigationPatterns, fetchFinancialInvestigations, fetchLatestReconciliation, fetchProviderHealth, fetchReconciliationResults, fetchReconciliationInvestigation, fetchRelationships, fetchSourceAnalysis, fetchSourceFiles, fetchSourceMappings, generateDemoData, investigateReconciliationResult, normalizeDataset, rejectResolution, requestFinancialResolution, runInvestigationReconciliation, updateSourceClassification, uploadSourceFile } from "../lib/api-client";
 import type { ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiInvestigation, ApiProviderHealth, ApiReconciliationResult, ApiReconciliationRun, ApiRelationshipProposal, ApiResolutionRequest, ApiSourceAnalysis, ApiSourceFile, ApiSourceMapping, DemoDataRequest, ResolutionActionCode, SourceType } from "../lib/types";
 import { PageHeading } from "./dashboard";
 
 const allowedExtensions = [".csv", ".xlsx"];
+const configuredActorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
+const configuredActorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "ANALYST";
+const canApprove = configuredActorRole === "FINANCE_MANAGER" || configuredActorRole === "CONTROLLER";
 
 function requestId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -159,7 +162,8 @@ export function RelationshipReview({ investigationId }: { investigationId: strin
   return <Card className="mt-4"><CardHeader><CardTitle>Relationship review</CardTitle><CardDescription>FinTrace calculates overlap, cardinality, duplicates, type compatibility, temporal consistency, and amount agreement from the uploaded rows. AI does not calculate these metrics.</CardDescription></CardHeader><CardContent>{error && <Alert variant="destructive" className="mb-3"><AlertDescription>{error}</AlertDescription></Alert>}{loading ? <div role="status" className="text-xs text-muted-foreground">Loading relationship proposals…</div> : items.length === 0 ? <div className="flex flex-col items-start gap-3"><p className="text-xs text-muted-foreground">No proposals yet. Discover relationships after confirming mappings.</p><Button size="sm" onClick={() => void discover()} disabled={working}>Discover relationships</Button></div> : <div className="space-y-3">{items.map(item => <div key={item.id} className="flex flex-col gap-3 rounded-lg border border-border p-4 sm:flex-row sm:items-center"><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-foreground">{item.source_file_id} <span className="text-muted-foreground">to</span> {item.target_source_file_id}<Badge variant={item.confidence_label === "HIGH" ? "default" : "outline"}>{item.confidence_label}</Badge></div><p className="mt-1 text-[11px] text-muted-foreground">{item.evidence_summary} Join: {item.join_fields.join(", ")} · {Math.round(item.confidence * 100)}%</p><div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-[10px] text-muted-foreground sm:grid-cols-4"><span>Overlap {item.value_overlap_percent.toFixed(1)}%</span><span>Cardinality {item.cardinality}</span><span>Duplicates {item.duplicate_key_rate_percent.toFixed(1)}%</span><span>Types {item.type_compatibility}</span>{item.temporal_consistency_percent !== null && <span>Temporal {item.temporal_consistency_percent.toFixed(1)}%</span>}{item.amount_agreement_percent !== null && <span>Amount {item.amount_agreement_percent.toFixed(1)}%</span>}</div></div><div className="flex items-center gap-2"><StatusBadge status={item.status} />{item.status === "PROPOSED" && <><Button variant="outline" size="sm" onClick={() => void decide(item, "REJECTED")} disabled={working}>Reject</Button><Button size="sm" onClick={() => void decide(item, "ACCEPTED")} disabled={working}>Accept</Button></>}</div></div>)}</div>}</CardContent></Card>;
 }
 
-export function ReconciliationRunPanel({ investigationId, currency }: { investigationId: string; currency: string }) {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+function ReconciliationRunPanelSummary({ investigationId, currency }: { investigationId: string; currency: string }) {
   const [run, setRun] = React.useState<ApiReconciliationRun | null>(null);
   const [results, setResults] = React.useState<ApiReconciliationResult[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -222,6 +226,105 @@ function LegacyReconciliationRunPanel({ investigationId, currency }: { investiga
   }
   const exception = results.find(item => item.status === "EXCEPTION" || item.status === "AMBIGUOUS");
   return <Card className="mt-4"><CardHeader><CardTitle>Deterministic reconciliation</CardTitle><CardDescription>Normalize the confirmed sources into an immutable dataset, then run the deterministic lifecycle rules. No AI call changes this result.</CardDescription></CardHeader><CardContent>{error && <Alert variant="destructive" className="mb-3"><AlertDescription>{error}</AlertDescription></Alert>}{run ? <div className="grid gap-3 sm:grid-cols-4"><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Lifecycles</div><div className="mt-1 text-xl font-bold text-foreground">{run.lifecycle_count}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Reconciled</div><div className="mt-1 text-xl font-bold text-foreground">{run.reconciled_count}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Exceptions</div><div className="mt-1 text-xl font-bold text-warning">{run.exception_count + run.ambiguous_count}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Exposure</div><div className="mt-1 text-xl font-bold text-foreground">{(run.open_exposure_minor / 100).toLocaleString("en-IN", { style: "currency", currency })}</div></div></div> : <p className="text-xs text-muted-foreground">No reconciliation run exists for this investigation yet.</p>}{patterns.length > 0 && <div className="mt-4 rounded-md border border-border bg-muted/20 p-3 text-xs"><div className="font-semibold text-foreground">Advisory recurring signals</div>{patterns.map(pattern => <div key={pattern.pattern_id} className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-muted-foreground"><span className="font-semibold text-foreground">{pattern.exception_type}</span><span>·</span><span>{pattern.occurrence_count} occurrences</span><span>·</span><span>{(pattern.associated_exposure_minor / 100).toLocaleString("en-IN", { style: "currency", currency })} exposure</span></div>)}</div>}{exception && <div className="mt-4 flex flex-col gap-2 rounded-md border border-border bg-muted/20 p-3 text-xs sm:flex-row sm:items-center sm:justify-between"><span><span className="font-semibold text-foreground">{exception.order_id}</span> · {exception.exception_type ?? "Ambiguous result"} · requires bounded evidence review</span><div className="flex flex-wrap items-center gap-2"><Button variant="outline" size="sm" onClick={() => void investigate()} disabled={working || investigated !== null}>{investigated ? `Investigation ${investigated.toLowerCase()}` : "Investigate exception"}</Button><Button size="sm" onClick={() => void requestReview()} disabled={working || requestingReview || reviewRequest !== null}>{requestingReview ? "Requesting review…" : reviewRequest ? "Review requested" : "Request human review"}</Button></div></div>}{investigation && <div className="mt-4 rounded-md border border-border p-4 text-xs"><div className="flex flex-wrap items-center justify-between gap-2"><div className="font-semibold text-foreground">Evidence investigation</div><StatusBadge status={investigation.status} /></div><p className="mt-2 leading-5 text-muted-foreground">{investigation.summary}</p>{investigation.status === "FAILED" && <Alert variant="destructive" className="mt-3"><AlertDescription>AI provider unavailable. Deterministic evidence remains available for manual review.</AlertDescription></Alert>}<div className="mt-3 grid gap-3 sm:grid-cols-3"><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Evidence score</div><div className="mt-1 font-bold text-foreground">{investigation.evidence_score}/100</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Root cause</div><div className="mt-1 font-semibold text-foreground">{investigation.root_cause_code ?? "Unresolved"}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Review</div><div className="mt-1 font-semibold text-foreground">{investigation.requires_human_review ? "Human review required" : "No review required"}</div></div></div>{investigation.tool_calls.length > 0 && <div className="mt-3 border-t border-border pt-3"><div className="font-semibold text-foreground">Read-only evidence trace</div><div className="mt-2 space-y-1 text-muted-foreground">{investigation.tool_calls.map(call => <div key={`${call.name}-${call.target}`} className="flex flex-wrap gap-x-2"><span className="font-medium text-foreground">{call.name}</span><span>{call.target}</span><span>· {call.status}</span><span>· {call.duration_ms} ms</span></div>)}</div></div>}</div>}{reviewRequest && <Alert variant="info" className="mt-4"><AlertTitle>Human review requested</AlertTitle><AlertDescription>{reviewRequest.action_code} is pending approval. The financial state has not been changed.</AlertDescription></Alert>}<Button className="mt-4" size="sm" onClick={() => void reconcile()} disabled={working}>{working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{working ? "Processing…" : run ? "Run again" : "Normalize and reconcile"}</Button></CardContent></Card>;
+}
+
+export function ReconciliationRunPanel({ investigationId, currency }: { investigationId: string; currency: string }) {
+  const [run, setRun] = React.useState<ApiReconciliationRun | null>(null);
+  const [results, setResults] = React.useState<ApiReconciliationResult[]>([]);
+  const [patterns, setPatterns] = React.useState<ApiFinancialInvestigationPattern[]>([]);
+  const [selectedId, setSelectedId] = React.useState<string | null>(null);
+  const [investigation, setInvestigation] = React.useState<ApiInvestigation | null>(null);
+  const [reviewRequest, setReviewRequest] = React.useState<ApiResolutionRequest | null>(null);
+  const [providerHealth, setProviderHealth] = React.useState<ApiProviderHealth | null>(null);
+  const [working, setWorking] = React.useState(false);
+  const [requestingReview, setRequestingReview] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  const load = React.useCallback(async () => {
+    try {
+      const loadedRun = await fetchLatestReconciliation(investigationId);
+      const [loadedResults, loadedPatterns] = await Promise.all([
+        fetchReconciliationResults(investigationId, loadedRun.id),
+        fetchFinancialInvestigationPatterns(investigationId),
+      ]);
+      setRun(loadedRun);
+      setResults(loadedResults);
+      setPatterns(loadedPatterns);
+      setSelectedId(current => current ?? loadedResults.find(item => item.status === "EXCEPTION" || item.status === "AMBIGUOUS")?.id ?? null);
+    } catch (loadError) {
+      if (loadError instanceof ApiClientError && loadError.status === 404) {
+        setRun(null);
+        setResults([]);
+        setPatterns([]);
+        return;
+      }
+      setError(errorMessage(loadError));
+    }
+  }, [investigationId]);
+
+  React.useEffect(() => { void load(); }, [load]);
+  React.useEffect(() => {
+    fetchProviderHealth().then(setProviderHealth).catch(() => setProviderHealth(null));
+  }, []);
+
+  const selected = results.find(item => item.id === selectedId) ?? null;
+  const exceptions = results.filter(item => item.status === "EXCEPTION" || item.status === "AMBIGUOUS");
+
+  async function reconcile() {
+    setWorking(true); setError(null);
+    try {
+      const dataset = await normalizeDataset(investigationId);
+      const completed = await runInvestigationReconciliation(investigationId, dataset.id);
+      const [loadedResults, loadedPatterns] = await Promise.all([
+        fetchReconciliationResults(investigationId, completed.id),
+        fetchFinancialInvestigationPatterns(investigationId),
+      ]);
+      setRun(completed); setResults(loadedResults); setPatterns(loadedPatterns);
+      setSelectedId(loadedResults.find(item => item.status === "EXCEPTION" || item.status === "AMBIGUOUS")?.id ?? null);
+      setInvestigation(null); setReviewRequest(null);
+    } catch (runError) { setError(errorMessage(runError)); }
+    finally { setWorking(false); }
+  }
+
+  async function inspect(result: ApiReconciliationResult) {
+    if (!run) return;
+    setSelectedId(result.id); setInvestigation(null); setReviewRequest(null); setError(null); setWorking(true);
+    try { setInvestigation(await fetchReconciliationInvestigation(investigationId, run.id, result.id)); }
+    catch (inspectError) {
+      if (!(inspectError instanceof ApiClientError && inspectError.status === 404)) setError(errorMessage(inspectError));
+    }
+    finally { setWorking(false); }
+  }
+
+  async function investigate() {
+    if (!run || !selected) return;
+    setWorking(true); setError(null);
+    try { setInvestigation(await investigateReconciliationResult(investigationId, run.id, selected.id)); }
+    catch (investigateError) { setError(errorMessage(investigateError)); }
+    finally { setWorking(false); }
+  }
+
+  async function requestReview() {
+    if (!run || !selected) return;
+    setRequestingReview(true); setError(null);
+    try { setReviewRequest(await requestFinancialResolution(investigationId, run.id, selected.id, reviewActionFor(selected.exception_type), requestId())); }
+    catch (reviewError) { setError(errorMessage(reviewError)); }
+    finally { setRequestingReview(false); }
+  }
+
+  async function decideReview(decision: "approve" | "reject") {
+    if (!reviewRequest) return;
+    setWorking(true); setError(null);
+    try {
+      const result = decision === "approve"
+        ? await approveResolution(reviewRequest.request_id, requestId())
+        : await rejectResolution(reviewRequest.request_id, requestId());
+      setReviewRequest(current => current ? { ...current, status: result.request_status, approvals_received: result.approvals_received } : current);
+    } catch (decisionError) { setError(errorMessage(decisionError)); }
+    finally { setWorking(false); }
+  }
+
+  return <Card className="mt-4"><CardHeader><div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between"><div><CardTitle>Reconciliation and investigation</CardTitle><CardDescription>Deterministic rules establish the financial result. AI only investigates selected exceptions using read-only, verifiable evidence.</CardDescription></div>{run && <Button variant="outline" size="sm" onClick={() => void reconcile()} disabled={working}>{working ? "Running…" : "Run again"}</Button>}</div>{providerHealth && <ProviderHealthSummary health={providerHealth} />}</CardHeader><CardContent>{error && <Alert variant="destructive" className="mb-3"><AlertDescription>{error}</AlertDescription></Alert>}{!run ? <div className="rounded-lg border border-dashed border-border bg-muted/20 p-6 text-center"><div className="text-sm font-semibold text-foreground">Ready to reconcile</div><p className="mx-auto mt-2 max-w-lg text-xs leading-5 text-muted-foreground">Normalize the confirmed source mappings into an immutable dataset, then run the deterministic lifecycle checks. This creates the exception queue for evidence review.</p><Button className="mt-4" size="sm" onClick={() => void reconcile()} disabled={working}>{working ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}{working ? "Preparing run…" : "Normalize and reconcile"}</Button></div> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5"><MetricCell label="Lifecycles" value={run.lifecycle_count.toLocaleString()} /><MetricCell label="Reconciled" value={run.reconciled_count.toLocaleString()} /><MetricCell label="Exceptions" value={(run.exception_count + run.ambiguous_count).toLocaleString()} /><MetricCell label="Potential exposure" value={(run.open_exposure_minor / 100).toLocaleString("en-IN", { style: "currency", currency })} /><MetricCell label="Run status" value={statusLabel(run.status)} /></div><div className="mt-4 rounded-md border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">Input accounting: {run.records_consumed.toLocaleString()} consumed / {run.records_expected.toLocaleString()} expected · {run.failure_reason ?? "Every normalized record was accounted for."}</div>{patterns.length > 0 && <div className="mt-4 rounded-md border border-border p-3 text-xs"><div className="font-semibold text-foreground">Recurring signals</div><div className="mt-2 grid gap-2 sm:grid-cols-2">{patterns.map(pattern => <div key={pattern.pattern_id} className="rounded-md bg-muted/20 p-2 text-muted-foreground"><span className="font-semibold text-foreground">{statusLabel(pattern.exception_type)}</span> · {pattern.occurrence_count} occurrences · {(Number(pattern.associated_exposure_minor) / 100).toLocaleString("en-IN", { style: "currency", currency })}</div>)}</div></div>}{exceptions.length === 0 ? <Alert variant="info" className="mt-4"><AlertTitle>All lifecycles reconciled</AlertTitle><AlertDescription>No exception or ambiguous association requires investigation in this run.</AlertDescription></Alert> : <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.4fr)]"><div><div className="mb-2 flex items-center justify-between"><div className="text-xs font-semibold text-foreground">Needs review</div><span className="text-[11px] text-muted-foreground">{exceptions.length} result(s)</span></div><div className="max-h-96 space-y-2 overflow-auto pr-1">{exceptions.map(item => <Button type="button" variant="ghost" key={item.id} onClick={() => void inspect(item)} className={`w-full rounded-md border p-3 text-left text-xs ${selected?.id === item.id ? "border-primary bg-primary/5" : "border-border bg-muted/20"}`}><div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground">{item.order_id}</span><StatusBadge status={item.status} /></div><div className="mt-1 text-[11px] text-muted-foreground">{statusLabel(item.exception_type ?? "AMBIGUOUS_ASSOCIATION")} · {statusLabel(item.severity)} · {(item.exposure_minor / 100).toLocaleString("en-IN", { style: "currency", currency })}</div></Button>)}</div></div>{selected && <div className="rounded-md border border-border p-4 text-xs"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><div className="font-semibold text-foreground">Exception investigation</div><div className="mt-1 text-[11px] text-muted-foreground">{selected.order_id} · {statusLabel(selected.exception_type ?? "AMBIGUOUS_ASSOCIATION")} · deterministic findings: {selected.findings.map(item => item.code).join(", ")}</div></div><Button size="sm" onClick={() => void investigate()} disabled={working}>{working ? "Investigating…" : investigation ? "Re-run investigation" : "Investigate with AI"}</Button></div>{investigation ? <><div className="mt-3 rounded-md border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">{investigation.provider} · {investigation.model} · {investigation.status} · {investigation.latency_ms} ms</div><p className="mt-3 leading-5 text-muted-foreground">{investigation.summary}</p><div className="mt-3 grid gap-3 sm:grid-cols-3"><MetricCell label="Root cause" value={investigation.root_cause_code ?? "Unresolved"} /><MetricCell label="Evidence score" value={`${investigation.evidence_score}/100`} /><MetricCell label="Verifier" value={investigation.verifier_passed ? "Passed" : "Review required"} /></div><EvidencePanel title="Supporting evidence" items={investigation.supporting_evidence} /><EvidencePanel title="Contradictory evidence" items={investigation.contradictory_evidence} />{investigation.rejected_evidence.length > 0 && <EvidencePanel title="Rejected evidence" items={investigation.rejected_evidence} />}</> : <p className="mt-6 text-center text-xs text-muted-foreground">Select “Investigate with AI” to produce a bounded, evidence-backed assessment.</p>}{reviewRequest ? <div className="mt-4 rounded-md border border-info/30 bg-info/5 p-3"><div className="font-semibold text-foreground">Human review · {statusLabel(reviewRequest.status)}</div><div className="mt-1 text-[11px] text-muted-foreground">Requested by {reviewRequest.requester_id} · {reviewRequest.approvals_received}/{reviewRequest.required_approvals} approvals · {statusLabel(reviewRequest.action_code)}</div>{reviewRequest.status === "PENDING_APPROVAL" && (canApprove && configuredActorId !== reviewRequest.requester_id ? <div className="mt-3 flex flex-wrap gap-2"><Button size="sm" onClick={() => void decideReview("approve")} disabled={working}>Approve</Button><Button variant="outline" size="sm" onClick={() => void decideReview("reject")} disabled={working}>Reject</Button></div> : <p className="mt-3 text-[11px] text-muted-foreground">Waiting for a different authorized reviewer. The requester cannot approve their own request.</p>)}</div> : <Button variant="outline" className="mt-4" size="sm" onClick={() => void requestReview()} disabled={working || requestingReview}>{requestingReview ? "Requesting review…" : "Request human review"}</Button>}</div>}</div>}</>}</CardContent></Card>;
 }
 
 export function FinancialInvestigationSourcesPage({ investigationId }: { investigationId: string }) {

@@ -228,45 +228,34 @@ class ControlsService:
                         )
                     return ApprovalResponse.model_validate(previous["response_body"])
                 self._validate_decision(context, response, approvers)
-                if response.status != ApprovalStatus.PENDING_APPROVAL:
-                    raise ControlStateError("Approval request is no longer pending")
-                if context.actor_id in approvers:
-                    raise ControlStateError("An actor can approve a request only once")
                 now = datetime.now(UTC)
-                if decision == Decision.REJECTED:
-                    updated_status = ApprovalStatus.REJECTED
-                    approvals_received = len(approvers)
-                else:
-                    approvals_received = len(approvers) + 1
-                    updated_status = (
-                        ApprovalStatus.APPROVED
-                        if approvals_received >= response.required_approvals
-                        else ApprovalStatus.PENDING_APPROVAL
-                    )
-                updated_request = response.model_copy(
-                    update={"status": updated_status, "approvals_received": approvals_received}
-                )
-                approval = ApprovalResponse(
-                    approval_id=f"APR-{uuid4().hex[:12].upper()}",
-                    request_id=request_id,
-                    decision=decision,
-                    request_status=updated_status,
-                    required_approvals=updated_request.required_approvals,
-                    approvals_received=approvals_received,
-                    actor_id=context.actor_id,
-                    decided_at=now,
-                )
-                if not self._repository.save_approval_decision(
+                approval_id = f"APR-{uuid4().hex[:12].upper()}"
+                applied = self._repository.apply_approval_decision(
                     context.organization_id,
                     request_id,
                     context.actor_id,
                     decision.value,
-                    approval.approval_id,
+                    approval_id,
                     now.isoformat(),
-                ):
-                    raise ControlStateError("An actor can approve a request only once")
-                self._repository.update_resolution_request(
-                    context.organization_id, updated_request.model_dump(mode="json")
+                )
+                if applied is None:
+                    raise ControlNotFoundError(request_id)
+                if not applied.get("applied"):
+                    reason = applied.get("reason")
+                    if reason == "duplicate":
+                        raise ControlStateError("An actor can approve a request only once")
+                    raise ControlStateError("Approval request is no longer pending")
+                updated_status = ApprovalStatus(str(applied["status"]))
+                approvals_received = int(applied["approvals_received"])
+                approval = ApprovalResponse(
+                    approval_id=approval_id,
+                    request_id=request_id,
+                    decision=decision,
+                    request_status=updated_status,
+                    required_approvals=response.required_approvals,
+                    approvals_received=approvals_received,
+                    actor_id=context.actor_id,
+                    decided_at=now,
                 )
                 self._repository.put_idempotency(
                     context.organization_id,
@@ -291,6 +280,8 @@ class ControlsService:
                 raise ControlForbiddenError("Actor cannot approve or reject remediation")
             if response.required_capability not in context.capabilities:
                 raise ControlForbiddenError("Actor lacks the required approval capability")
+            if context.actor_id == response.requester_id:
+                raise ControlForbiddenError("The requester cannot approve their own request")
             approval_key = (context.organization_id, idempotency_key)
             previous = self._approval_idempotency.get(approval_key)
             if previous is not None:
@@ -366,6 +357,8 @@ class ControlsService:
             raise ControlForbiddenError("Actor cannot approve or reject remediation")
         if response.required_capability not in context.capabilities:
             raise ControlForbiddenError("Actor lacks the required approval capability")
+        if context.actor_id == response.requester_id:
+            raise ControlForbiddenError("The requester cannot approve their own request")
 
     @staticmethod
     def _require(context: ActorContext, capability: Capability) -> None:

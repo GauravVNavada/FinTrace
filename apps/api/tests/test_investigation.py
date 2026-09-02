@@ -5,6 +5,7 @@ from app.domain.lifecycle import CanonicalLifecycle
 from app.domain.schemas import ExceptionStatus, ExceptionSummary, ExceptionType, Severity
 from app.investigations.provider import StubAIClient, UnavailableAIClient
 from app.investigations.service import InvestigationService
+from app.investigations.tools import EvidenceToolRegistry
 from app.main import app
 from app.repositories.demo import demo_repository
 
@@ -69,7 +70,9 @@ async def test_investigation_requires_tenant_and_idempotency(client: AsyncClient
 
 @pytest.mark.asyncio
 async def test_provider_health_is_visible_before_investigation(client: AsyncClient) -> None:
-    response = await client.get("/api/v1/ai/provider-health")
+    response = await client.get(
+        "/api/v1/ai/provider-health", headers={"X-Organization-Id": "ORG-001"}
+    )
 
     assert response.status_code == 200
     assert response.json()["status"] == "CONNECTED"
@@ -78,6 +81,13 @@ async def test_provider_health_is_visible_before_investigation(client: AsyncClie
     assert response.json()["overall_status"] == "AVAILABLE"
     assert response.json()["active_provider"] == "stub"
     assert response.json()["providers"][0]["provider"] == "stub"
+
+
+@pytest.mark.asyncio
+async def test_provider_health_requires_authentication(client: AsyncClient) -> None:
+    response = await client.get("/api/v1/ai/provider-health")
+
+    assert response.status_code == 401
 
 
 def test_provider_failure_is_safe() -> None:
@@ -152,3 +162,20 @@ def test_ambiguous_payment_relationship_is_unresolved_not_provider_failure() -> 
         "get_settlements_for_order",
         "get_refunds_for_order",
     }
+
+
+def test_evidence_tools_read_actual_status_and_accept_external_ids() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "100234", "amount_minor": 10000},
+        payments=({"payment_id": "pay-1", "status": "FAILED", "amount_minor": 10000},),
+        settlements=(),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+
+    result = EvidenceToolRegistry(demo_repository).invoke("get_payment", "org-1", lifecycle)
+
+    assert result.call.evidence[0].expected_value == "FAILED"
+    assert result.call.evidence[0].fact == "Payment status is FAILED."
