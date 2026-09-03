@@ -42,6 +42,7 @@ class DemoDataRequest(BaseModel):
     seed: int = Field(default=42, ge=0, le=2_147_483_647)
     anomaly_rate: float = Field(default=0.30, ge=0, le=1)
     scenario_types: list[str] = Field(default_factory=list, max_length=12)
+    preset: str | None = Field(default=None, max_length=64)
 
 
 class FinancialInvestigationCreate(BaseModel):

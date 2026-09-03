@@ -23,6 +23,7 @@ SCENARIOS = (
     "MANUAL_WORKFLOW_ANOMALY",
     "AMBIGUOUS_PAYMENT",
 )
+FLAGSHIP_FINANCE_REVIEW = "FLAGSHIP_FINANCE_REVIEW"
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,6 +33,7 @@ class GeneratorConfig:
     anomaly_rate: float = 0.30
     organization_id: str = "ORG-001"
     scenario_types: tuple[str, ...] = ()
+    preset: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,6 +73,8 @@ def generate_dataset(config: GeneratorConfig | None = None) -> GeneratedDataset:
     ground_truth: list[dict[str, Any]] = []
     base_time = datetime(2026, 8, 1, 8, 0, tzinfo=UTC)
     anomaly_scenarios = config.scenario_types or SCENARIOS[1:]
+    if config.preset not in (None, FLAGSHIP_FINANCE_REVIEW):
+        raise ValueError(f"unsupported generator preset: {config.preset}")
     invalid_scenarios = set(anomaly_scenarios) - set(SCENARIOS[1:])
     if invalid_scenarios:
         raise ValueError("unsupported scenario types: " + ", ".join(sorted(invalid_scenarios)))
@@ -90,7 +94,18 @@ def generate_dataset(config: GeneratorConfig | None = None) -> GeneratedDataset:
         payment_id = f"PAY-{20000 + index}"
         amount = Decimal(rng.choice(amount_options))
         created_at = base_time + timedelta(minutes=index * 7)
-        scenario = rng.choice(anomaly_scenarios) if rng.random() < config.anomaly_rate else "NORMAL"
+        forced_flagship = {
+            5: "MISSING_SETTLEMENT",
+            15: "REFUND_INVENTORY_MISSING",
+            25: "AMBIGUOUS_PAYMENT",
+            35: "SETTLEMENT_FEE_VARIANCE",
+            45: "SETTLEMENT_TIMING",
+        }
+        scenario = (
+            forced_flagship.get(index)
+            if config.preset == FLAGSHIP_FINANCE_REVIEW
+            else None
+        ) or (rng.choice(anomaly_scenarios) if rng.random() < config.anomaly_rate else "NORMAL")
         order: dict[str, Any] = {
             "organization_id": config.organization_id,
             "order_id": order_id,
@@ -103,6 +118,7 @@ def generate_dataset(config: GeneratorConfig | None = None) -> GeneratedDataset:
             "organization_id": config.organization_id,
             "payment_id": payment_id,
             "order_id": order_id,
+            "gateway_reference": f"GTW-{500000 + index}",
             "amount_minor": _money(amount),
             "status": "CAPTURED",
             "gateway_fee_minor": _money(amount * Decimal("0.018")),

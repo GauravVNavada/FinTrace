@@ -97,7 +97,7 @@ This architecture makes AI failure non-fatal. If an AI provider is unavailable, 
 | Component | Language/runtime | Framework | Database/storage | Important configuration |
 | --- | --- | --- | --- | --- |
 | `apps/web` | TypeScript, Node 24+ | Next.js App Router, React, Tailwind | Typed API responses with deterministic fallback for isolated development | `NEXT_PUBLIC_API_BASE_URL`, organization/actor dev context |
-| `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ when `STORAGE_BACKEND=postgres`; demo adapter by default | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
+| `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ for the buildathon/demo runtime; demo adapter remains available for tests/offline fixtures | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
 | `packages/ui` | TypeScript, React | Tailwind + shadcn-style primitives | None | Shared by web apps only |
 | Evaluation runner | Python 3.12+ | Plain Python modules | Synthetic CSV/JSON and hidden ground truth | deterministic seed and output path |
 | AI provider adapter | Python | `AIProvider` with `GeminiProvider`, `GroqProvider`, and test-only `StubAIClient` | No prompt/result persistence outside API model; provider/model selected at runtime | timeout, retry, model, redaction settings |
@@ -136,7 +136,7 @@ packages/
         └── index.ts         # public exports only
 ```
 
-The API exposes `/health`, `/ready`, dashboard/exception/lifecycle reads, financial-investigation source/generation/normalization/reconciliation routes, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter as the default for local review and tests. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for canonical reads and durable workflow paths. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
+The API exposes `/health`, `/ready`, demo-login, dashboard/exception/lifecycle reads, financial-investigation source/generation/normalization/reconciliation routes, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for the buildathon/demo runtime; `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter available for tests and offline fixtures. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
 
 ## Request-to-data path
 

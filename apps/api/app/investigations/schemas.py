@@ -1,5 +1,6 @@
 from datetime import datetime
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -111,7 +112,9 @@ class ToolCall(BaseModel):
     duration_ms: int = Field(ge=0)
     evidence: list[EvidenceItem] = Field(default_factory=list, max_length=50)
     sequence_no: int = Field(default=0, ge=0)
-    arguments: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
+    # Provider tool arguments are bounded JSON, not only scalar query params.
+    # Keeping the JSON shape preserves the exact read-only request in the audit trace.
+    arguments: dict[str, Any] = Field(default_factory=dict)
     result_record_ids: list[str] = Field(default_factory=list, max_length=100)
     result_summary: str = ""
     provider: str = "unknown"

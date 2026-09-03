@@ -100,6 +100,37 @@ async def test_bearer_tenant_cannot_be_overridden_by_header() -> None:
     assert response.status_code == 403
 
 
+@pytest.mark.asyncio
+async def test_demo_login_preserves_role_capabilities_and_exception_detail_access() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        analyst_login = await client.post(
+            "/api/v1/auth/demo-login", json={"role": "ANALYST"}
+        )
+        controller_login = await client.post(
+            "/api/v1/auth/demo-login", json={"role": "CONTROLLER"}
+        )
+
+        analyst_headers = {"Authorization": f"Bearer {analyst_login.json()['access_token']}"}
+        controller_headers = {
+            "Authorization": f"Bearer {controller_login.json()['access_token']}"
+        }
+        exception = await client.get(
+            "/api/v1/exceptions/EXC-1042", headers=analyst_headers
+        )
+        audit = await client.get("/api/v1/audit-events", headers=analyst_headers)
+        controller_audit = await client.get(
+            "/api/v1/audit-events", headers=controller_headers
+        )
+
+    assert analyst_login.status_code == 200
+    assert analyst_login.json()["role"] == "ANALYST"
+    assert controller_login.status_code == 200
+    assert controller_login.json()["role"] == "CONTROLLER"
+    assert exception.status_code == 200
+    assert audit.status_code == 403
+    assert controller_audit.status_code == 200
+
+
 def test_required_auth_rejects_default_or_short_secret() -> None:
     with pytest.raises(ValueError, match="AUTH_SECRET"):
         Settings(auth_mode="required", auth_secret="fintrace-development-only-secret")

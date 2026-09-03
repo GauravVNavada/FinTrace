@@ -450,7 +450,12 @@ class OpenAICompatibleAIClient:
             "declared list, never calculate money, never invent records, and return UNRESOLVED "
             "when evidence is insufficient. Return JSON with either {\"action\":\"tool\","
             "\"tool_name\":\"...\",\"arguments\":{}} or {\"action\":\"final\","
-            "\"candidate\":{...}}. Do not include chain-of-thought."
+            "\"candidate\":{...}}. A final candidate must use only these exact fields: status, "
+            "root_cause_code, summary, supporting_evidence, contradictory_evidence, missing_evidence, "
+            "recommended_action_code, requires_human_review. status must be SUPPORTED or UNRESOLVED; "
+            "evidence source must be one of order, payment, settlement, invoice, refund, inventory, "
+            "employee_action; use null record_id only for an explicit missing finding. Do not include "
+            "chain-of-thought or extra fields."
         )
         tool_specs = [
             {

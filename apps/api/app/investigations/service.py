@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import UTC, datetime
 from hashlib import sha256
 from threading import RLock
@@ -8,7 +9,7 @@ from uuid import uuid4
 from pydantic import ValidationError
 
 from app.domain.lifecycle import LifecycleNotFoundError
-from app.domain.schemas import ExceptionSummary
+from app.domain.schemas import ExceptionSummary, ExceptionType
 from app.investigations.provider import AIClient, ProviderUnavailable
 from app.investigations.schemas import (
     EvidenceItem,
@@ -22,6 +23,8 @@ from app.investigations.schemas import (
 from app.investigations.tools import EvidenceToolRegistry
 from app.investigations.verifier import verify_candidate
 from app.repositories.contracts import LifecycleRepository
+
+_logger = logging.getLogger("fintrace.investigation")
 
 
 class InvestigationNotFoundError(LookupError):
@@ -165,21 +168,7 @@ class InvestigationService:
 
         tool_calls: list[ToolCall] = []
         evidence: list[EvidenceItem] = []
-        available_tools = [
-            "get_order",
-            "get_payment",
-            "get_payments_for_order",
-            "get_settlement",
-            "get_settlements_for_payment",
-            "get_settlements_for_order",
-            "get_invoice_for_order",
-            "get_refunds_for_payment",
-            "get_refunds_for_order",
-            "get_inventory_movements",
-            "get_employee_action_logs",
-            "get_related_exceptions",
-            "get_exception_history",
-        ]
+        available_tools = self._investigation_tools(exception.type)
         findings = [
             {
                 "code": code,
@@ -204,7 +193,14 @@ class InvestigationService:
                 ]
                 try:
                     decision = next_step(
-                        exception, findings, evidence, trace, available_tools
+                        exception,
+                        findings,
+                        evidence,
+                        trace,
+                        # Once every relevant evidence source has been inspected,
+                        # require a structured final answer instead of allowing the
+                        # provider to keep selecting an already-used tool.
+                        [] if len(tool_calls) >= len(available_tools) else available_tools,
                     )
                 except ProviderUnavailable as error:
                     return _with_metadata(
@@ -220,8 +216,16 @@ class InvestigationService:
                     )
                 if decision.action == "final":
                     try:
-                        candidate = InvestigationCandidate.model_validate(decision.candidate or {})
-                    except ValidationError:
+                        candidate = InvestigationCandidate.model_validate(
+                            _normalize_provider_candidate(decision.candidate or {})
+                        )
+                    except ValidationError as error:
+                        _logger.warning(
+                            "investigation_candidate_invalid provider=%s model=%s errors=%s",
+                            getattr(self._provider, "provider", "unknown"),
+                            getattr(self._provider, "model", "unknown"),
+                            str(error).replace("\n", " ")[:500],
+                        )
                         candidate = InvestigationCandidate(
                             status=InvestigationStatus.UNRESOLVED,
                             root_cause_code=None,
@@ -359,6 +363,39 @@ class InvestigationService:
         ), started_at, self._provider)
 
     @staticmethod
+    def _investigation_tools(exception_type: ExceptionType) -> list[str]:
+        """Expose only the evidence sources that can resolve this deterministic finding."""
+        plans: dict[ExceptionType, list[str]] = {
+            ExceptionType.REFUND_WITHOUT_INVENTORY_RETURN: [
+                "get_order", "get_payments_for_order", "get_refunds_for_order",
+                "get_invoice_for_order", "get_inventory_movements", "get_employee_action_logs",
+            ],
+            ExceptionType.REFUND_WITHOUT_ERP_REVERSAL: [
+                "get_order", "get_refunds_for_order", "get_invoice_for_order"
+            ],
+            ExceptionType.ERP_INVOICE_MISSING: [
+                "get_order", "get_payments_for_order", "get_invoice_for_order"
+            ],
+            ExceptionType.ERP_AMOUNT_MISMATCH: [
+                "get_order", "get_invoice_for_order"
+            ],
+            ExceptionType.MISSING_SETTLEMENT: [
+                "get_order", "get_payment", "get_settlements_for_order"
+            ],
+            ExceptionType.DUPLICATE_PAYMENT: [
+                "get_order", "get_payments_for_order", "get_settlements_for_order"
+            ],
+            ExceptionType.AMBIGUOUS_ASSOCIATION: [
+                "get_order", "get_payments_for_order", "get_invoice_for_order",
+                "get_settlements_for_order", "get_refunds_for_order", "get_related_exceptions"
+            ],
+        }
+        return plans.get(exception_type, [
+            "get_order", "get_payments_for_order", "get_invoice_for_order",
+            "get_inventory_movements", "get_employee_action_logs",
+        ])
+
+    @staticmethod
     def _fallback_tools(exception: ExceptionSummary) -> list[str]:
         common = ["get_order", "get_payments_for_order"]
         if exception.type.value in {"DUPLICATE_PAYMENT", "AMBIGUOUS_ASSOCIATION"}:
@@ -447,3 +484,57 @@ def _with_metadata(
             "latency_ms": max(0, int((completed_at - started_at).total_seconds() * 1000)),
         }
     )
+
+
+def _normalize_provider_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+    """Normalize documented provider aliases while retaining strict candidate validation."""
+    allowed = {
+        "status", "root_cause_code", "summary", "supporting_evidence",
+        "contradictory_evidence", "missing_evidence", "recommended_action_code",
+        "requires_human_review",
+    }
+    result = {key: value for key, value in candidate.items() if key in allowed}
+    root_aliases = {
+        "REFUND_WITHOUT_INVENTORY_RETURN": "INVENTORY_REVERSAL_MISSING",
+        "REFUND_WITHOUT_ERP_REVERSAL": "ERP_REVERSAL_MISSING",
+        "MISSING_SETTLEMENT": "SETTLEMENT_MISSING",
+    }
+    root = result.get("root_cause_code")
+    if root in root_aliases:
+        result["root_cause_code"] = root_aliases[root]
+    action_aliases = {
+        "INITIATE_INVENTORY_INSPECTION": "REQUEST_INVENTORY_VERIFICATION",
+        "REQUEST_INVENTORY_INSPECTION": "REQUEST_INVENTORY_VERIFICATION",
+        "FLAG_FOR_INVENTORY_AUDIT": "REQUEST_INVENTORY_VERIFICATION",
+        "REVIEW_ERP_REVERSAL": "REQUEST_ERP_REVERSAL_REVIEW",
+        "REQUEST_ERP_REVIEW": "REQUEST_ERP_REVERSAL_REVIEW",
+        "REVIEW_PAYMENT": "REQUEST_PAYMENT_REVIEW",
+        "REQUEST_REVIEW": "REQUEST_MANUAL_REVIEW",
+    }
+    action = result.get("recommended_action_code")
+    if action in action_aliases:
+        result["recommended_action_code"] = action_aliases[action]
+    elif action is not None and action not in {
+        "REQUEST_INVENTORY_VERIFICATION", "REQUEST_ERP_REVERSAL_REVIEW",
+        "REQUEST_PAYMENT_REVIEW", "REQUEST_MANUAL_REVIEW",
+    }:
+        # An unrecognized action is never allowed to cross the API boundary.
+        result["recommended_action_code"] = None
+    for field in ("supporting_evidence", "contradictory_evidence"):
+        result[field] = [_normalize_provider_evidence(item) for item in result.get(field, []) if isinstance(item, dict)]
+    return result
+
+
+def _normalize_provider_evidence(item: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "source", "record_id", "fact", "field", "operator", "expected_value",
+    }
+    result = {key: value for key, value in item.items() if key in allowed}
+    result["source"] = {
+        "inventory_movements": "inventory",
+        "employee_actions": "employee_action",
+    }.get(str(result.get("source")), result.get("source"))
+    if result.get("record_id") is None and result.get("operator") is None:
+        # Missing-record claims must be explicit before deterministic verification.
+        result["operator"] = "missing"
+    return result

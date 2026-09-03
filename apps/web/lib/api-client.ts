@@ -2,8 +2,8 @@ import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiDemoData
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
 const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "ORG-001";
-const actorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
-const actorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "ANALYST";
+const configuredActorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
+const configuredActorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "ANALYST";
 
 export class ApiClientError extends Error {
   constructor(
@@ -21,12 +21,32 @@ type ApiErrorPayload = { detail?: { code?: string; message?: string } | string; 
 
 const baseHeaders = {
   "X-Organization-Id": organizationId,
-  "X-Actor-Id": actorId,
-  "X-Actor-Role": actorRole,
 };
+
+export type ClientIdentity = { actor_id: string; role: string; display_name: string; organization_id: string };
+
+export function getClientIdentity(): ClientIdentity {
+  if (typeof window !== "undefined") {
+    try {
+      const stored = window.localStorage.getItem("fintrace.identity");
+      if (stored) return JSON.parse(stored) as ClientIdentity;
+    } catch { /* fall through to the explicit development defaults */ }
+  }
+  return { actor_id: configuredActorId, role: configuredActorRole, display_name: "Development user", organization_id: organizationId };
+}
+
+function runtimeIdentity() {
+  const token = typeof window !== "undefined" ? window.localStorage.getItem("fintrace.access_token") : null;
+  if (token) return { Authorization: `Bearer ${token}` };
+  return {
+    "X-Actor-Id": configuredActorId,
+    "X-Actor-Role": configuredActorRole,
+  };
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(baseHeaders);
+  Object.entries(runtimeIdentity()).forEach(([key, value]) => headers.set(key, value));
   new Headers(init.headers).forEach((value, key) => headers.set(key, value));
   let response: Response;
   try {
@@ -85,6 +105,10 @@ export function fetchDashboardSummary() {
 
 export function fetchReadiness() {
   return get<{ status: string; storage_backend: string }>("/ready");
+}
+
+export function demoLogin(role: "ANALYST" | "FINANCE_MANAGER" | "CONTROLLER") {
+  return post<{ access_token: string; token_type: string; expires_in: number; organization_id: string; actor_id: string; role: string; display_name: string }>("/api/v1/auth/demo-login", { role }, requestId());
 }
 
 export function fetchProviderHealth() {
@@ -173,6 +197,10 @@ export function uploadSourceFile(investigationId: string, file: File, idempotenc
 
 export function generateDemoData(investigationId: string, payload: DemoDataRequest, idempotencyKey: string) {
   return post<ApiDemoDataResponse>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/demo-data`, payload, idempotencyKey);
+}
+
+export function launchFlagshipDemo(idempotencyKey: string) {
+  return post<ApiFinancialInvestigation>("/api/v1/financial-investigations/flagship-demo", {}, idempotencyKey);
 }
 
 export async function deleteSourceFile(investigationId: string, sourceFileId: string, idempotencyKey = requestId()) {

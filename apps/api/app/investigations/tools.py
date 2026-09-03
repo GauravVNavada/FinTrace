@@ -51,21 +51,18 @@ class EvidenceToolRegistry:
 
         if name == "get_order":
             values = (lifecycle.order,)
-            evidence = [
-                _evidence(EvidenceSource.ORDER, order_id, "status", "exists", None,
-                    "Order record exists in the scoped lifecycle.")
-            ]
+            evidence = _record_evidence(EvidenceSource.ORDER, lifecycle.order, order_id)
             target = order_id
         elif name == "get_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = (lifecycle.payments[0],)
-            evidence = [_status_evidence(EvidenceSource.PAYMENT, lifecycle.payments[0], payment_id)]
+            evidence = _record_evidence(EvidenceSource.PAYMENT, lifecycle.payments[0], payment_id)
             target = payment_id
         elif name == "get_payments_for_order":
             values = lifecycle.payments
-            evidence = [
-                _status_evidence(EvidenceSource.PAYMENT, item, str(item["payment_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.PAYMENT, item, str(item["payment_id"]))
             ]
             target = order_id
         elif name == "get_settlement":
@@ -74,52 +71,51 @@ class EvidenceToolRegistry:
             settlement_id = str(lifecycle.settlements[0]["settlement_id"])
             _validate_id(settlement_id, "settlement_id")
             values = (lifecycle.settlements[0],)
-            evidence = [_status_evidence(EvidenceSource.SETTLEMENT, lifecycle.settlements[0], settlement_id)]
+            evidence = _record_evidence(EvidenceSource.SETTLEMENT, lifecycle.settlements[0], settlement_id)
             target = settlement_id
         elif name == "get_settlements_for_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.settlements
-            evidence = [
-                _status_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
             ]
             target = payment_id
         elif name == "get_settlements_for_order":
             values = lifecycle.settlements
-            evidence = [
-                _status_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
             ]
             target = order_id
         elif name == "get_refunds_for_payment":
             payment_id = self._single_payment_id(lifecycle)
             values = lifecycle.refunds
-            evidence = [
-                _status_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
             ]
             target = payment_id
         elif name == "get_refunds_for_order":
             values = lifecycle.refunds
-            evidence = [
-                _status_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
             ]
             target = order_id
         elif name == "get_invoice_for_order":
             values = lifecycle.invoices
-            evidence = [
-                _status_evidence(EvidenceSource.INVOICE, item, str(item["invoice_id"]))
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.INVOICE, item, str(item["invoice_id"]))
             ]
             target = order_id
         elif name == "get_inventory_movements":
             values = lifecycle.inventory_movements
             returns = [item for item in values if item.get("movement_type") == "RETURN"]
-            evidence = [
-                _evidence(EvidenceSource.INVENTORY, str(item["movement_id"]), "movement_type",
-                    "equals", "RETURN", "Inventory movement type is RETURN.")
+            evidence = [fact
                 for item in returns
+                for fact in _record_evidence(EvidenceSource.INVENTORY, item, str(item["movement_id"]))
             ]
             if not returns:
                 evidence.append(
@@ -135,10 +131,9 @@ class EvidenceToolRegistry:
             target = order_id
         elif name == "get_employee_action_logs":
             values = lifecycle.employee_actions
-            evidence = [
-                    _evidence(EvidenceSource.EMPLOYEE_ACTION, str(item["action_id"]), "action_id",
-                        "exists", None, "Employee action record exists.")
+            evidence = [fact
                 for item in values
+                for fact in _record_evidence(EvidenceSource.EMPLOYEE_ACTION, item, str(item["action_id"]))
             ]
             target = order_id
         elif name == "get_related_exceptions":
@@ -226,6 +221,31 @@ def _status_evidence(
         str(status),
         f"{label} status is {status}.",
     )
+
+
+def _record_evidence(source: EvidenceSource, record: dict[str, Any], record_id: str) -> list[EvidenceItem]:
+    """Return a small, source-specific fact set instead of exposing the full source row."""
+    label = source.value.replace("_", " ").title()
+    field_specs: dict[EvidenceSource, tuple[tuple[str, str], ...]] = {
+        EvidenceSource.ORDER: (("amount_minor", "amount_minor"), ("created_at", "created_at"), ("status", "status")),
+        EvidenceSource.PAYMENT: (("order_id", "order_id"), ("amount_minor", "amount_minor"), ("captured_at", "captured_at"), ("status", "status"), ("gateway_reference", "gateway_reference")),
+        EvidenceSource.SETTLEMENT: (("payment_id", "payment_id"), ("gross_minor", "gross_minor"), ("fees_minor", "fees_minor"), ("tax_minor", "tax_minor"), ("net_minor", "net_minor"), ("settled_at", "settled_at"), ("status", "status")),
+        EvidenceSource.INVOICE: (("order_id", "order_id"), ("gross_minor", "gross_minor"), ("created_at", "created_at"), ("status", "status")),
+        EvidenceSource.REFUND: (("payment_id", "payment_id"), ("amount_minor", "amount_minor"), ("processed_at", "processed_at"), ("status", "status")),
+        EvidenceSource.INVENTORY: (("order_id", "order_id"), ("movement_type", "movement_type"), ("quantity", "quantity"), ("occurred_at", "occurred_at")),
+        EvidenceSource.EMPLOYEE_ACTION: (("entity_id", "entity_id"), ("employee_id", "employee_id"), ("action", "action"), ("occurred_at", "occurred_at")),
+    }
+    facts: list[EvidenceItem] = []
+    for source_field, display_field in field_specs[source]:
+        value = record.get(source_field)
+        if value in (None, ""):
+            continue
+        expected = str(value) if not isinstance(value, (str, int, float, bool)) else value
+        facts.append(_evidence(source, record_id, display_field, "equals", expected, f"{label} {display_field} is {value}."))
+    if not facts:
+        facts.append(_evidence(source, record_id, None, "exists", None, f"{label} record exists."))
+    facts.sort(key=lambda item: 0 if item.field == "status" else 1)
+    return facts
 
 
 def _result_summary(name: str, values: tuple[dict[str, Any], ...]) -> str:

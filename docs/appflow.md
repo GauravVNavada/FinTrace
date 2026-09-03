@@ -9,7 +9,7 @@ Control screens use four explicit states: loading, persisted result, no result y
 
 ## Active evolution flow
 
-The existing navigation remains available for the seeded MVP. The new primary user journey will be investigation-scoped:
+The primary user journey is investigation-scoped:
 
 ```text
 Investigations
@@ -48,17 +48,16 @@ Authenticated workspace
         |      +--> Priority exceptions
         |      +--> Recurring patterns
         |
-        +--> Exceptions
-        |      +--> Filters/search
-        |      +--> Exception detail
-        |             +--> Lifecycle
-        |             +--> Timeline
-        |             +--> Evidence investigation
-        |             +--> Approval guardrail
-        |             +--> Audit history
+        +--> Investigations
+        |      +--> Investigation workspace
+        |             +--> Overview
+        |             +--> Sources
+        |             +--> Relationships
+        |             +--> Reconciliation
+        |             +--> Exceptions
+        |             +--> Audit context
         |
         +--> Patterns
-        +--> Reconciliation runs
         +--> Evaluations
         +--> Audit trail
         +--> Settings
@@ -165,7 +164,7 @@ Investigation requested
 | Screen | Route | Primary question | Required states |
 | --- | --- | --- | --- |
 | Overview | `/` | Are books currently reconciled? | populated, empty, unavailable |
-| Exception queue | `/exceptions` | What needs attention? | populated, filtered empty, unavailable |
+| Exception queue | `/exceptions` | Compatibility-only legacy queue; uploaded results are reviewed from an investigation workspace. | populated, filtered empty, unavailable |
 | Exception detail | `/exceptions/:id` | What happened and what is safe next? | populated, missing ID, investigation unavailable |
 | Patterns | `/patterns` | What is recurring? | loading, populated, no patterns, unavailable |
 | Runs | `/runs` | What was processed and when? | populated, in progress, failure |

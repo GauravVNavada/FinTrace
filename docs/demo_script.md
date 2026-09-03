@@ -4,7 +4,7 @@
 
 ## Demo modes
 
-The walkthrough demonstrates a fresh synthetic financial investigation. The web flow supports source generation or upload, bounded analysis, mapping edits, explicit confirmation, relationship decisions, immutable dataset normalization, deterministic reconciliation, uploaded-result evidence investigation, advisory patterns, evaluation, and audit. The legacy `/exceptions` queue is a separate seeded compatibility workflow; uploaded investigation results remain in their owning workspace.
+The walkthrough demonstrates a fresh synthetic financial investigation. Use `Launch Flagship Demo` to create or resume the prepared workspace and open its live overview, or use a fresh investigation for manual source generation/upload. The web flow supports source generation or upload, bounded analysis, mapping edits, explicit confirmation, relationship decisions, immutable dataset normalization, deterministic reconciliation, uploaded-result evidence investigation, advisory patterns, evaluation, and audit. The legacy `/exceptions` queue is a separate seeded compatibility workflow; uploaded investigation results remain in their owning workspace. `Judge Demo · Controller` is a clearly labelled local review identity that uses the normal API RBAC checks to expose judging surfaces.
 
 ## Reproduce the dataset and benchmark
 
@@ -35,14 +35,16 @@ Open `http://localhost:3002`.
 
 ## Five-minute walkthrough
 
-1. Configure `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, `GEMINI_API_KEY`, `AI_FALLBACK_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY` in the API `.env` (never commit credentials). Run `RUN_LIVE_AI_TESTS=1 python scripts/live_ai_smoke.py` from the repository root first; it must report both isolated provider statuses, one source analysis, and one completed investigation before proceeding. Open **Investigations → Create a financial investigation**, enter a name, period, and currency, then create the workspace.
+1. Configure `STORAGE_BACKEND=postgres`, `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, and `GEMINI_API_KEY` in the API `.env` (never commit credentials). Open the product and choose **Judge Demo · Controller**. The signed demo identity uses the normal API RBAC path.
 2. On **Sources**, choose **Generate and attach** with a bounded order count, seed, anomaly rate, and scenario set. The generator creates separate source exports through the same upload boundary; it is disabled after sources are attached.
 3. Before starting AI work, confirm the investigation screen reports **Gemini connected** from the provider-health check. If it reports unavailable or not configured, fix the provider configuration before continuing. Analyze each source, confirm the screen identifies **Gemini · model · Live provider**, review the inferred type and unfamiliar-header mappings, edit/ignore fields when necessary, and confirm mappings explicitly. The UI discloses that bounded sample values may be sent to Gemini.
 4. Open relationship review, inspect overlap, cardinality, duplicate-key, temporal, type, and amount evidence, and accept only reviewed joins.
 5. Normalize and reconcile. Confirm the persisted run shows `records_consumed = records_expected` and a believable mix of reconciled, variance, exception, and ambiguous outcomes.
 6. Open an exception from this investigation, then run AI investigation. Confirm the actual iterative read-only tool trace, verified supporting evidence, contradictory/missing evidence, root cause, recommendation, and latency. An unresolved result is valid and must not be forced into a conclusion.
 7. Open **Evaluations** and run both **RECONCILIATION** and **AI INVESTIGATION**. Confirm the provider/model and measured metrics are distinct. Open **Audit** to verify append-only events and tool-call history.
-8. The seeded **Exceptions** route is compatibility-only and is not the primary demo story.
+8. The seeded `/exceptions` route is compatibility-only and is not the primary demo story.
+
+For the recording, use **Launch Flagship Demo** from the empty Overview state. It creates/resumes the reproducible PostgreSQL-backed `FLAGSHIP_FINANCE_REVIEW` workspace, performs the real source-to-reconciliation workflow, and does not spend live AI quota until an exception is explicitly investigated.
 
 ## Honest limitations
 

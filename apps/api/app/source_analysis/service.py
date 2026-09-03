@@ -47,7 +47,12 @@ class SourceAnalysisService:
         self._repository = repository
 
     def analyze(
-        self, context: ActorContext, investigation_id: str, source_file_id: str, idempotency_key: str
+        self,
+        context: ActorContext,
+        investigation_id: str,
+        source_file_id: str,
+        idempotency_key: str,
+        provider_name: str | None = None,
     ) -> SourceAnalysisResponse:
         if not idempotency_key or len(idempotency_key) > 128:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
@@ -90,7 +95,7 @@ class SourceAnalysisService:
                 truncate=True,
             )
             provider = get_source_analysis_provider(
-                settings.ai_provider,
+                provider_name or settings.ai_provider,
                 settings.configured_ai_api_keys,
                 settings.resolved_ai_base_url,
                 settings.resolved_ai_model,

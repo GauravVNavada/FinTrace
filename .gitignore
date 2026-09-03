@@ -6,6 +6,7 @@ dist
 .env*
 !.env.example
 .venv
+apps/api/.preview-venv/
 __pycache__
 .pytest_cache
 .mypy_cache
@@ -13,3 +14,5 @@ __pycache__
 *.tsbuildinfo
 apps/api/data/generated/
 apps/api/data/uploads/
+.codex-remote-attachments/
+test-results/

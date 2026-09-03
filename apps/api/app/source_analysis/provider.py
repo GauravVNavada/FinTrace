@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 from collections.abc import Sequence
 from pathlib import Path
@@ -8,6 +9,8 @@ from urllib.error import HTTPError, URLError
 
 from app.financial_investigations.schemas import SourceType
 from app.source_analysis.analyzer import AnalysisDocument
+
+_logger = logging.getLogger(__name__)
 
 
 class SourceAnalysisProviderUnavailable(RuntimeError):
@@ -101,6 +104,10 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "orderdate": "created_at",
     },
     SourceType.PAYMENTS: {
+        "gatewaytxn": "payment_id",
+        "receiptnumber": "order_id",
+        "paidvalue": "amount",
+        "gatewayreference": "gateway_reference",
         "paymentid": "payment_id",
         "transactionid": "payment_id",
         "orderid": "order_id",
@@ -115,9 +122,16 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "currency": "currency",
         "status": "status",
         "capturedat": "captured_at",
+        "createdwhen": "captured_at",
         "transactiondate": "captured_at",
     },
     SourceType.SETTLEMENTS: {
+        "settlementref": "settlement_id",
+        "gatewayreference": "payment_id",
+        "grosspaid": "gross_amount",
+        "processingfee": "fee_amount",
+        "netsettled": "net_amount",
+        "bookedat": "settled_at",
         "settlementid": "settlement_id",
         "payoutid": "settlement_id",
         "paymentid": "payment_id",
@@ -143,16 +157,20 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "amount": "amount",
         "amountminor": "amount",
         "refundamount": "amount",
+        "refundedamount": "amount",
+        "gatewayreference": "payment_id",
         "currency": "currency",
         "status": "status",
         "processedat": "processed_at",
         "refunddate": "processed_at",
+        "createdwhen": "processed_at",
     },
     SourceType.INVOICES: {
         "invoiceid": "invoice_id",
         "invoicenumber": "invoice_id",
         "orderid": "order_id",
         "orderreference": "order_id",
+        "receiptnumber": "order_id",
         "amount": "amount",
         "amountminor": "amount",
         "invoicetotal": "amount",
@@ -161,11 +179,13 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "status": "status",
         "createdat": "created_at",
         "invoicedate": "created_at",
+        "createdwhen": "created_at",
     },
     SourceType.INVENTORY_MOVEMENTS: {
         "movementid": "movement_id",
         "inventorymovementid": "movement_id",
         "orderid": "order_id",
+        "receiptnumber": "order_id",
         "sku": "sku",
         "quantity": "quantity",
         "movementtype": "movement_type",
@@ -329,8 +349,9 @@ class OpenAICompatibleSourceAnalysisProvider:
             payload,
         )
         try:
+            source_type = _normalize_source_type(result["source_type"])
             return ClassificationResult(
-                SourceType(result["source_type"]),
+                source_type,
                 float(result["confidence"]),
                 str(result["reasoning_summary"])[:500],
                 "AI_PROVIDER",
@@ -372,7 +393,7 @@ class OpenAICompatibleSourceAnalysisProvider:
                     str(item["source_column"]),
                     item.get("canonical_field"),
                     float(item["confidence"]),
-                    bool(item["ignored"]),
+                    bool(item.get("ignored", item.get("canonical_field") is None)),
                 )
                 for item in candidates
             ]
@@ -421,7 +442,7 @@ class OpenAICompatibleSourceAnalysisProvider:
                 with request.urlopen(request_object, timeout=self._timeout_seconds) as response:
                     raw = json.loads(response.read())
                 content = raw["choices"][0]["message"]["content"]
-                return json.loads(re.sub(r"^```(?:json)?|```$", "", str(content).strip()).strip())
+                return _parse_json_content(content)
             except HTTPError as error:
                 last_error = error
                 last_category, last_retryable = _http_failure(error.code)
@@ -433,6 +454,13 @@ class OpenAICompatibleSourceAnalysisProvider:
             except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
                 last_error = error
                 last_category, last_retryable = "invalid_response", False
+                _logger.warning(
+                    "source_analysis_invalid_response provider=%s model=%s error_type=%s detail=%s",
+                    self.provider,
+                    self.model,
+                    type(error).__name__,
+                    str(error)[:160],
+                )
                 break
         raise SourceAnalysisProviderUnavailable(
             "AI source-analysis provider is unavailable",
@@ -518,6 +546,51 @@ def get_source_analysis_provider(
 
 def _normalize(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def _normalize_source_type(value: Any) -> SourceType:
+    """Accept harmless singular/spacing variants without accepting new contracts."""
+    normalized = re.sub(r"[^A-Z0-9]+", "_", str(value).upper()).strip("_")
+    aliases = {
+        "SALE": SourceType.SALES,
+        "ORDER": SourceType.ORDERS,
+        "PAYMENT": SourceType.PAYMENTS,
+        "SETTLEMENT": SourceType.SETTLEMENTS,
+        "REFUND": SourceType.REFUNDS,
+        "INVOICE": SourceType.INVOICES,
+        "INVENTORY": SourceType.INVENTORY_MOVEMENTS,
+        "INVENTORY_MOVEMENT": SourceType.INVENTORY_MOVEMENTS,
+        "EMPLOYEE": SourceType.EMPLOYEE_ACTIONS,
+        "EMPLOYEE_ACTION": SourceType.EMPLOYEE_ACTIONS,
+    }
+    return aliases.get(normalized, SourceType(normalized))
+
+
+def _parse_json_content(content: Any) -> dict[str, Any]:
+    """Parse string or OpenAI-compatible content parts into one JSON object."""
+    if isinstance(content, list):
+        content = "".join(
+            str(part.get("text", "")) if isinstance(part, dict) else str(part)
+            for part in content
+        )
+    text = str(content).strip()
+    text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"\s*```$", "", text).strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start, end = text.find("{"), text.rfind("}")
+        if start < 0 or end <= start:
+            raise
+        parsed = json.loads(text[start : end + 1])
+    if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
+        if len(parsed) == 1 and "source_type" in parsed[0]:
+            parsed = parsed[0]
+        elif all("source_column" in item for item in parsed):
+            parsed = {"mappings": parsed}
+    if not isinstance(parsed, dict):
+        raise TypeError("provider response must be a JSON object")
+    return parsed
 
 
 def _provider_base_url(provider_name: str, base_url: str) -> str:

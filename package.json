@@ -5,6 +5,8 @@
     "dev": "turbo dev",
     "build": "turbo build",
     "check:ui-architecture": "node scripts/check-ui-architecture.mjs",
+    "test:web-regression": "node --experimental-strip-types --test apps/web/lib/exception-detail-loader.test.ts",
+    "test:e2e": "pnpm build && playwright test",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "prepare": "husky",
@@ -13,6 +15,7 @@
   "devDependencies": {
     "@commitlint/cli": "^19.6.1",
     "@commitlint/config-conventional": "^19.6.0",
+    "@playwright/test": "^1.62.1",
     "husky": "^9.1.7",
     "turbo": "^2.5.6"
   },

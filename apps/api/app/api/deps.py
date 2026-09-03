@@ -65,6 +65,33 @@ def _verified_claims(authorization: str | None) -> dict[str, Any] | None:
     return claims
 
 
+def create_signed_token(*, organization_id: str, actor_id: str, role: str, expires_in: int = 3600) -> str:
+    """Create a short-lived development token for the local judge entry screen."""
+    settings = get_settings()
+    now = int(time.time())
+
+    def encode(value: dict[str, Any]) -> str:
+        return base64.urlsafe_b64encode(
+            json.dumps(value, separators=(",", ":")).encode()
+        ).decode().rstrip("=")
+
+    header = {"alg": "HS256", "typ": "JWT"}
+    claims: dict[str, Any] = {
+        "sub": actor_id,
+        "organization_id": organization_id,
+        "role": role,
+        "iss": settings.auth_issuer,
+        "aud": settings.auth_audience,
+        "iat": now,
+        "exp": now + expires_in,
+    }
+    signing_input = f"{encode(header)}.{encode(claims)}"
+    signature = hmac.new(
+        settings.auth_secret.encode(), signing_input.encode(), hashlib.sha256
+    ).digest()
+    return f"{signing_input}.{base64.urlsafe_b64encode(signature).decode().rstrip('=')}"
+
+
 def get_organization_id(
     x_organization_id: Annotated[str | None, Header()] = None,
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,

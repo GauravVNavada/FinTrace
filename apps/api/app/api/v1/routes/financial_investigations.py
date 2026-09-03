@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, cast
 from uuid import uuid4
@@ -56,7 +56,11 @@ from app.reconciliation.service import (
     ReconciliationNotFound,
     ReconciliationService,
 )
-from app.relationship_discovery.schemas import RelationshipDecision, RelationshipResponse
+from app.relationship_discovery.schemas import (
+    RelationshipDecision,
+    RelationshipResponse,
+    RelationshipStatus,
+)
 from app.relationship_discovery.service import (
     RelationshipConflict,
     RelationshipDiscoveryService,
@@ -125,6 +129,124 @@ def list_investigations(
 ) -> list[FinancialInvestigationResponse]:
     _require(context, Capability.FINANCIAL_INVESTIGATION_READ)
     return service.list_all(context.organization_id, limit)
+
+
+@router.post("/flagship-demo", response_model=FinancialInvestigationResponse)
+def launch_flagship_demo(
+    context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
+) -> FinancialInvestigationResponse:
+    """Create or resume the prepared synthetic workflow used by the local demo."""
+    _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(
+            status_code=422,
+            detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
+        )
+    try:
+        return _prepare_flagship_demo(context, idempotency_key)
+    except (
+        FinancialInvestigationConflict,
+        MappingConflict,
+        MappingConfirmationRequired,
+        RelationshipConflict,
+        NormalizationConflict,
+        ReconciliationConflict,
+    ) as error:
+        raise HTTPException(
+            status_code=409,
+            detail={"code": "FLAGSHIP_DEMO_NOT_READY", "message": str(error)},
+        ) from error
+
+
+def _prepare_flagship_demo(
+    context: ActorContext, idempotency_key: str
+) -> FinancialInvestigationResponse:
+    name = "FinTrace Flagship Demo"
+    existing = next(
+        (item for item in service.list_all(context.organization_id, 100) if item.name == name),
+        None,
+    )
+    if existing is None:
+        existing = service.create(
+            context,
+            FinancialInvestigationCreate(
+                name=name,
+                description="Prepared synthetic lifecycle with deterministic reconciliation and bounded AI evidence review.",
+                period_start=date(2026, 8, 1),
+                period_end=date(2026, 8, 31),
+                base_currency="INR",
+            ),
+            idempotency_key,
+        )
+    if existing.status == "RECONCILED":
+        return existing
+
+    sources = service.list_sources(context.organization_id, existing.id)
+    if not sources:
+        demo_data_service.generate(
+            context,
+            existing.id,
+            DemoDataRequest(
+                orders=50,
+                seed=42,
+                anomaly_rate=0.08,
+                preset="FLAGSHIP_FINANCE_REVIEW",
+                scenario_types=[],
+            ),
+            f"{idempotency_key}:data",
+        )
+        sources = service.list_sources(context.organization_id, existing.id)
+
+    for source in sources:
+        analysis = None
+        try:
+            analysis = analysis_service.get_analysis(
+                context.organization_id, existing.id, source.id
+            )
+        except SourceAnalysisNotFound:
+            pass
+        if analysis is None or source.status != "READY":
+            analysis_service.analyze(
+                context,
+                existing.id,
+                source.id,
+                f"{idempotency_key}:analyze:{source.id}",
+                provider_name="offline",
+            )
+        if source.status != "READY":
+            analysis_service.confirm_mappings(
+                context, existing.id, source.id, f"{idempotency_key}:confirm:{source.id}"
+            )
+
+    relationships = relationship_service.list(context.organization_id, existing.id)
+    if not relationships:
+        relationships = relationship_service.discover(
+            context, existing.id, f"{idempotency_key}:relationships"
+        )
+    for relationship in relationships:
+        if relationship.status == "PROPOSED":
+            relationship_service.decide(
+                context,
+                existing.id,
+                relationship.id,
+                RelationshipDecision(status=RelationshipStatus.ACCEPTED),
+                f"{idempotency_key}:relationship:{relationship.id}",
+            )
+
+    try:
+        normalization_service.latest(context.organization_id, existing.id)
+    except DatasetVersionNotFound:
+        normalization_service.normalize(
+            context, existing.id, f"{idempotency_key}:normalize"
+        )
+    try:
+        reconciliation_service.latest(context.organization_id, existing.id)
+    except ReconciliationNotFound:
+        reconciliation_service.run(
+            context, existing.id, None, f"{idempotency_key}:reconcile"
+        )
+    return service.get(context.organization_id, existing.id)
 
 
 @router.get("/{investigation_id}", response_model=FinancialInvestigationResponse)

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.routes import (
     analytics,
+    auth,
     controls,
     dashboard,
     exceptions,
@@ -11,6 +12,7 @@ from app.api.v1.routes import (
 )
 
 router = APIRouter()
+router.include_router(auth.router, prefix="/auth", tags=["auth"])
 router.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 router.include_router(exceptions.router, prefix="/exceptions", tags=["exceptions"])
 router.include_router(lifecycles.router, prefix="/lifecycles", tags=["lifecycles"])

@@ -18,7 +18,7 @@ from app.financial_investigations.service import (
     FinancialInvestigationService,
 )
 from app.repositories.contracts import WorkflowRepository
-from app.simulator.generator import SCENARIOS
+from app.simulator.generator import FLAGSHIP_FINANCE_REVIEW, SCENARIOS
 
 
 class DemoDataService:
@@ -36,7 +36,13 @@ class DemoDataService:
         self._investigations.get(context.organization_id, investigation_id)
         if not idempotency_key or len(idempotency_key) > 128:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
-        scenarios = tuple(payload.scenario_types) if payload.scenario_types else SCENARIOS[1:]
+        scenarios = (
+            tuple(payload.scenario_types)
+            if payload.scenario_types or payload.preset == FLAGSHIP_FINANCE_REVIEW
+            else SCENARIOS[1:]
+        )
+        if payload.preset not in (None, FLAGSHIP_FINANCE_REVIEW):
+            raise ValueError(f"Unsupported demo preset: {payload.preset}")
         invalid = sorted(set(scenarios) - set(SCENARIOS[1:]))
         if invalid:
             raise ValueError("Unsupported demo scenario type(s): " + ", ".join(invalid))

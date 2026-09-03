@@ -13,6 +13,7 @@ The upload workflow introduces a separate `FinancialInvestigation` resource. It 
 ```text
 POST /api/v1/financial-investigations
 GET  /api/v1/financial-investigations
+POST /api/v1/financial-investigations/flagship-demo
 GET  /api/v1/financial-investigations/{id}
 POST /api/v1/financial-investigations/{id}/sources
 GET  /api/v1/financial-investigations/{id}/sources
@@ -25,6 +26,8 @@ The upload endpoints validate organization scope, multipart metadata, extension/
 ### Fresh synthetic source generation
 
 `POST /financial-investigations/{id}/demo-data` requires `Idempotency-Key` and accepts bounded `orders`, `seed`, `anomaly_rate`, and optional allowlisted `scenario_types`. It is available only for a workspace with no attached sources, creates separate orders/payments/settlements/invoices/refunds/inventory/employee-action CSV exports, and stores them through the same upload and audit pipeline as user-provided files. Generation never exposes hidden labels, never bypasses analysis/mapping/relationship confirmation, and cannot overwrite an existing source set. Reusing the same idempotency key and request replays the generated source response; a different request conflicts.
+
+`POST /financial-investigations/flagship-demo` creates or resumes the local prepared investigation, runs the existing synthetic upload, source analysis, mapping confirmation, relationship review, immutable normalization, and deterministic reconciliation stages, then returns the persisted investigation. It is a local demo convenience endpoint; it does not hardcode metrics or AI conclusions and requires the same write capability and idempotency header as the underlying stages.
 
 ### Sprint 1 implemented source contract
 
@@ -82,6 +85,12 @@ Successful responses return a resource or collection. Errors use a stable envelo
 ```
 
 ## Versioned endpoints
+
+### `POST /api/v1/auth/demo-login`
+
+**Auth:** none in `AUTH_MODE=development`; disabled in required-auth deployments.
+**Request:** `{ "role": "ANALYST" | "FINANCE_MANAGER" | "CONTROLLER" }`
+**Behavior:** returns a short-lived signed development identity containing the demo organization, actor, and role. The browser stores the token and sends it through the normal bearer-auth path; this endpoint does not change identity from a URL or route.
 
 ### `GET /ready`
 
@@ -259,7 +268,7 @@ The development actor context supports `ANALYST`, `FINANCE_MANAGER`, `CONTROLLER
 
 ## Storage selection and migrations
 
-The API uses the deterministic in-process repository by default. Set `STORAGE_BACKEND=postgres` and a `DATABASE_URL` using the PostgreSQL repository path. Apply migrations explicitly with `fintrace-migrate`; application startup never mutates schema. Seed canonical demo records with `fintrace-seed` after migrations are applied. PostgreSQL mode covers canonical reads, exception reads, aggregate reads, lifecycle reads, investigation/evaluation/control persistence, idempotency replay, and audit writes. Set `AUTH_MODE=required` for deployment so tenant and actor scope must come from a verified bearer token.
+The buildathon/demo runtime uses PostgreSQL: set `STORAGE_BACKEND=postgres` and a `DATABASE_URL` using the PostgreSQL repository path. Apply migrations explicitly with `fintrace-migrate`; application startup never mutates schema. Seed canonical demo records with `fintrace-seed` after migrations are applied. PostgreSQL mode covers canonical reads, exception reads, aggregate reads, lifecycle reads, investigation/evaluation/control persistence, idempotency replay, and audit writes. The deterministic in-process repository remains available for tests and offline fixtures. Set `AUTH_MODE=required` for deployment so tenant and actor scope must come from a verified bearer token.
 
 Breaking changes require `/api/v2` or an explicitly negotiated media type. Additive response fields are preferred. Clients must tolerate unknown response fields and must not infer authorization from omitted UI fields.
 # P0 additions

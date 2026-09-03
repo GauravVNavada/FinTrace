@@ -96,6 +96,7 @@ Store representative exception fixtures and expected controlled codes. Assert th
 pnpm typecheck
 pnpm build
 pnpm lint
+pnpm test:e2e
 cd apps/api && python -m pytest
 cd apps/api && ruff check .
 ```
@@ -116,7 +117,7 @@ $env:DATABASE_URL = "postgresql://fintrace:fintrace@127.0.0.1:55432/fintrace"
 
 The Python runtime is installed locally. API/simulator tests run with `apps/api/.venv`; Docker PostgreSQL migrations 001–010 and seed-42 data are the local persistence verification path.
 
-The current local API contract test run is `83 passed, 3 skipped` (2026-09-03). It includes required idempotency headers for every source mutation, request-hash replay/conflict behavior, independent-approver enforcement, organization-scoped reads, and the Track 4 workflow. The PostgreSQL path must apply migration 014 before release verification; the demo adapter is process-local and is not restart durability.
+The current local API contract test run is `85 passed, 3 skipped` (2026-09-03). It includes demo-login role enforcement, required idempotency headers for every source mutation, request-hash replay/conflict behavior, independent-approver enforcement, organization-scoped reads, and the Track 4 workflow. The PostgreSQL path must apply migration 014 before release verification; the demo adapter is process-local and is not restart durability.
 
 ## Verified local release evidence
 
@@ -124,8 +125,8 @@ On 2026-08-31 the repository was verified with:
 
 - API: Ruff clean, mypy clean across 82 source files, `53 passed, 3 skipped`.
 - PostgreSQL: migrations applied with `Applied 0 migration(s): none`; the three-test vertical slice passed with `STORAGE_BACKEND=postgres` and `FINTRACE_TEST_DATABASE_URL` set.
-- Web: lint clean, typecheck clean, UI architecture checks passed, and production build generated all 13 routes.
-- Browser: live API-connected walkthrough covered investigation creation/list/detail, fresh generator, source analysis, mapping confirmation, relationships, reconciliation, uploaded-result investigation, dashboard, patterns, runs/evaluation, audit, settings, and the seeded compatibility exception detail.
+- Web: lint clean, typecheck clean, UI architecture checks passed, and production build generated all 15 routes.
+- Browser: the mocked-AI golden path passes Controller login, flagship launch, investigation overview, reconciliation, exception investigation, human review, and audit; the clean production server also passes primary-route smoke checks.
 
 The browser walkthrough used the in-process demo backend; PostgreSQL persistence was separately exercised by the integration suite. The default AI provider was the explicitly labelled deterministic local provider, so no live external AI call is claimed.
 
@@ -137,4 +138,4 @@ Sprint 4 adds capability authorization, signed bearer-claim verification, action
 
 Sprint 5 adds graph derivation and tenant isolation tests, deterministic pattern grouping and detail lookup, analytics capability checks, evaluation idempotency, hidden-ground-truth response assertions, and web route smoke checks. The browser smoke check verifies Patterns, Evaluations, and Audit loading/empty/populated states against a running Next.js server. The release script is exercised with a fixed seed and bounded 50-order run so its output is reproducible without PostgreSQL or an external AI provider. CI also provisions PostgreSQL, applies migrations, seeds a bounded dataset, and runs `tests/test_postgres_integration.py`.
 
-CI now runs frontend quality gates, API tests/static checks, dependency audits, and the PostgreSQL integration suite including the upload-to-reconciliation-to-investigation vertical slice. Secret scanning remains a release-hardening follow-up.
+CI now runs frontend quality gates, API tests/static checks, dependency audits, the mocked-AI browser golden path, and the PostgreSQL integration suite including the upload-to-reconciliation-to-investigation vertical slice. The local release scan found no credential-shaped matches outside ignored runtime secrets.

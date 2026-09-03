@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Activity, AlertCircle, Clock3, Download, ExternalLink, Filter, Play, RefreshCw } from "lucide-react";
 import { Alert, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Input, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@fintrace/ui";
 import { appConfig } from "../lib/data";
-import { ApiClientError, fetchExceptions, fetchFinancialInvestigationPatterns, fetchFinancialInvestigations, fetchLatestEvaluation, fetchLatestReconciliation, runEvaluation } from "../lib/api-client";
+import { ApiClientError, fetchExceptions, fetchFinancialInvestigationPatterns, fetchFinancialInvestigations, fetchLatestEvaluation, fetchLatestReconciliation, launchFlagshipDemo, runEvaluation } from "../lib/api-client";
 import { downloadCsv } from "../lib/export";
 import type { ApiEvaluation, ApiExceptionSummary, ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiReconciliationRun, ExceptionItem } from "../lib/types";
 import { SeverityBadge, StatusBadge } from "./status-badge";
@@ -79,6 +79,8 @@ export function Overview() {
   const [patterns, setPatterns] = React.useState<ApiFinancialInvestigationPattern[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [unavailable, setUnavailable] = React.useState(false);
+  const [launching, setLaunching] = React.useState(false);
+  const [launchError, setLaunchError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     let active = true;
@@ -115,9 +117,20 @@ export function Overview() {
     ]);
   }
 
+  async function launchDemo() {
+    setLaunching(true); setLaunchError(null);
+    try {
+      const prepared = await launchFlagshipDemo(createActionKey("flagship-demo"));
+      window.location.href = `/?investigation=${encodeURIComponent(prepared.id)}`;
+    } catch (error) {
+      setLaunchError(error instanceof ApiClientError ? error.message : "The flagship demo could not be prepared.");
+      setLaunching(false);
+    }
+  }
+
   if (loading) return <div role="status" className="flex items-center gap-2 text-xs text-muted-foreground"><RefreshCw className="h-4 w-4 animate-spin" />Loading live investigation metrics…</div>;
   if (unavailable) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="The dashboard reads persisted investigation data from the API." /><Alert variant="destructive">The API is unavailable. No stale dashboard snapshot has been substituted.</Alert></>;
-  if (!selected) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="Select the investigation you want to inspect. Metrics and patterns never silently switch workspaces."><Button asChild size="sm"><Link href="/investigations/new">Create investigation</Link></Button></PageHeading>{investigations.length > 1 && <Card className="mb-4"><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold text-foreground">Choose an investigation</div><p className="mt-1 text-xs text-muted-foreground">There are multiple workspaces in this organization.</p></div><Select aria-label="Select investigation" defaultValue="" onChange={event => { if (event.target.value) window.location.href = `/?investigation=${encodeURIComponent(event.target.value)}`; }} className="sm:w-80"><option value="">Select an investigation</option>{investigations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></CardContent></Card>}{investigations.length <= 1 && <Card><CardContent className="py-16 text-center"><div className="text-sm font-semibold text-foreground">No financial investigation selected</div><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-muted-foreground">Upload source exports, confirm mappings, review deterministic relationships, and run reconciliation before metrics appear here.</p><Button asChild className="mt-5" size="sm"><Link href="/investigations">Open investigations</Link></Button></CardContent></Card>}</>;
+  if (!selected) return <><PageHeading eyebrow="Control center" title="Financial integrity workspace" description="Select the investigation you want to inspect. Metrics and patterns never silently switch workspaces."><Button variant="outline" size="sm" onClick={() => void launchDemo()} disabled={launching}>{launching ? "Preparing flagship demo…" : "Launch Flagship Demo"}</Button><Button asChild size="sm"><Link href="/investigations/new">Create investigation</Link></Button></PageHeading>{launchError && <Alert variant="destructive" className="mb-4">{launchError}</Alert>}{investigations.length > 1 && <Card className="mb-4"><CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-semibold text-foreground">Choose an investigation</div><p className="mt-1 text-xs text-muted-foreground">There are multiple workspaces in this organization.</p></div><Select aria-label="Select investigation" defaultValue="" onChange={event => { if (event.target.value) window.location.href = `/?investigation=${encodeURIComponent(event.target.value)}`; }} className="sm:w-80"><option value="">Select an investigation</option>{investigations.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</Select></CardContent></Card>}{investigations.length <= 1 && <Card><CardContent className="py-16 text-center"><div className="text-sm font-semibold text-foreground">No financial investigation selected</div><p className="mx-auto mt-2 max-w-md text-xs leading-5 text-muted-foreground">Launch the flagship demo for a prepared synthetic lifecycle, or upload source exports yourself.</p><div className="mt-5 flex justify-center gap-2"><Button onClick={() => void launchDemo()} disabled={launching}>{launching ? "Preparing…" : "Launch Flagship Demo"}</Button><Button asChild variant="outline"><Link href="/investigations">Open investigations</Link></Button></div></CardContent></Card>}</>;
   const autoRate = run && run.lifecycle_count > 0 ? Math.round((run.reconciled_count / run.lifecycle_count) * 1000) / 10 : null;
   const metrics = [
     ["Lifecycle records", run ? run.lifecycle_count.toLocaleString() : "—", run ? "Latest run" : "Normalize and reconcile to calculate"],
@@ -126,6 +139,23 @@ export function Overview() {
     ["Patterns", patterns.length.toLocaleString(), "Investigation-scoped advisory signals"],
   ];
   return <><PageHeading eyebrow="Control center" title={selected.name} description="Live metrics from the latest persisted reconciliation run for this investigation."><Button variant="outline" size="sm" onClick={exportReport} disabled={!run}><Download className="h-3.5 w-3.5" />Export report</Button><Button asChild size="sm"><Link href={`/investigations/${selected.id}`}>Open investigation</Link></Button></PageHeading><div className="mb-6 flex flex-wrap items-center gap-2 text-xs text-muted-foreground"><span className="font-mono">{selected.id}</span><span>·</span><span>{selected.base_currency}</span><span>·</span><span>{selected.source_file_count} source files</span><span>·</span><span>{run ? `Run completed ${new Date(run.completed_at ?? run.started_at).toLocaleString()}` : "No run completed"}</span></div><div className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, detail]) => <Card key={label}><CardContent className="p-5"><div className="text-xs font-medium text-muted-foreground">{label}</div><div className="mt-3 text-[25px] font-bold tracking-tight text-foreground">{value}</div><div className="mt-1 text-[11px] text-muted-foreground">{detail}</div></CardContent></Card>)}</div><div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle>Latest reconciliation</CardTitle></CardHeader><CardContent>{run ? <div className="space-y-3 text-xs"><div className="flex items-center justify-between border-b border-border pb-3"><span className="text-muted-foreground">Run status</span><span className="font-semibold text-foreground">{run.status}</span></div><div className="flex items-center justify-between border-b border-border pb-3"><span className="text-muted-foreground">Exceptions</span><span className="font-semibold text-foreground">{run.exception_count + run.ambiguous_count}</span></div><div className="flex items-center justify-between"><span className="text-muted-foreground">Dataset</span><span className="font-mono text-[10px] text-foreground">{run.dataset_version_id}</span></div><Button asChild variant="outline" size="sm" className="mt-3"><Link href={`/investigations/${selected.id}`}>Inspect results</Link></Button></div> : <div><p className="text-xs leading-5 text-muted-foreground">This investigation has no persisted reconciliation run yet. The workflow will block until mappings and relationships are confirmed.</p><Button asChild className="mt-4" size="sm"><Link href={`/investigations/${selected.id}/sources`}>Continue source workflow</Link></Button></div>}</CardContent></Card><Card><CardHeader><CardTitle>Recurring patterns</CardTitle></CardHeader><CardContent>{patterns.length === 0 ? <p className="text-xs leading-5 text-muted-foreground">No investigation-scoped patterns meet the minimum occurrence threshold.</p> : <div className="space-y-3">{patterns.slice(0, 4).map(pattern => <div key={pattern.pattern_id} className="rounded-md border border-border p-3 text-xs"><div className="flex items-center justify-between gap-2"><span className="font-semibold text-foreground">{pattern.exception_type}</span><span className="text-muted-foreground">{pattern.occurrence_count} occurrences</span></div><p className="mt-1 leading-5 text-muted-foreground">{pattern.observation}</p><div className="mt-2 font-semibold text-foreground">{formatMinor(pattern.associated_exposure_minor, selected.base_currency)} exposure</div></div>)}<Button asChild variant="link" size="sm" className="px-0"><Link href="/patterns">View all patterns</Link></Button></div>}</CardContent></Card></div></>;
+}
+
+export function JudgeDemoPage() {
+  return <>
+    <PageHeading eyebrow="Buildathon review mode" title="Judge Demo · Controller" description="A local Controller identity for reviewing the complete FinTrace submission surface. API capabilities are still enforced server-side." />
+    <Alert variant="info" className="mb-5">This mode changes only the local demo identity sent to the API: judge-controller / CONTROLLER. It does not bypass authorization.</Alert>
+    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      {[
+        ["Launch Flagship Demo", "Open the prepared synthetic investigation overview.", "/"],
+        ["Investigation evidence", "Review lifecycle results and bounded AI traces.", "/investigations"],
+        ["Audit trail", "Inspect the chronological control record.", "/audit"],
+        ["Evaluations", "Review deterministic and AI evaluation reports.", "/evaluations"],
+        ["Approvals", "Open an investigation result to review approval controls.", "/investigations"],
+        ["Patterns", "Inspect recurring advisory control signals.", "/patterns"],
+      ].map(([title, description, href]) => <Card key={title}><CardContent className="flex h-full flex-col p-5"><div className="text-sm font-semibold text-foreground">{title}</div><p className="mt-2 flex-1 text-xs leading-5 text-muted-foreground">{description}</p><Button asChild variant="outline" size="sm" className="mt-4 w-fit"><Link href={href}>{title === "Launch Flagship Demo" ? "Open overview" : "Open surface"}</Link></Button></CardContent></Card>)}
+    </div>
+  </>;
 }
 
 export function ExceptionsPage() {
