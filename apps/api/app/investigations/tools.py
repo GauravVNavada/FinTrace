@@ -80,6 +80,17 @@ class EvidenceToolRegistry:
                 for item in values
                 for fact in _record_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
             ]
+            if not values:
+                evidence.append(
+                    EvidenceItem(
+                        source=EvidenceSource.SETTLEMENT,
+                        record_id=None,
+                        fact="No settlement record exists for the scoped payment.",
+                        field="settlement_id",
+                        operator=EvidenceOperator.MISSING,
+                        expected_value=None,
+                    )
+                )
             target = payment_id
         elif name == "get_settlements_for_order":
             values = lifecycle.settlements
@@ -87,6 +98,17 @@ class EvidenceToolRegistry:
                 for item in values
                 for fact in _record_evidence(EvidenceSource.SETTLEMENT, item, str(item["settlement_id"]))
             ]
+            if not values:
+                evidence.append(
+                    EvidenceItem(
+                        source=EvidenceSource.SETTLEMENT,
+                        record_id=None,
+                        fact="No settlement record exists for the scoped order.",
+                        field="settlement_id",
+                        operator=EvidenceOperator.MISSING,
+                        expected_value=None,
+                    )
+                )
             target = order_id
         elif name == "get_refunds_for_payment":
             payment_id = self._single_payment_id(lifecycle)
@@ -182,7 +204,7 @@ class EvidenceToolRegistry:
 
 def _evidence(
     source: EvidenceSource,
-    record_id: str,
+    record_id: str | None,
     field: str | None,
     operator: EvidenceOperator | str,
     expected_value: str | float | bool | None,

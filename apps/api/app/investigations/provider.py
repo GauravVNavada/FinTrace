@@ -455,8 +455,34 @@ class OpenAICompatibleAIClient:
             "recommended_action_code, requires_human_review. status must be SUPPORTED or UNRESOLVED; "
             "evidence source must be one of order, payment, settlement, invoice, refund, inventory, "
             "employee_action; use null record_id only for an explicit missing finding. Do not include "
-            "chain-of-thought or extra fields."
+            "chain-of-thought or extra fields. Final result contract: every final candidate must include "
+            "all eight fields status, root_cause_code, summary, supporting_evidence, contradictory_evidence, "
+            "missing_evidence, recommended_action_code, and requires_human_review. Use [] rather than "
+            "null for evidence arrays and missing_evidence. For SUPPORTED, use a valid applicable root "
+            "cause, non-empty supporting_evidence, and an allowlisted recommendation. For UNRESOLVED, "
+            "set root_cause_code to null, put a human-readable unresolved reason in summary, provide "
+            "at least one concrete missing_evidence item, and set requires_human_review true."
         )
+        applicable_roots = {
+            "MISSING_SETTLEMENT": ["SETTLEMENT_MISSING"],
+            "REFUND_WITHOUT_INVENTORY_RETURN": [
+                "INCOMPLETE_REFUND_WORKFLOW", "INVENTORY_REVERSAL_MISSING"
+            ],
+            "AMBIGUOUS_ASSOCIATION": ["AMBIGUOUS_ASSOCIATION"],
+        }.get(exception.type.value)
+        if applicable_roots:
+            instruction += (
+                " The exact applicable root_cause_code values for this exception are: "
+                + ", ".join(applicable_roots)
+                + ". Do not invent or alter these enum values."
+            )
+        if exception.type.value == "AMBIGUOUS_ASSOCIATION":
+            instruction += (
+                " This exception MUST return status UNRESOLVED, root_cause_code null, and "
+                "requires_human_review true. The summary must explicitly state that two candidate "
+                "payments satisfy the available evidence and that additional transaction reference or "
+                "settlement evidence is required. Do not return SUPPORTED for an ambiguous association."
+            )
         tool_specs = [
             {
                 "type": "function",
@@ -497,6 +523,8 @@ class OpenAICompatibleAIClient:
             return AgentDecision("tool", raw["tool_name"], arguments)
         if action == "final" and isinstance(raw.get("candidate"), dict):
             return AgentDecision("final", candidate=raw["candidate"])
+        if isinstance(raw.get("status"), str) and "supporting_evidence" in raw:
+            return AgentDecision("final", candidate=raw)
         raise ProviderUnavailable("AI provider returned an invalid agent decision")
 
     def select_tools(self, exception: ExceptionSummary, available_tools: list[str]) -> list[str]:
@@ -543,6 +571,7 @@ class OpenAICompatibleAIClient:
         rotate_keys: bool = True,
         request_stage: str = "unknown",
         tool_loop_iteration: int | None = None,
+        allow_invalid_tool_correction: bool = True,
     ) -> Any:
         body_payload: dict[str, Any] = {
                 "model": self._model,
@@ -574,7 +603,11 @@ class OpenAICompatibleAIClient:
                 request_object = request.Request(
                     f"{self._base_url}/chat/completions",
                     data=body,
-                    headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "User-Agent": "FinTrace/1.0",
+                    },
                     method="POST",
                 )
                 started = time.perf_counter()
@@ -594,6 +627,41 @@ class OpenAICompatibleAIClient:
                     if tools and message.get("tool_calls"):
                         call = message["tool_calls"][0]
                         function = call["function"]
+                        allowed_tool_names = {
+                            str(spec.get("function", {}).get("name"))
+                            for spec in tools
+                        }
+                        if function.get("name") not in allowed_tool_names:
+                            if not allow_invalid_tool_correction:
+                                raise ProviderUnavailable(
+                                    "Provider requested an unavailable tool after correction.",
+                                    info=ProviderFailureInfo(
+                                        "invalid_tool_call", False,
+                                        stage=request_stage, iteration=tool_loop_iteration,
+                                        detail=(
+                                            f"attempted tool {function.get('name')!r}; "
+                                            f"allowed tools: {', '.join(sorted(allowed_tool_names))}"
+                                        ),
+                                    ),
+                                )
+                            correction = (
+                                " The previous response attempted an unavailable tool. That tool was not executed. "
+                                "The valid tools were: " + ", ".join(sorted(allowed_tool_names)) + ". "
+                                "This one corrective turn is final-output-only: return the final candidate as JSON "
+                                "message content with action=final and the candidate fields specified above. "
+                                "Do not emit any tool call, including json."
+                            )
+                            return self._chat(
+                                instruction + correction,
+                                payload,
+                                max_tokens=max_tokens,
+                                tools=None,
+                                require_tool_call=False,
+                                rotate_keys=False,
+                                request_stage=request_stage,
+                                tool_loop_iteration=tool_loop_iteration,
+                                allow_invalid_tool_correction=False,
+                            )
                         return {"_tool_call": function}
                     content = message.get("content")
                     if not isinstance(content, str) or not content.strip():
@@ -625,6 +693,31 @@ class OpenAICompatibleAIClient:
                     break
                 except HTTPError as error:
                     provider_detail = _safe_http_detail(error)
+                    if tools and allow_invalid_tool_correction and error.code == 400 and (
+                        "not in request.tools" in provider_detail
+                        or "Failed to parse tool call arguments as JSON" in provider_detail
+                    ):
+                        correction = (
+                            " The previous response attempted an unavailable tool. The provider rejected it, "
+                            "and it was not executed. The valid tools were: "
+                            + ", ".join(sorted(
+                                str(spec.get("function", {}).get("name")) for spec in tools
+                            ))
+                            + ". This one corrective turn is final-output-only: return the final candidate as "
+                            "JSON message content with action=final and the candidate fields specified above. "
+                            "Do not emit any tool call, including json."
+                        )
+                        return self._chat(
+                            instruction + correction,
+                            payload,
+                            max_tokens=max_tokens,
+                            tools=None,
+                            require_tool_call=False,
+                            rotate_keys=False,
+                            request_stage=request_stage,
+                            tool_loop_iteration=tool_loop_iteration,
+                            allow_invalid_tool_correction=False,
+                        )
                     category, retryable = _http_failure_category(error.code, provider_detail)
                     last_error = ProviderUnavailable(
                         f"Provider HTTP {error.code} ({error.reason})."

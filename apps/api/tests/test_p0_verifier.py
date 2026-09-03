@@ -58,3 +58,33 @@ def test_fact_verifier_rejects_nonexistent_record() -> None:
     )
     assert result.candidate.status == InvestigationStatus.UNRESOLVED
     assert "does not exist" in result.issues[0]
+
+
+def test_fact_verifier_accepts_backend_provenance_for_missing_settlement() -> None:
+    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = lifecycle.__class__(
+        order=lifecycle.order,
+        payments=lifecycle.payments,
+        settlements=(),
+        invoices=lifecycle.invoices,
+        refunds=lifecycle.refunds,
+        inventory_movements=lifecycle.inventory_movements,
+        employee_actions=lifecycle.employee_actions,
+    )
+    result = verify_candidate(
+        _candidate(
+            EvidenceItem(
+                source=EvidenceSource.SETTLEMENT,
+                record_id=None,
+                field="settlement_id",
+                operator="missing",
+                expected_value=None,
+                fact="No settlement record exists for the scoped payment.",
+            )
+        ),
+        ExceptionType.ERP_AMOUNT_MISMATCH,
+        lifecycle,
+    )
+    assert result.rejected_evidence == []
+    assert result.issues == []
+    assert result.candidate.supporting_evidence[0].verified is True

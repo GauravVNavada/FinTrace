@@ -179,3 +179,24 @@ def test_evidence_tools_read_actual_status_and_accept_external_ids() -> None:
 
     assert result.call.evidence[0].expected_value == "FAILED"
     assert result.call.evidence[0].fact == "Payment status is FAILED."
+
+
+def test_empty_settlement_lookup_returns_verifiable_missing_evidence() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-EMPTY-001", "amount_minor": 10000},
+        payments=({"payment_id": "PAY-EMPTY-001", "order_id": "ORD-EMPTY-001"},),
+        settlements=(),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+
+    result = EvidenceToolRegistry(demo_repository).invoke(
+        "get_settlements_for_payment", "org-1", lifecycle
+    )
+
+    assert result.call.evidence[0].source.value == "settlement"
+    assert result.call.evidence[0].record_id is None
+    assert result.call.evidence[0].operator.value == "missing"
+    assert result.call.evidence[0].expected_value is None

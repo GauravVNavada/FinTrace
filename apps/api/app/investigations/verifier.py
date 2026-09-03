@@ -88,10 +88,13 @@ def _verify_evidence(item: Any, lifecycle: CanonicalLifecycle) -> tuple[bool, st
     if item.record_id is None:
         if item.operator != "missing" or not item.field:
             return False, f"Evidence for {item.source.value} is missing a record_id."
-        exists = any(
-            _normal_value(row.get(item.field)) == _normal_value(item.expected_value)
-            for row in rows
-        )
+        if item.expected_value is None:
+            exists = any(row.get(item.field) is not None for row in rows)
+        else:
+            exists = any(
+                _normal_value(row.get(item.field)) == _normal_value(item.expected_value)
+                for row in rows
+            )
         return (
             (not exists, f"Claimed {item.source.value}.{item.field}={item.expected_value!r} is present, but the scoped data contradicts it.")
             if exists
@@ -188,6 +191,8 @@ def _record_ids(lifecycle: CanonicalLifecycle) -> set[str]:
 def _compatibility_issues(
     candidate: InvestigationCandidate, exception_type: ExceptionType, lifecycle: CanonicalLifecycle
 ) -> list[str]:
+    if exception_type == ExceptionType.AMBIGUOUS_ASSOCIATION and candidate.status == InvestigationStatus.SUPPORTED:
+        return ["Ambiguous associations cannot be marked SUPPORTED without a unique relationship."]
     if candidate.root_cause_code is None:
         return (
             ["A root-cause code is required for verification."]

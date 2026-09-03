@@ -217,6 +217,90 @@ def test_provider_retries_next_key_after_rate_limit(monkeypatch: pytest.MonkeyPa
     assert calls == ["Bearer first-key", "Bearer second-key"]
 
 
+def test_provider_corrects_one_unallowlisted_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    class FakeResponse:
+        def __init__(self, body: bytes) -> None:
+            self.body = body
+
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return self.body
+
+    responses = [
+        b'{"choices":[{"message":{"tool_calls":[{"function":{"name":"json","arguments":"{}"}}]}}]}',
+        b'{"choices":[{"message":{"content":"{\\"action\\":\\"final\\",\\"candidate\\":{}}"}}]}',
+    ]
+    calls: list[bytes] = []
+
+    def fake_urlopen(request_object: object, timeout: float) -> FakeResponse:
+        del timeout
+        calls.append(request_object.data)  # type: ignore[attr-defined]
+        return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", fake_urlopen)
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+    tools = [{
+        "type": "function",
+        "function": {"name": "get_order", "parameters": {"type": "object"}},
+    }]
+
+    result = client._chat("Return a decision.", {}, tools=tools)
+
+    assert result == {"action": "final", "candidate": {}}
+    assert len(calls) == 2
+    assert "Do not emit any tool call, including json" in json.loads(calls[1])["messages"][0]["content"]
+
+
+def test_provider_corrects_groq_rejected_unallowlisted_tool_call(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeResponse:
+        def __enter__(self) -> Self:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+        def read(self) -> bytes:
+            return b'{"choices":[{"message":{"content":"{\\"action\\":\\"final\\",\\"candidate\\":{}}"}}]}'
+
+    calls = 0
+
+    def fake_urlopen(request_object: object, timeout: float) -> FakeResponse:
+        nonlocal calls
+        del request_object, timeout
+        calls += 1
+        if calls == 1:
+            raise HTTPError(
+                "https://provider.test",
+                400,
+                "Bad Request",
+                {},
+                BytesIO(
+                    b'{"error":{"message":"Tool call validation failed: attempted to call tool '
+                    b'json which was not in request.tools"}}'
+                ),
+            )
+        return FakeResponse()
+
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", fake_urlopen)
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+    tools = [{
+        "type": "function",
+        "function": {"name": "get_order", "parameters": {"type": "object"}},
+    }]
+
+    result = client._chat("Return a decision.", {}, tools=tools)
+
+    assert result == {"action": "final", "candidate": {}}
+    assert calls == 2
+
+
 def test_provider_health_classifies_malformed_success_response(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         def __enter__(self) -> Self:

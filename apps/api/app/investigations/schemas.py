@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class InvestigationStatus(StrEnum):
@@ -101,6 +101,22 @@ class InvestigationCandidate(BaseModel):
     missing_evidence: list[str] = Field(default_factory=list, max_length=20)
     recommended_action_code: RecommendationCode | None = None
     requires_human_review: bool = True
+
+    @model_validator(mode="after")
+    def validate_result_contract(self) -> "InvestigationCandidate":
+        if self.status == InvestigationStatus.SUPPORTED:
+            if self.root_cause_code is None:
+                raise ValueError("SUPPORTED results require root_cause_code")
+            if not self.supporting_evidence:
+                raise ValueError("SUPPORTED results require supporting_evidence")
+        if self.status == InvestigationStatus.UNRESOLVED:
+            if not self.summary.strip():
+                raise ValueError("UNRESOLVED results require an unresolved reason")
+            if not self.missing_evidence:
+                raise ValueError("UNRESOLVED results require missing_evidence")
+            if not self.requires_human_review:
+                raise ValueError("UNRESOLVED results require human review")
+        return self
 
 
 class ToolCall(BaseModel):

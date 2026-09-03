@@ -10,7 +10,7 @@ from pydantic import ValidationError
 
 from app.domain.lifecycle import LifecycleNotFoundError
 from app.domain.schemas import ExceptionSummary, ExceptionType
-from app.investigations.provider import AIClient, ProviderUnavailable
+from app.investigations.provider import AIClient, ProviderFailureInfo, ProviderUnavailable
 from app.investigations.schemas import (
     EvidenceItem,
     InvestigationCandidate,
@@ -217,7 +217,7 @@ class InvestigationService:
                 if decision.action == "final":
                     try:
                         candidate = InvestigationCandidate.model_validate(
-                            _normalize_provider_candidate(decision.candidate or {})
+                            _normalize_provider_candidate(decision.candidate or {}, evidence)
                         )
                     except ValidationError as error:
                         _logger.warning(
@@ -226,13 +226,23 @@ class InvestigationService:
                             getattr(self._provider, "model", "unknown"),
                             str(error).replace("\n", " ")[:500],
                         )
-                        candidate = InvestigationCandidate(
-                            status=InvestigationStatus.UNRESOLVED,
-                            root_cause_code=None,
-                            summary="Provider output failed strict validation.",
-                            missing_evidence=["A valid structured provider result was not returned."],
-                            recommended_action_code=None,
-                            requires_human_review=True,
+                        return _with_metadata(
+                            self._failed_response(
+                                exception,
+                                tool_calls,
+                                ProviderUnavailable(
+                                    "Provider returned an invalid final investigation result.",
+                                    info=ProviderFailureInfo(
+                                        "invalid_response",
+                                        False,
+                                        stage="investigation_final",
+                                        iteration=len(tool_calls) + 1,
+                                        detail="Final candidate did not match the investigation result contract.",
+                                    ),
+                                ),
+                            ),
+                            started_at,
+                            self._provider,
                         )
                     break
                 if decision.action != "tool" or decision.tool_name not in available_tools:
@@ -248,13 +258,55 @@ class InvestigationService:
                     call.name == decision.tool_name and call.arguments == arguments
                     for call in tool_calls
                 ):
-                    return _with_metadata(
-                        self._unresolved_response(
-                            exception, tool_calls, evidence, "Provider repeated the same evidence request."
-                        ),
-                        started_at,
-                        self._provider,
-                    )
+                    try:
+                        final_decision = next_step(
+                            exception,
+                            findings,
+                            evidence,
+                            trace,
+                            [],
+                        )
+                    except ProviderUnavailable as error:
+                        return _with_metadata(
+                            self._failed_response(exception, tool_calls, error),
+                            started_at,
+                            self._provider,
+                        )
+                    if final_decision.action != "final":
+                        return _with_metadata(
+                            self._unresolved_response(
+                                exception,
+                                tool_calls,
+                                evidence,
+                                "Provider repeated the same evidence request.",
+                            ),
+                            started_at,
+                            self._provider,
+                        )
+                    try:
+                        candidate = InvestigationCandidate.model_validate(
+                            _normalize_provider_candidate(final_decision.candidate or {}, evidence)
+                        )
+                    except ValidationError:
+                        return _with_metadata(
+                            self._failed_response(
+                                exception,
+                                tool_calls,
+                                ProviderUnavailable(
+                                    "Provider returned an invalid final investigation result.",
+                                    info=ProviderFailureInfo(
+                                        "invalid_response",
+                                        False,
+                                        stage="investigation_final",
+                                        iteration=len(tool_calls) + 1,
+                                        detail="Final candidate did not match the investigation result contract.",
+                                    ),
+                                ),
+                            ),
+                            started_at,
+                            self._provider,
+                        )
+                    break
                 try:
                     result = self._tools.invoke(
                         decision.tool_name,
@@ -447,7 +499,7 @@ class InvestigationService:
             summary="AI provider unavailable; deterministic evidence remains available for manual review.",
             supporting_evidence=[],
             contradictory_evidence=[],
-            missing_evidence=[str(error)],
+            missing_evidence=[],
             recommended_action_code=None,
             requires_human_review=True,
             investigation_id=f"INV-{uuid4().hex[:12].upper()}",
@@ -486,7 +538,9 @@ def _with_metadata(
     )
 
 
-def _normalize_provider_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
+def _normalize_provider_candidate(
+    candidate: dict[str, Any], authoritative_evidence: list[EvidenceItem] | None = None
+) -> dict[str, Any]:
     """Normalize documented provider aliases while retaining strict candidate validation."""
     allowed = {
         "status", "root_cause_code", "summary", "supporting_evidence",
@@ -521,8 +575,43 @@ def _normalize_provider_candidate(candidate: dict[str, Any]) -> dict[str, Any]:
         # An unrecognized action is never allowed to cross the API boundary.
         result["recommended_action_code"] = None
     for field in ("supporting_evidence", "contradictory_evidence"):
-        result[field] = [_normalize_provider_evidence(item) for item in result.get(field, []) if isinstance(item, dict)]
+        evidence = result.get(field, [])
+        if not isinstance(evidence, list):
+            evidence = []
+        normalized = [
+            _normalize_provider_evidence(item) for item in evidence if isinstance(item, dict)
+        ]
+        if authoritative_evidence:
+            normalized = [
+                _complete_missing_predicate(item, authoritative_evidence)
+                for item in normalized
+            ]
+        result[field] = normalized
+    missing = result.get("missing_evidence", [])
+    if isinstance(missing, str):
+        result["missing_evidence"] = [missing]
+    elif not isinstance(missing, list):
+        result["missing_evidence"] = []
     return result
+
+
+def _complete_missing_predicate(
+    item: dict[str, Any], authoritative_evidence: list[EvidenceItem]
+) -> dict[str, Any]:
+    """Complete only an absent predicate from the matching bounded tool fact."""
+    if item.get("record_id") is not None or item.get("operator") != "missing" or item.get("field"):
+        return item
+    source = item.get("source")
+    for fact in authoritative_evidence:
+        if fact.source.value == source and fact.record_id is None and fact.operator.value == "missing":
+            return {
+                **item,
+                "fact": fact.fact,
+                "field": fact.field,
+                "operator": fact.operator.value,
+                "expected_value": fact.expected_value,
+            }
+    return item
 
 
 def _normalize_provider_evidence(item: dict[str, Any]) -> dict[str, Any]:
@@ -534,6 +623,14 @@ def _normalize_provider_evidence(item: dict[str, Any]) -> dict[str, Any]:
         "inventory_movements": "inventory",
         "employee_actions": "employee_action",
     }.get(str(result.get("source")), result.get("source"))
+    if not isinstance(result.get("fact"), str) or not result["fact"].strip():
+        source = str(result.get("source", "evidence")).replace("_", " ")
+        record_id = result.get("record_id")
+        result["fact"] = (
+            f"{source.title()} record {record_id} was cited."
+            if record_id
+            else f"No {source} record was cited for the missing finding."
+        )
     if result.get("record_id") is None and result.get("operator") is None:
         # Missing-record claims must be explicit before deterministic verification.
         result["operator"] = "missing"
