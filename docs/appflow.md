@@ -1,5 +1,9 @@
 # FinTrace Application Flow
 
+## Operational state semantics (2026-09-03)
+
+Control screens use four explicit states: loading, persisted result, no result yet, and failure. A `404` on a latest-run/latest-evaluation read means the workflow has not run; `403` means the actor lacks the capability; network/5xx failures are retryable service failures. The UI never labels a permission denial as an outage and never replaces an unavailable live provider with a fabricated score. Source mutations require idempotency keys and are safe to retry.
+
 **Version:** 1.0.0  
 **Last updated:** 2026-08-31
 

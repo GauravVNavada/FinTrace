@@ -117,30 +117,33 @@ class FinancialExceptionInvestigationService:
             detected_at=datetime.now(UTC),
             rules_triggered=[str(item.get("code")) for item in result.get("findings", [])],
         )
-        response = self._investigator.investigate_lifecycle(
-            context.organization_id, exception, lifecycle
-        )
-        body = response.model_dump(mode="json")
-        existing = self._repository.reserve_idempotency(
+        reserved = self._repository.reserve_idempotency(
             context.organization_id, context.actor_id, idempotency_key, request_hash
         )
-        if existing is not None:
-            if existing.get("request_hash") != request_hash:
+        if reserved is not None:
+            if reserved.get("request_hash") != request_hash:
                 raise FinancialExceptionConflict(
                     "Idempotency-Key was already used for another exception"
                 )
-            if int(existing.get("response_status", 425)) == 425:
+            if int(reserved.get("response_status", 425)) == 425:
                 raise FinancialExceptionConflict(
                     "An identical exception investigation is already in progress"
                 )
-            return InvestigationResponse.model_validate(existing["response_body"])
+            return InvestigationResponse.model_validate(reserved["response_body"])
         try:
-            self._repository.save_financial_exception_investigation(
-                context.organization_id, investigation_id, result_id, body
+            response = self._investigator.investigate_lifecycle(
+                context.organization_id, exception, lifecycle
             )
-            self._repository.save_financial_exception_investigation_tool_calls(
+            body = response.model_dump(mode="json")
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
+        try:
+            self._repository.save_financial_exception_investigation_with_tool_calls(
                 context.organization_id,
-                response.investigation_id,
+                investigation_id,
+                result_id,
+                body,
                 [item.model_dump(mode="json") for item in response.tool_calls],
             )
         except Exception:

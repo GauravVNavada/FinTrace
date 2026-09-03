@@ -5,6 +5,10 @@
 **Last updated:** 2026-08-31
 **Source:** [`PRD.md`](PRD.md)
 
+## 0.1 Post-P0 hardening (2026-09-03)
+
+The Track 4 implementation now requires an `Idempotency-Key` for every source mutation (delete, analysis, mapping edit/confirmation, and classification update), with request-hash conflict detection and reclaimable pending leases. Audit reads are bounded to a caller-selected maximum of 500 events. PostgreSQL workflow lookups use direct organization-scoped joins rather than bounded list scans, and source entity foreign keys enforce organization-consistent relationships through migration 014. The web console distinguishes an empty result, forbidden access, and an unavailable API; it does not substitute static run history or stub evaluation scores.
+
 ## 1. Purpose
 
 This document converts the product narrative into testable system requirements. The PRD remains the authority for product intent; this file is the implementation checklist for acceptance criteria, failure behavior, and non-functional expectations.

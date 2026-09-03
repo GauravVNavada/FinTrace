@@ -28,9 +28,13 @@ class LifecycleRepository(Protocol):
         correlation_id: str | None = None,
     ) -> None: ...
 
-    def audit_events(self, organization_id: str, resource_id: str) -> list[dict[str, str]]: ...
+    def audit_events(
+        self, organization_id: str, resource_id: str, limit: int = 200
+    ) -> list[dict[str, str]]: ...
 
-    def audit_events_for_organization(self, organization_id: str) -> list[dict[str, str]]: ...
+    def audit_events_for_organization(
+        self, organization_id: str, limit: int = 200
+    ) -> list[dict[str, str]]: ...
 
     def related_exceptions(self, organization_id: str, order_id: str) -> list[ExceptionSummary]: ...
 
@@ -176,6 +180,15 @@ class WorkflowRepository(LifecycleRepository, Protocol):
     def save_financial_exception_investigation_tool_calls(
         self, organization_id: str, investigation_id: str, tool_calls: list[dict[str, Any]]
     ) -> None: ...
+
+    def save_financial_exception_investigation_with_tool_calls(
+        self,
+        organization_id: str,
+        investigation_id: str,
+        result_id: str,
+        response: dict[str, Any],
+        tool_calls: list[dict[str, Any]],
+    ) -> dict[str, Any]: ...
 
     def get_financial_exception_investigation_tool_calls(
         self, organization_id: str, investigation_id: str

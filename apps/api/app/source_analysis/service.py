@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import UTC, datetime
 from typing import Any
 from uuid import uuid4
@@ -45,23 +47,40 @@ class SourceAnalysisService:
         self._repository = repository
 
     def analyze(
-        self, context: ActorContext, investigation_id: str, source_file_id: str
+        self, context: ActorContext, investigation_id: str, source_file_id: str, idempotency_key: str
     ) -> SourceAnalysisResponse:
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise ValueError("Idempotency-Key must be between 1 and 128 characters")
         source = self._repository.get_source_file_internal(
             context.organization_id, investigation_id, source_file_id
         )
         if source is None:
             raise SourceAnalysisNotFound(source_file_id)
-        settings = get_settings()
-        self._repository.update_source_analysis_state(
-            context.organization_id,
-            investigation_id,
-            source_file_id,
-            "ANALYZING",
-            "UNKNOWN",
-            0,
+        request_hash = self._request_hash(investigation_id, source_file_id)
+        previous = self._repository.get_idempotency(context.organization_id, idempotency_key)
+        if previous is not None:
+            self._validate_idempotency(previous, request_hash)
+            if int(previous.get("response_status", 425)) == 425:
+                raise MappingConflict("An identical source analysis is already in progress")
+            return SourceAnalysisResponse.model_validate(previous["response_body"])
+        reserved = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
         )
+        if reserved is not None:
+            self._validate_idempotency(reserved, request_hash)
+            if int(reserved.get("response_status", 425)) == 425:
+                raise MappingConflict("An identical source analysis is already in progress")
+            return SourceAnalysisResponse.model_validate(reserved["response_body"])
+        settings = get_settings()
         try:
+            self._repository.update_source_analysis_state(
+                context.organization_id,
+                investigation_id,
+                source_file_id,
+                "ANALYZING",
+                "UNKNOWN",
+                0,
+            )
             filename, content = read_upload(str(source["storage_reference"]))
             document = analyze_content(
                 filename,
@@ -136,6 +155,12 @@ class SourceAnalysisService:
                 source_file_id,
                 context.actor_id,
             )
+            self._repository.complete_idempotency(
+                context.organization_id,
+                idempotency_key,
+                200,
+                analysis.model_dump(mode="json"),
+            )
             return analysis
         except SourceAnalysisProviderUnavailable:
             self._repository.update_source_analysis_state(
@@ -152,6 +177,7 @@ class SourceAnalysisService:
                 source_file_id,
                 context.actor_id,
             )
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise
         except Exception:
             self._repository.update_source_analysis_state(
@@ -162,6 +188,7 @@ class SourceAnalysisService:
                 "UNKNOWN",
                 0,
             )
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise
 
     def get_analysis(
@@ -192,6 +219,7 @@ class SourceAnalysisService:
         source_file_id: str,
         mapping_id: str,
         payload: MappingEdit,
+        idempotency_key: str,
     ) -> MappingResponse:
         analysis = self.get_analysis(context.organization_id, investigation_id, source_file_id)
         mapping = next(
@@ -216,26 +244,43 @@ class SourceAnalysisService:
                 raise MappingConflict(
                     "The selected canonical field is not valid for this source type"
                 )
-        updated = self._repository.update_source_mapping(
-            context.organization_id,
+        request_hash = self._request_hash(
             investigation_id,
             source_file_id,
             mapping_id,
-            {
-                "canonical_field": payload.canonical_field,
-                "ignored": payload.ignored,
-                "updated_at": datetime.now(UTC),
-            },
+            payload.model_dump(mode="json"),
         )
-        if updated is None:
-            raise SourceAnalysisNotFound(mapping_id)
-        self._repository.record_audit_event(
-            context.organization_id, "SOURCE_MAPPING_EDITED", mapping_id, context.actor_id
-        )
-        return MappingResponse.model_validate(updated)
+        replay = self._reserve_or_replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return MappingResponse.model_validate(replay)
+        try:
+            updated = self._repository.update_source_mapping(
+                context.organization_id,
+                investigation_id,
+                source_file_id,
+                mapping_id,
+                {
+                    "canonical_field": payload.canonical_field,
+                    "ignored": payload.ignored,
+                    "updated_at": datetime.now(UTC),
+                },
+            )
+            if updated is None:
+                raise SourceAnalysisNotFound(mapping_id)
+            self._repository.record_audit_event(
+                context.organization_id, "SOURCE_MAPPING_EDITED", mapping_id, context.actor_id
+            )
+            response = MappingResponse.model_validate(updated)
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, response.model_dump(mode="json")
+            )
+            return response
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
 
     def confirm_mappings(
-        self, context: ActorContext, investigation_id: str, source_file_id: str
+        self, context: ActorContext, investigation_id: str, source_file_id: str, idempotency_key: str
     ) -> MappingConfirmationResponse:
         analysis = self.get_analysis(context.organization_id, investigation_id, source_file_id)
         if analysis.source_type == SourceType.UNKNOWN:
@@ -251,28 +296,40 @@ class SourceAnalysisService:
         missing = sorted(REQUIRED_FIELDS[analysis.source_type] - mapped_fields)
         if missing:
             raise MappingConfirmationRequired(missing)
-        result = self._repository.confirm_source_mappings(
-            context.organization_id, investigation_id, source_file_id
-        )
-        if result is None or not result.get("valid"):
-            raise MappingConfirmationRequired(
-                [str(item) for item in (result or {}).get("missing_fields", [])]
+        request_hash = self._request_hash(investigation_id, source_file_id, "confirm")
+        replay = self._reserve_or_replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return MappingConfirmationResponse.model_validate(replay)
+        try:
+            result = self._repository.confirm_source_mappings(
+                context.organization_id, investigation_id, source_file_id
             )
-        sources = self._repository.list_source_files(context.organization_id, investigation_id)
-        if sources and all(item.get("status") == "READY" for item in sources):
-            self._repository.update_financial_investigation_status(
-                context.organization_id, investigation_id, "RELATIONSHIP_REVIEW"
+            if result is None or not result.get("valid"):
+                raise MappingConfirmationRequired(
+                    [str(item) for item in (result or {}).get("missing_fields", [])]
+                )
+            sources = self._repository.list_source_files(context.organization_id, investigation_id)
+            if sources and all(item.get("status") == "READY" for item in sources):
+                self._repository.update_financial_investigation_status(
+                    context.organization_id, investigation_id, "RELATIONSHIP_REVIEW"
+                )
+            self._repository.record_audit_event(
+                context.organization_id, "SOURCE_MAPPINGS_CONFIRMED", source_file_id, context.actor_id
             )
-        self._repository.record_audit_event(
-            context.organization_id, "SOURCE_MAPPINGS_CONFIRMED", source_file_id, context.actor_id
-        )
-        return MappingConfirmationResponse(
-            financial_investigation_id=investigation_id,
-            source_file_id=source_file_id,
-            status=MappingStatus.CONFIRMED,
-            confirmed_mapping_count=int(result["confirmed_mapping_count"]),
-            ignored_column_count=int(result["ignored_column_count"]),
-        )
+            response = MappingConfirmationResponse(
+                financial_investigation_id=investigation_id,
+                source_file_id=source_file_id,
+                status=MappingStatus.CONFIRMED,
+                confirmed_mapping_count=int(result["confirmed_mapping_count"]),
+                ignored_column_count=int(result["ignored_column_count"]),
+            )
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, response.model_dump(mode="json")
+            )
+            return response
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
 
     def update_classification(
         self,
@@ -280,35 +337,82 @@ class SourceAnalysisService:
         investigation_id: str,
         source_file_id: str,
         payload: SourceTypeUpdate,
+        idempotency_key: str,
     ) -> SourceAnalysisResponse:
         analysis = self.get_analysis(context.organization_id, investigation_id, source_file_id)
         if payload.source_type == SourceType.UNKNOWN:
             raise MappingConflict("A confirmed source must use a supported source type")
-        self._repository.update_source_analysis_state(
-            context.organization_id,
-            investigation_id,
-            source_file_id,
-            "MAPPING_REQUIRED",
-            payload.source_type.value,
-            analysis.classification_confidence,
+        request_hash = self._request_hash(
+            investigation_id, source_file_id, "classification", payload.model_dump(mode="json")
         )
-        updated = {
-            **analysis.model_dump(mode="python"),
-            "source_type": payload.source_type,
-        }
-        saved = self._repository.save_source_analysis(
-            context.organization_id,
-            investigation_id,
-            source_file_id,
-            updated,
+        replay = self._reserve_or_replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return SourceAnalysisResponse.model_validate(replay)
+        try:
+            self._repository.update_source_analysis_state(
+                context.organization_id,
+                investigation_id,
+                source_file_id,
+                "MAPPING_REQUIRED",
+                payload.source_type.value,
+                analysis.classification_confidence,
+            )
+            updated = {
+                **analysis.model_dump(mode="python"),
+                "source_type": payload.source_type,
+            }
+            saved = self._repository.save_source_analysis(
+                context.organization_id,
+                investigation_id,
+                source_file_id,
+                updated,
+            )
+            self._repository.record_audit_event(
+                context.organization_id,
+                "SOURCE_CLASSIFICATION_UPDATED",
+                source_file_id,
+                context.actor_id,
+            )
+            response = SourceAnalysisResponse.model_validate(saved)
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, response.model_dump(mode="json")
+            )
+            return response
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
+
+    def _reserve_or_replay(
+        self, context: ActorContext, idempotency_key: str, request_hash: str
+    ) -> dict[str, Any] | None:
+        if not idempotency_key or len(idempotency_key) > 128:
+            raise ValueError("Idempotency-Key must be between 1 and 128 characters")
+        previous = self._repository.get_idempotency(context.organization_id, idempotency_key)
+        if previous is not None:
+            self._validate_idempotency(previous, request_hash)
+            if int(previous.get("response_status", 425)) == 425:
+                raise MappingConflict("An identical source operation is already in progress")
+            return dict(previous["response_body"])
+        reserved = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
         )
-        self._repository.record_audit_event(
-            context.organization_id,
-            "SOURCE_CLASSIFICATION_UPDATED",
-            source_file_id,
-            context.actor_id,
-        )
-        return SourceAnalysisResponse.model_validate(saved)
+        if reserved is not None:
+            self._validate_idempotency(reserved, request_hash)
+            if int(reserved.get("response_status", 425)) == 425:
+                raise MappingConflict("An identical source operation is already in progress")
+            return dict(reserved["response_body"])
+        return None
+
+    @staticmethod
+    def _validate_idempotency(record: dict[str, Any], request_hash: str) -> None:
+        if record.get("request_hash") != request_hash:
+            raise MappingConflict("Idempotency-Key was already used for another source operation")
+
+    @staticmethod
+    def _request_hash(*parts: object) -> str:
+        return hashlib.sha256(
+            json.dumps(parts, sort_keys=True, separators=(",", ":"), default=str).encode()
+        ).hexdigest()
 
     @staticmethod
     def _mapping_records(

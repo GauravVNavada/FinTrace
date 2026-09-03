@@ -1,6 +1,6 @@
 # FinTrace Architecture
 
-Status: accepted local product architecture; Sprints 0–7 implemented · 2026-08-31
+Status: accepted local product architecture; Sprints 0–7 plus Track 4 reliability/UX hardening implemented · 2026-09-03
 
 ## Decision summary
 
@@ -71,6 +71,10 @@ Each app's `app/globals.css` must contain exactly one import of the UI package s
 `docs` owns the durable decisions. A change to product behavior must update the PRD and the relevant contract document in the same change.
 
 `apps/api` owns source ingestion boundaries, bounded source analysis, normalization, lifecycle resolution, reconciliation, investigation orchestration, policy, persistence, and audit writes. The frontend consumes `/api/v1` only and never connects directly to a database.
+
+### Reliability boundary update
+
+Consequential source workflow mutations reserve an idempotency lease before expensive work, persist or replay only a request-hash-compatible response, and release the lease on failure. PostgreSQL leases reclaim expired pending work. Tenant integrity is enforced both in repository predicates and in composite organization-aware foreign keys added by migration 014. Evaluation and audit screens treat empty, forbidden, and unavailable states as different domain outcomes. The local demo remains explicitly process-local; PostgreSQL is required for restart durability.
 
 ## Runtime and deployment
 

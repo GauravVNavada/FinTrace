@@ -1,6 +1,6 @@
 # FinTrace Data and API Contract
 
-Status: accepted evolution contract; Sprints 1–7 local ingestion, normalization, reconciliation, investigation, advisory-signal, and demo-generation slices implemented · 2026-08-31
+Status: accepted evolution contract; Sprints 1–7 plus Track 4 reliability/UX hardening implemented · 2026-09-03
 
 ## Adapter rule
 
@@ -113,9 +113,9 @@ GET  /api/v1/evaluation/latest
 ## Request requirements
 
 - `organization_id` comes from authenticated server context; it is never trusted from a browser body.
-- Consequential POST requests require `Idempotency-Key`.
+- Consequential POST requests and all source workflow mutations require `Idempotency-Key`: source delete, analysis, mapping edit/confirmation, and classification update are replay-safe and reject request-hash reuse. Pending work uses a finite lease in PostgreSQL.
 - All query filters are validated against allowlisted enum values.
-- Collection endpoints accept bounded `limit` values and every response carries and logs a `request_id`; audit events use it as the default correlation ID.
+- Collection endpoints accept bounded `limit` values and every response carries and logs a `request_id`; audit events use it as the default correlation ID. Audit reads default to 200 and cap at 500.
 
 ## Investigation contract
 

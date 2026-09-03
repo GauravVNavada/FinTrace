@@ -30,15 +30,16 @@ controls_service = ControlsService(repository)
 def list_audit_events(
     context: Annotated[ActorContext, Depends(get_actor_context)],
     resource_id: Annotated[str | None, Query(max_length=128)] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
 ) -> list[AuditEventResponse]:
     if Capability.AUDIT_READ not in context.capabilities:
         raise HTTPException(
             status_code=403, detail={"code": "FORBIDDEN", "message": "Audit access is restricted"}
         )
     events = (
-        repository.audit_events(context.organization_id, resource_id)
+        repository.audit_events(context.organization_id, resource_id, limit)
         if resource_id
-        else repository.audit_events_for_organization(context.organization_id)
+        else repository.audit_events_for_organization(context.organization_id, limit)
     )
     public_fields = (
         "event_id",

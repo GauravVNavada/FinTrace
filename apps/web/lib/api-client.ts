@@ -6,91 +6,77 @@ const actorId = process.env.NEXT_PUBLIC_ACTOR_ID ?? "web-reviewer";
 const actorRole = process.env.NEXT_PUBLIC_ACTOR_ROLE ?? "ANALYST";
 
 export class ApiClientError extends Error {
-  constructor(public readonly status: number, message: string) {
+  constructor(
+    public readonly status: number,
+    message: string,
+    public readonly code = "API_ERROR",
+    public readonly requestId?: string,
+  ) {
     super(message);
+    this.name = "ApiClientError";
   }
+}
+
+type ApiErrorPayload = { detail?: { code?: string; message?: string } | string; summary?: string };
+
+const baseHeaders = {
+  "X-Organization-Id": organizationId,
+  "X-Actor-Id": actorId,
+  "X-Actor-Role": actorRole,
+};
+
+async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const headers = new Headers(baseHeaders);
+  new Headers(init.headers).forEach((value, key) => headers.set(key, value));
+  let response: Response;
+  try {
+    response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers, cache: "no-store" });
+  } catch {
+    throw new ApiClientError(0, "The FinTrace API could not be reached. Check that the API is running and try again.", "NETWORK_ERROR");
+  }
+  if (!response.ok) {
+    const fallback = `API request failed with status ${response.status}`;
+    let message = fallback;
+    let code = "API_ERROR";
+    try {
+      const payload = await response.json() as ApiErrorPayload;
+      const detail = payload.detail;
+      if (typeof detail === "string") message = detail;
+      if (detail && typeof detail === "object") {
+        message = detail.message ?? payload.summary ?? fallback;
+        code = detail.code ?? code;
+      } else {
+        message = payload.summary ?? message;
+      }
+    } catch { /* Keep the HTTP status message when the response is not JSON. */ }
+    throw new ApiClientError(response.status, message, code, response.headers.get("X-Request-Id") ?? undefined);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
 }
 
 async function get<T>(path: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    headers: {
-      "X-Organization-Id": organizationId,
-      "X-Actor-Id": actorId,
-      "X-Actor-Role": actorRole
-    },
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    let message = `API request failed with status ${response.status}`;
-    try {
-      const detail = await response.json() as { detail?: { message?: string } | string; summary?: string };
-      message = typeof detail.detail === "string" ? detail.detail : detail.detail?.message ?? detail.summary ?? message;
-    } catch { /* Keep the status message when the response is not JSON. */ }
-    throw new ApiClientError(response.status, message);
-  }
-  return response.json() as Promise<T>;
+  return request<T>(path);
 }
 
 async function post<T>(path: string, body: unknown, idempotencyKey: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  return request<T>(path, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": idempotencyKey,
-      "X-Organization-Id": organizationId,
-      "X-Actor-Id": actorId,
-      "X-Actor-Role": actorRole
-    },
+    headers: { "Content-Type": "application/json", "Idempotency-Key": idempotencyKey },
     body: JSON.stringify(body),
-    cache: "no-store"
   });
-  if (!response.ok) {
-    let message = `API request failed with status ${response.status}`;
-    try {
-      const detail = await response.json() as { detail?: { message?: string } | string; summary?: string };
-      message = typeof detail.detail === "string" ? detail.detail : detail.detail?.message ?? detail.summary ?? message;
-    } catch { /* Keep the status message when the response is not JSON. */ }
-    throw new ApiClientError(response.status, message);
-  }
-  return response.json() as Promise<T>;
 }
 
 async function postForm<T>(path: string, body: FormData, idempotencyKey: string): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    method: "POST",
-    headers: {
-      "Idempotency-Key": idempotencyKey,
-      "X-Organization-Id": organizationId,
-      "X-Actor-Id": actorId,
-      "X-Actor-Role": actorRole
-    },
-    body,
-    cache: "no-store"
-  });
-  if (!response.ok) {
-    let message = `API request failed with status ${response.status}`;
-    try {
-      const detail = await response.json() as { detail?: { message?: string } };
-      message = detail.detail?.message ?? message;
-    } catch { /* Keep the status message when the response is not JSON. */ }
-    throw new ApiClientError(response.status, message);
-  }
-  return response.json() as Promise<T>;
+  return request<T>(path, { method: "POST", headers: { "Idempotency-Key": idempotencyKey }, body });
 }
 
 async function patchJson<T>(path: string, body: unknown, idempotencyKey?: string): Promise<T> {
-  const headers: Record<string, string> = { "Content-Type": "application/json", "X-Organization-Id": organizationId, "X-Actor-Id": actorId, "X-Actor-Role": actorRole };
-  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
-  const response = await fetch(`${apiBaseUrl}${path}`, { method: "PATCH", headers, body: JSON.stringify(body), cache: "no-store" });
-  if (!response.ok) {
-    let message = `API request failed with status ${response.status}`;
-    try {
-      const detail = await response.json() as { detail?: { message?: string } | string };
-      message = typeof detail.detail === "string" ? detail.detail : detail.detail?.message ?? message;
-    } catch { /* Keep the status message when the response is not JSON. */ }
-    throw new ApiClientError(response.status, message);
-  }
-  return response.json() as Promise<T>;
+  return request<T>(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", ...(idempotencyKey ? { "Idempotency-Key": idempotencyKey } : {}) },
+    body: JSON.stringify(body),
+  });
 }
 
 export function fetchDashboardSummary() {
@@ -157,9 +143,10 @@ export function runEvaluation(request: EvaluationRunRequest, idempotencyKey: str
   return post<ApiEvaluation>("/api/v1/evaluation/run", request, idempotencyKey);
 }
 
-export function fetchAuditEvents(resourceId?: string) {
-  const query = resourceId ? `?resource_id=${encodeURIComponent(resourceId)}` : "";
-  return get<ApiAuditEvent[]>(`/api/v1/audit-events${query}`);
+export function fetchAuditEvents(resourceId?: string, limit = 200) {
+  const query = new URLSearchParams({ limit: String(limit) });
+  if (resourceId) query.set("resource_id", resourceId);
+  return get<ApiAuditEvent[]>(`/api/v1/audit-events?${query.toString()}`);
 }
 
 export function createFinancialInvestigation(payload: { name: string; description?: string; period_start?: string; period_end?: string; base_currency: string }, idempotencyKey: string) {
@@ -188,13 +175,11 @@ export function generateDemoData(investigationId: string, payload: DemoDataReque
   return post<ApiDemoDataResponse>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/demo-data`, payload, idempotencyKey);
 }
 
-export async function deleteSourceFile(investigationId: string, sourceFileId: string) {
-  const response = await fetch(`${apiBaseUrl}/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}`, {
+export async function deleteSourceFile(investigationId: string, sourceFileId: string, idempotencyKey = requestId()) {
+  await request<void>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}`, {
     method: "DELETE",
-    headers: { "X-Organization-Id": organizationId, "X-Actor-Id": actorId, "X-Actor-Role": actorRole },
-    cache: "no-store"
+    headers: { "Idempotency-Key": idempotencyKey },
   });
-  if (!response.ok) throw new ApiClientError(response.status, `API request failed with status ${response.status}`);
 }
 
 export function analyzeSourceFile(investigationId: string, sourceFileId: string) {
@@ -210,7 +195,7 @@ export function fetchSourceMappings(investigationId: string, sourceFileId: strin
 }
 
 export function editSourceMapping(investigationId: string, sourceFileId: string, mappingId: string, body: { canonical_field: string | null; ignored: boolean }) {
-  return patchJson<ApiSourceMapping>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}/mappings/${encodeURIComponent(mappingId)}`, body);
+  return patchJson<ApiSourceMapping>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}/mappings/${encodeURIComponent(mappingId)}`, body, requestId());
 }
 
 export function confirmSourceMappings(investigationId: string, sourceFileId: string) {
@@ -218,7 +203,7 @@ export function confirmSourceMappings(investigationId: string, sourceFileId: str
 }
 
 export function updateSourceClassification(investigationId: string, sourceFileId: string, source_type: SourceType) {
-  return patchJson<ApiSourceAnalysis>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}/classification`, { source_type });
+  return patchJson<ApiSourceAnalysis>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources/${encodeURIComponent(sourceFileId)}/classification`, { source_type }, requestId());
 }
 
 export function discoverRelationships(investigationId: string) {
@@ -271,4 +256,9 @@ export function requestFinancialResolution(investigationId: string, runId: strin
 
 function requestId() {
   return typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+export function getApiErrorMessage(error: unknown, fallback = "Something went wrong. Try again.") {
+  if (error instanceof ApiClientError) return error.message;
+  return fallback;
 }

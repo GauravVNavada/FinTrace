@@ -18,6 +18,7 @@ def test_migrations_are_discovered_in_version_order() -> None:
         "009_investigation_reconciliation.sql",
         "010_financial_exception_investigations.sql",
             "011_uploaded_approval_requests.sql",
-            "012_p0_buildathon_contract.sql",
-            "013_provider_health_diagnostics.sql",
+        "012_p0_buildathon_contract.sql",
+        "013_provider_health_diagnostics.sql",
+        "014_tenant_integrity_and_idempotency.sql",
     ]

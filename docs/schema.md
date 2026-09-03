@@ -1,6 +1,6 @@
 # FinTrace Schema
 
-Status: accepted evolution schema; migrations 001–011 applied and verified locally · 2026-08-31
+Status: accepted evolution schema; migrations 001–013 applied locally, migration 014 defined for tenant-integrity/replay hardening · 2026-09-03
 
 ## Domain separation for the evolution program
 
@@ -151,6 +151,10 @@ Source financial records and audit events are append-only for MVP. Corrections a
 ## Migration rules
 
 Migrations are version-controlled and forward-compatible. Required changes follow expand → backfill → validate → contract. Do not add a required column to a populated table without a safe default/backfill plan. Large indexes use the database's online/concurrent facility where supported. Destructive operations require a backup, migration review, and recovery test.
+
+## Migration 014 integrity additions (2026-09-03)
+
+`014_tenant_integrity_and_idempotency.sql` adds organization-aware composite foreign keys for payments, settlements, invoices, refunds, and inventory movements, plus supporting indexes for bounded audit and reconciliation-result reads. Repository lookups also join on organization ID, so an internal identifier cannot resolve through another tenant's parent row. Pending PostgreSQL idempotency records carry a finite lease and can be safely reclaimed after expiry; completed responses remain replayable by request hash.
 
 ## Tenant isolation review
 

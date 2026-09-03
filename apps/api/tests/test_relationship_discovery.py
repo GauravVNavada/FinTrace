@@ -43,7 +43,7 @@ async def test_relationship_discovery_requires_confirmed_mappings_and_is_reviewa
             source_ids.append(source_id)
             analyzed = await client.post(
                 f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-                headers=headers(),
+                headers=headers(key=f"rel-analyze-{key}"),
             )
             assert analyzed.status_code == 200
             mappings = (
@@ -57,14 +57,14 @@ async def test_relationship_discovery_requires_confirmed_mappings_and_is_reviewa
                     assert (
                         await client.patch(
                             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/{mapping['id']}",
-                            headers=headers(),
+                            headers=headers(key=f"rel-mapping-{mapping['id']}"),
                             json={"canonical_field": mapping["canonical_field"], "ignored": False},
                         )
                     ).status_code == 200
             assert (
                 await client.post(
                     f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-                    headers=headers(),
+                    headers=headers(key=f"rel-confirm-{key}"),
                 )
             ).status_code == 200
         discovered = await client.post(

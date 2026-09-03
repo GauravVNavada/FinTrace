@@ -2,8 +2,8 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Clock3, Download, ExternalLink, Filter, Play, RefreshCw } from "lucide-react";
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle, Input, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@fintrace/ui";
+import { Activity, AlertCircle, Clock3, Download, ExternalLink, Filter, Play, RefreshCw } from "lucide-react";
+import { Alert, Button, Card, CardContent, CardHeader, CardTitle, EmptyState, Input, Select, Skeleton, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@fintrace/ui";
 import { appConfig } from "../lib/data";
 import { ApiClientError, fetchExceptions, fetchFinancialInvestigationPatterns, fetchFinancialInvestigations, fetchLatestEvaluation, fetchLatestReconciliation, runEvaluation } from "../lib/api-client";
 import { downloadCsv } from "../lib/export";
@@ -151,17 +151,63 @@ function ExceptionTable({ items }: { items: ExceptionItem[] }) {
 export function RunsPage() {
   const [latest, setLatest] = React.useState<ApiEvaluation | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [unavailable, setUnavailable] = React.useState(false);
+  const [loadError, setLoadError] = React.useState<ApiClientError | null>(null);
   const [running, setRunning] = React.useState(false);
   const [notice, setNotice] = React.useState<string | null>(null);
-  React.useEffect(() => { fetchLatestEvaluation().then(setLatest).catch(error => { if (!(error instanceof ApiClientError) || error.status !== 404) setUnavailable(true); }).finally(() => setLoading(false)); }, []);
+  const [reloadToken, setReloadToken] = React.useState(0);
+
+  React.useEffect(() => {
+    let active = true;
+    setLoading(true);
+    fetchLatestEvaluation()
+      .then(result => { if (active) { setLatest(result); setLoadError(null); } })
+      .catch(error => {
+        if (!active) return;
+        if (error instanceof ApiClientError && error.status === 404) { setLatest(null); setLoadError(null); }
+        else setLoadError(error instanceof ApiClientError ? error : new ApiClientError(0, "The benchmark history could not be loaded.", "UNKNOWN_ERROR"));
+      })
+      .finally(() => { if (active) setLoading(false); });
+    return () => { active = false; };
+  }, [reloadToken]);
+
   async function startRun() {
-    setRunning(true); setNotice(null);
-    try { const result = await runEvaluation({ orders: appConfig.benchmark.orders, seed: appConfig.benchmark.seed, anomaly_rate: appConfig.benchmark.anomalyRate }, createActionKey("run")); setLatest(result); setUnavailable(false); setNotice("A new deterministic benchmark run completed."); }
-    catch { setNotice("The benchmark could not be started. Check that the API is available and try again."); }
-    finally { setRunning(false); }
+    setRunning(true); setNotice(null); setLoadError(null);
+    try {
+      const result = await runEvaluation({ orders: appConfig.benchmark.orders, seed: appConfig.benchmark.seed, anomaly_rate: appConfig.benchmark.anomalyRate }, createActionKey("run"));
+      setLatest(result);
+      setNotice("Benchmark completed and the result was persisted.");
+    } catch (error) {
+      setNotice(error instanceof ApiClientError ? error.message : "The benchmark could not be started. Try again.");
+    } finally { setRunning(false); }
   }
-  return <><PageHeading eyebrow="Controls" title="Reconciliation evaluation runs" description="A reproducible synthetic benchmark for validating deterministic matching against hidden ground truth."><Button size="sm" onClick={startRun} disabled={running}><Play className={running ? "h-3.5 w-3.5 animate-pulse" : "h-3.5 w-3.5"} />{running ? "Running…" : "Start benchmark"}</Button></PageHeading><ActionNotice message={notice} variant={notice?.startsWith("The benchmark") ? "destructive" : "info"} />{unavailable && <Alert variant="destructive" className="mb-4 text-xs">The evaluation API is unavailable. No static run history has been substituted.</Alert>}{loading ? <div role="status" className="text-xs text-muted-foreground">Loading latest evaluation…</div> : !latest ? <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">No benchmark run exists yet. Start one to create a persisted evaluation record.</CardContent></Card> : <Card><CardHeader><CardTitle>Latest benchmark run</CardTitle></CardHeader><CardContent><div className="grid gap-4 text-xs sm:grid-cols-2 lg:grid-cols-4"><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Lifecycles</div><div className="mt-1 text-xl font-bold text-foreground">{latest.report.lifecycles.toLocaleString()}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Match rate</div><div className="mt-1 text-xl font-bold text-foreground">{latest.report.match_rate}%</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Exceptions</div><div className="mt-1 text-xl font-bold text-foreground">{latest.report.exceptions.toLocaleString()}</div></div><div><div className="text-[10px] uppercase tracking-wide text-muted-foreground">Created</div><div className="mt-1 font-semibold text-foreground">{new Date(latest.created_at).toLocaleString()}</div></div></div><div className="mt-5 rounded-md border border-border bg-muted/30 p-3 text-[11px] leading-5 text-muted-foreground">This benchmark uses synthetic records and hidden labels. Uploaded-investigation outcomes are not scored here until a reviewer supplies ground-truth labels.</div></CardContent></Card>}</>;
+
+  const unavailable = loadError !== null && loadError.status !== 403;
+  return <>
+    <PageHeading eyebrow="Controls" title="Reconciliation evaluation runs" description="A reproducible synthetic benchmark for validating deterministic matching against hidden ground truth.">
+      <Button size="sm" onClick={() => void startRun()} disabled={running || loading || loadError?.status === 403} title={loadError?.status === 403 ? "Evaluation access is restricted for this role" : "Generate and persist a synthetic benchmark run"}><Play className={running ? "h-3.5 w-3.5 animate-pulse" : "h-3.5 w-3.5"} />{running ? "Running benchmark…" : "Start benchmark"}</Button>
+    </PageHeading>
+    <ActionNotice message={notice} variant={notice?.toLowerCase().includes("could not") || notice?.toLowerCase().includes("unavailable") ? "destructive" : "info"} />
+    {loadError?.status === 403 && <Alert variant="warning" className="mb-4 flex items-center gap-2 text-xs"><AlertCircle className="h-4 w-4" />Your role cannot view evaluation results. Ask a Controller or Finance Manager for access.</Alert>}
+    {unavailable && <Alert variant="destructive" className="mb-4 flex items-center justify-between gap-3 text-xs"><span>{loadError?.message ?? "The evaluation service is unavailable."}</span><Button variant="outline" size="sm" onClick={() => setReloadToken(value => value + 1)}><RefreshCw className="h-3.5 w-3.5" />Retry</Button></Alert>}
+    {loading ? <div role="status" aria-label="Loading evaluation history" className="grid gap-4 sm:grid-cols-3"><Skeleton className="h-24" /><Skeleton className="h-24" /><Skeleton className="h-24" /></div> : latest ? <RunResult evaluation={latest} /> : !loadError ? <EmptyState icon={<Activity className="h-5 w-5" />} eyebrow="No run history" title="Your first benchmark is ready to run" description="FinTrace will generate synthetic lifecycles, apply deterministic reconciliation rules, and compare the result with hidden ground truth. Nothing in this benchmark changes a real payment or customer record." actions={<Button onClick={() => void startRun()} disabled={running}><Play className="h-3.5 w-3.5" />{running ? "Running…" : "Run first benchmark"}</Button>} /> : null}
+  </>;
+}
+
+function RunResult({ evaluation }: { evaluation: ApiEvaluation }) {
+  const metrics = [
+    ["Lifecycles", evaluation.report.lifecycles.toLocaleString()],
+    ["Match rate", `${evaluation.report.match_rate}%`],
+    ["Match precision", `${evaluation.report.match_precision}%`],
+    ["Exceptions", evaluation.report.exceptions.toLocaleString()],
+    ["Exception recall", `${evaluation.report.exception_recall}%`],
+    ["Severity accuracy", `${evaluation.report.severity_accuracy}%`],
+    ["Throughput", `${evaluation.report.throughput_per_second}/s`],
+    ["Unresolved", evaluation.report.unresolved_exceptions.toLocaleString()],
+  ];
+  return <div className="space-y-4">
+    <Card><CardHeader className="flex flex-row items-start justify-between gap-4"><div><CardTitle>Latest benchmark run</CardTitle><p className="mt-1 text-xs text-muted-foreground">{new Date(evaluation.created_at).toLocaleString()} · seed {evaluation.seed} · {evaluation.anomaly_rate}% anomaly rate</p></div><span className="rounded-full bg-success/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-success">Persisted</span></CardHeader><CardContent><div className="grid gap-x-5 gap-y-6 text-xs sm:grid-cols-2 lg:grid-cols-4">{metrics.map(([label, value]) => <div key={label}><div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div><div className="mt-1 text-xl font-bold text-foreground">{value}</div></div>)}</div></CardContent></Card>
+    <div className="grid gap-4 lg:grid-cols-2"><Card><CardHeader><CardTitle>What this run proves</CardTitle></CardHeader><CardContent className="text-xs leading-5 text-muted-foreground">Deterministic rules were measured against synthetic hidden labels. Match precision, exception recall, severity accuracy, and unsafe-resolution rate are separate signals; a high match rate alone is not a safety claim.</CardContent></Card><Card><CardHeader><CardTitle>Benchmark boundaries</CardTitle></CardHeader><CardContent className="text-xs leading-5 text-muted-foreground">This is a Track 4 reconciliation control benchmark. It does not measure live AI quality, uploaded-investigation outcomes, or production payment processing. Those are reported separately in Evaluations.</CardContent></Card></div>
+  </div>;
 }
 
 export function SettingsPage() {

@@ -82,7 +82,7 @@ async def test_postgres_financial_investigation_source_slice() -> None:
         assert refreshed.json()["source_file_count"] == 1
         deleted = await client.delete(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}",
-            headers=headers,
+            headers={**headers, "Idempotency-Key": f"postgres-delete-{suffix}"},
         )
         assert deleted.status_code == 204
 
@@ -130,7 +130,7 @@ async def test_postgres_reconciliation_and_uploaded_investigation_slice() -> Non
             assert (
                 await client.post(
                     f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-                    headers=headers,
+                    headers={**headers, "Idempotency-Key": f"postgres-recon-analyze-{key}-{suffix}"},
                 )
             ).status_code == 200
             mappings = await client.get(
@@ -142,14 +142,14 @@ async def test_postgres_reconciliation_and_uploaded_investigation_slice() -> Non
                     assert (
                         await client.patch(
                             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/{mapping['id']}",
-                            headers=headers,
+                            headers={**headers, "Idempotency-Key": f"postgres-recon-mapping-{key}-{mapping['id']}-{suffix}"},
                             json={"canonical_field": mapping["canonical_field"], "ignored": False},
                         )
                     ).status_code == 200
             assert (
                 await client.post(
                     f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-                    headers=headers,
+                    headers={**headers, "Idempotency-Key": f"postgres-recon-confirm-{key}-{suffix}"},
                 )
             ).status_code == 200
         normalized = await client.post(
@@ -179,7 +179,7 @@ async def test_postgres_reconciliation_and_uploaded_investigation_slice() -> Non
         assert review.status_code == 200, review.text
         approval = await client.post(
             f"/api/v1/approvals/{review.json()['request_id']}/approve",
-            headers={**headers, "Idempotency-Key": f"postgres-approval-{suffix}"},
+            headers={**headers, "X-Actor-Id": "integration-approver", "Idempotency-Key": f"postgres-approval-{suffix}"},
         )
         assert approval.status_code == 200, approval.text
         investigated = await client.post(

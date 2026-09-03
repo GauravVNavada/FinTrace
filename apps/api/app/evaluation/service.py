@@ -40,8 +40,8 @@ class EvaluationService:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
         key = (organization_id, idempotency_key)
         with self._lock:
+            request_hash = self._request_hash(request)
             if self._durable and self._repository is not None:
-                request_hash = self._request_hash(request)
                 previous = self._repository.get_idempotency(organization_id, idempotency_key)
                 if previous is not None:
                     if previous["request_hash"] != request_hash:
@@ -53,35 +53,11 @@ class EvaluationService:
                             "An identical evaluation is already in progress"
                         )
                     return EvaluationResponse.model_validate(previous["response_body"])
-            previous = self._idempotency.get(key)
-            if previous is not None:
-                previous_request, response = previous
-                if previous_request != request:
-                    raise EvaluationConflictError(
-                        "Idempotency-Key was already used for another evaluation"
-                    )
-                return response
-            dataset = generate_dataset(
-                GeneratorConfig(request.orders, request.seed, request.anomaly_rate, organization_id)
-            )
-            report, _ = evaluate_dataset(dataset)
-            response = EvaluationResponse(
-                evaluation_id=f"EVAL-{uuid4().hex[:12].upper()}",
-                organization_id=organization_id,
-                seed=request.seed,
-                anomaly_rate=request.anomaly_rate,
-                report=EvaluationReportResponse.model_validate(asdict(report)),
-                created_at=datetime.now(UTC),
-            )
-            self._latest[organization_id] = response
-            self._idempotency[key] = (request, response)
-            if self._durable and self._repository is not None:
-                body = response.model_dump(mode="json")
                 reserved = self._repository.reserve_idempotency(
-                    organization_id, "system", idempotency_key, self._request_hash(request)
+                    organization_id, "system", idempotency_key, request_hash
                 )
                 if reserved is not None:
-                    if reserved["request_hash"] != self._request_hash(request):
+                    if reserved["request_hash"] != request_hash:
                         raise EvaluationConflictError(
                             "Idempotency-Key was already used for another evaluation"
                         )
@@ -90,6 +66,35 @@ class EvaluationService:
                             "An identical evaluation is already in progress"
                         )
                     return EvaluationResponse.model_validate(reserved["response_body"])
+            previous = self._idempotency.get(key)
+            if previous is not None:
+                previous_request, response = previous
+                if previous_request != request:
+                    raise EvaluationConflictError(
+                        "Idempotency-Key was already used for another evaluation"
+                    )
+                return response
+            try:
+                dataset = generate_dataset(
+                    GeneratorConfig(request.orders, request.seed, request.anomaly_rate, organization_id)
+                )
+                report, _ = evaluate_dataset(dataset)
+                response = EvaluationResponse(
+                    evaluation_id=f"EVAL-{uuid4().hex[:12].upper()}",
+                    organization_id=organization_id,
+                    seed=request.seed,
+                    anomaly_rate=request.anomaly_rate,
+                    report=EvaluationReportResponse.model_validate(asdict(report)),
+                    created_at=datetime.now(UTC),
+                )
+            except Exception:
+                if self._durable and self._repository is not None:
+                    self._repository.release_idempotency(organization_id, idempotency_key)
+                raise
+            self._latest[organization_id] = response
+            self._idempotency[key] = (request, response)
+            if self._durable and self._repository is not None:
+                body = response.model_dump(mode="json")
                 try:
                     self._repository.save_evaluation(organization_id, body)
                 except Exception:

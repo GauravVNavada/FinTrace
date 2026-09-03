@@ -1,6 +1,6 @@
 # FinTrace Security Design
 
-**Status:** MVP security baseline; ingestion controls added to active requirements · 2026-08-31
+**Status:** MVP security baseline plus tenant-integrity and replay hardening · 2026-09-03
 
 ## File-ingestion security requirements
 
@@ -66,6 +66,8 @@ Tool results are delimited as data. Source-record text is never treated as instr
 - Return stable errors without stack traces or secrets.
 - Set request, connection, and provider timeouts.
 
+The API also emits content-type, frame, referrer, and permissions headers on every response, with HSTS enabled in production. Source workflow writes reserve a tenant-scoped request-hash lease before work; expired pending leases are reclaimable, while a key reused for a different operation is rejected.
+
 ## 3. Data protection
 
 All current records are synthetic. A production implementation must classify PII and financial data, encrypt transport and storage, redact logs, define retention/deletion rules, and restrict support access. Secrets live in environment/secret-manager configuration only.
@@ -76,6 +78,9 @@ All current records are synthetic. A production implementation must classify PII
 - [x] Object-level tenant filter is present on every repository query; the demo adapter also returns no seeded data for unknown tenants.
 - [x] Approval thresholds are tested server-side.
 - [x] Replay with the same idempotency key is harmless.
+- [x] Pending idempotency work has a bounded recovery lease in demo and PostgreSQL adapters.
+- [x] Parent/child financial records enforce organization-consistent foreign keys in migration 014.
+- [x] Security response headers are emitted by the API middleware.
 - [x] Prompt-injection fixture has no effect.
 - [x] Malformed model output becomes a safe failure.
 - [x] Logs contain IDs and outcomes, not source payloads or secrets.

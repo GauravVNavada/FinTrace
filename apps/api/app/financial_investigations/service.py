@@ -153,18 +153,46 @@ class FinancialInvestigationService:
         return result
 
     def delete_source(
-        self, context: ActorContext, investigation_id: str, source_file_id: str
+        self, context: ActorContext, investigation_id: str, source_file_id: str, idempotency_key: str
     ) -> str:
         self.get(context.organization_id, investigation_id)
-        result = self._repository.delete_source_file(
-            context.organization_id, investigation_id, source_file_id
+        request_hash = _request_hash(
+            {"operation": "delete_source", "investigation_id": investigation_id, "source_file_id": source_file_id}
         )
-        if result is None:
-            raise SourceFileNotFound(source_file_id)
-        self._repository.record_audit_event(
-            context.organization_id, "SOURCE_FILE_DELETED", source_file_id, context.actor_id
+        replay = self._replay(context, idempotency_key, request_hash)
+        if replay is not None:
+            return str(replay["storage_reference"])
+        reserved = self._repository.reserve_idempotency(
+            context.organization_id, context.actor_id, idempotency_key, request_hash
         )
-        return str(result["storage_reference"])
+        if reserved is not None:
+            if reserved.get("request_hash") != request_hash:
+                raise FinancialInvestigationConflict(
+                    "Idempotency-Key was already used for another request"
+                )
+            if int(reserved.get("response_status", 425)) == 425:
+                raise FinancialInvestigationConflict("An identical source deletion is already in progress")
+            body = reserved.get("response_body")
+            if not isinstance(body, dict) or "storage_reference" not in body:
+                raise FinancialInvestigationConflict("The previous source deletion response is invalid")
+            return str(body["storage_reference"])
+        try:
+            result = self._repository.delete_source_file(
+                context.organization_id, investigation_id, source_file_id
+            )
+            if result is None:
+                raise SourceFileNotFound(source_file_id)
+            self._repository.record_audit_event(
+                context.organization_id, "SOURCE_FILE_DELETED", source_file_id, context.actor_id
+            )
+            body = {"storage_reference": str(result["storage_reference"])}
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, body
+            )
+            return body["storage_reference"]
+        except Exception:
+            self._repository.release_idempotency(context.organization_id, idempotency_key)
+            raise
 
     def _replay(self, context: ActorContext, key: str, request_hash: str) -> dict[str, Any] | None:
         if not key or len(key) > 128:

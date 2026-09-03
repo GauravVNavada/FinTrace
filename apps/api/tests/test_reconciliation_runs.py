@@ -14,7 +14,7 @@ def headers(role: str = "CONTROLLER", key: str | None = None) -> dict[str, str]:
 async def confirm(client: AsyncClient, investigation_id: str, source_id: str) -> None:
     await client.post(
         f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-        headers=headers(),
+        headers=headers(key=f"recon-analyze-{source_id}"),
     )
     mappings = await client.get(
         f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings",
@@ -25,13 +25,13 @@ async def confirm(client: AsyncClient, investigation_id: str, source_id: str) ->
         if mapping["required"]:
             edited = await client.patch(
                 f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/{mapping['id']}",
-                headers=headers(),
+                headers=headers(key=f"recon-mapping-{mapping['id']}"),
                 json={"canonical_field": mapping["canonical_field"], "ignored": False},
             )
             assert edited.status_code == 200
     confirmed = await client.post(
         f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-        headers=headers(),
+        headers=headers(key=f"recon-confirm-{source_id}"),
     )
     assert confirmed.status_code == 200
 
@@ -135,7 +135,7 @@ async def test_reconciliation_run_uses_immutable_normalized_dataset_and_persists
         assert review.json()["status"] == "PENDING_APPROVAL"
         approval = await client.post(
             f"/api/v1/approvals/{review.json()['request_id']}/approve",
-            headers=headers(key="recon-review-approval"),
+            headers={**headers(key="recon-review-approval"), "X-Actor-Id": "independent-approver"},
         )
         assert approval.status_code == 200
         assert approval.json()["request_status"] == "APPROVED"

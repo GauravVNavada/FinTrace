@@ -84,7 +84,7 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
 
         deleted = await client.delete(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}",
-            headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"},
+            headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER", "Idempotency-Key": "delete-sprint1-upload"},
         )
         assert deleted.status_code == 204
         after_delete = await client.get(
@@ -98,6 +98,17 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
             headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"},
         )
         assert "SOURCE_FILE_DELETED" in {event["action"] for event in audit_after_delete.json()}
+
+
+@pytest.mark.asyncio
+async def test_source_delete_requires_idempotency_key() -> None:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.delete(
+            "/api/v1/financial-investigations/FIN-NOT-REAL/sources/SRC-NOT-REAL",
+            headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"},
+        )
+    assert response.status_code == 422
+    assert response.json()["detail"]["code"] == "INVALID_REQUEST"
 
 
 @pytest.mark.asyncio

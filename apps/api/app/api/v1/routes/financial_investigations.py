@@ -285,10 +285,13 @@ def delete_source(
     investigation_id: str,
     source_file_id: str,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> Response:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
     try:
-        storage_reference = service.delete_source(context, investigation_id, source_file_id)
+        storage_reference = service.delete_source(context, investigation_id, source_file_id, idempotency_key)
         remove_upload(storage_reference)
         return Response(status_code=status.HTTP_204_NO_CONTENT)
     except FinancialInvestigationNotFound as error:
@@ -313,10 +316,13 @@ def analyze_source(
     investigation_id: str,
     source_file_id: str,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> SourceAnalysisResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
     try:
-        return analysis_service.analyze(context, investigation_id, source_file_id)
+        return analysis_service.analyze(context, investigation_id, source_file_id, idempotency_key)
     except SourceAnalysisNotFound as error:
         raise HTTPException(
             status_code=404,
@@ -388,11 +394,14 @@ def edit_source_mapping(
     mapping_id: str,
     payload: MappingEdit,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> MappingResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
     try:
         return analysis_service.update_mapping(
-            context, investigation_id, source_file_id, mapping_id, payload
+            context, investigation_id, source_file_id, mapping_id, payload, idempotency_key
         )
     except SourceAnalysisNotFound as error:
         raise HTTPException(
@@ -413,10 +422,13 @@ def confirm_source_mappings(
     investigation_id: str,
     source_file_id: str,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> MappingConfirmationResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
     try:
-        return analysis_service.confirm_mappings(context, investigation_id, source_file_id)
+        return analysis_service.confirm_mappings(context, investigation_id, source_file_id, idempotency_key)
     except SourceAnalysisNotFound as error:
         raise HTTPException(
             status_code=404,
@@ -445,11 +457,14 @@ def update_source_classification(
     source_file_id: str,
     payload: SourceTypeUpdate,
     context: Annotated[ActorContext, Depends(get_actor_context)],
+    idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> SourceAnalysisResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
+    if idempotency_key is None:
+        raise HTTPException(status_code=422, detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"})
     try:
         return analysis_service.update_classification(
-            context, investigation_id, source_file_id, payload
+            context, investigation_id, source_file_id, payload, idempotency_key
         )
     except SourceAnalysisNotFound as error:
         raise HTTPException(

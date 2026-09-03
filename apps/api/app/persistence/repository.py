@@ -5,6 +5,7 @@ from uuid import UUID
 
 from psycopg.types.json import Json
 
+from app.core.config import get_settings
 from app.core.request_context import current_request_id
 from app.domain.lifecycle import CanonicalLifecycle, LifecycleNotFoundError
 from app.domain.schemas import (
@@ -101,10 +102,22 @@ class PostgresRepository:
             return [self._exception(row, organization_id) for row in rows]
 
     def get_exception(self, organization_id: str, exception_id: str) -> ExceptionSummary | None:
-        return next(
-            (item for item in self.list_exceptions(organization_id) if item.id == exception_id),
-            None,
-        )
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                """
+                SELECT source_exception_id, e.organization_id, o.source_order_id, exception_type,
+                       e.severity, e.status, e.financial_exposure_minor, e.currency, e.detected_at,
+                       e.rules_triggered
+                FROM exceptions e
+                JOIN orders o ON o.id = e.order_id AND o.organization_id = e.organization_id
+                WHERE e.organization_id = %s AND e.source_exception_id = %s
+                """,
+                (org_uuid, exception_id),
+            ).fetchone()
+            return self._exception(row, organization_id) if row else None
 
     def related_exceptions(self, organization_id: str, order_id: str) -> list[ExceptionSummary]:
         return [item for item in self.list_exceptions(organization_id) if item.order_id == order_id]
@@ -884,16 +897,28 @@ class PostgresRepository:
     def get_reconciliation_result(
         self, organization_id: str, investigation_id: str, run_id: str, result_id: str
     ) -> dict[str, Any] | None:
-        return next(
-            (
-                item
-                for item in self.list_reconciliation_results(
-                    organization_id, investigation_id, run_id
-                )
-                if item["id"] == result_id
-            ),
-            None,
-        )
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            if org_uuid is None:
+                return None
+            row = conn.execute(
+                """
+                SELECT r.id, r.run_id, r.order_id, r.status, r.exception_type, r.severity,
+                       r.exposure_minor, r.exposure_category, r.findings
+                FROM financial_reconciliation_results r
+                JOIN financial_reconciliation_runs rr
+                  ON rr.id = r.run_id AND rr.organization_id = r.organization_id
+                JOIN financial_investigations fi
+                  ON fi.id = rr.financial_investigation_id
+                 AND fi.organization_id = rr.organization_id
+                WHERE r.organization_id = %s
+                  AND fi.source_investigation_id = %s
+                  AND r.run_id = %s
+                  AND r.id = %s
+                """,
+                (org_uuid, investigation_id, run_id, result_id),
+            ).fetchone()
+            return self._public_organization(row, organization_id) if row else None
 
     def save_financial_exception_investigation(
         self, organization_id: str, investigation_id: str, result_id: str, response: dict[str, Any]
@@ -973,6 +998,50 @@ class PostgresRepository:
                     ),
                 )
 
+    def save_financial_exception_investigation_with_tool_calls(
+        self,
+        organization_id: str,
+        investigation_id: str,
+        result_id: str,
+        response: dict[str, Any],
+        tool_calls: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            investigation = conn.execute(
+                "SELECT id FROM financial_investigations WHERE organization_id = %s AND source_investigation_id = %s",
+                (org_uuid, investigation_id),
+            ).fetchone()
+            if investigation is None:
+                return {}
+            conn.execute(
+                "INSERT INTO financial_exception_investigations (id, organization_id, financial_investigation_id, reconciliation_result_id, status, response, provider, model, prompt_version, started_at, completed_at, latency_ms, verifier_passed, verifier_issues, provider_error_category, provider_retryable, failure_stage, failure_iteration, failure_detail, created_at) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (organization_id, reconciliation_result_id) DO UPDATE SET status = EXCLUDED.status, response = EXCLUDED.response, provider = EXCLUDED.provider, model = EXCLUDED.model, prompt_version = EXCLUDED.prompt_version, started_at = EXCLUDED.started_at, completed_at = EXCLUDED.completed_at, latency_ms = EXCLUDED.latency_ms, verifier_passed = EXCLUDED.verifier_passed, verifier_issues = EXCLUDED.verifier_issues, provider_error_category = EXCLUDED.provider_error_category, provider_retryable = EXCLUDED.provider_retryable, failure_stage = EXCLUDED.failure_stage, failure_iteration = EXCLUDED.failure_iteration, failure_detail = EXCLUDED.failure_detail",
+                (
+                    response["investigation_id"], org_uuid, investigation["id"], result_id,
+                    response["status"], Json(response), response.get("provider"), response.get("model"),
+                    response.get("prompt_version"), response.get("started_at"), response.get("completed_at"),
+                    response.get("latency_ms", 0), response.get("verifier_passed", False),
+                    Json(response.get("verifier_issues", [])), response.get("provider_error_category"),
+                    response.get("provider_retryable"), response.get("failure_stage"),
+                    response.get("failure_iteration"), response.get("failure_detail"), response["created_at"],
+                ),
+            )
+            conn.execute(
+                "DELETE FROM financial_exception_investigation_tool_calls WHERE organization_id = %s AND financial_exception_investigation_id = %s",
+                (org_uuid, response["investigation_id"]),
+            )
+            for call in tool_calls:
+                conn.execute(
+                    "INSERT INTO financial_exception_investigation_tool_calls (organization_id, financial_exception_investigation_id, sequence_no, name, arguments, result_record_ids, result_summary, duration_ms, status, provider, model) VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (
+                        org_uuid, response["investigation_id"], call.get("sequence_no", 0), call["name"],
+                        Json(call.get("arguments", {})), Json(call.get("result_record_ids", [])),
+                        call.get("result_summary", ""), call.get("duration_ms", 0), call.get("status", "UNKNOWN"),
+                        call.get("provider", "unknown"), call.get("model", "unknown"),
+                    ),
+                )
+        return dict(response)
+
     def get_financial_exception_investigation_tool_calls(
         self, organization_id: str, investigation_id: str
     ) -> list[dict[str, Any]]:
@@ -1009,7 +1078,7 @@ class PostgresRepository:
                 SELECT p.source_payment_id AS payment_id, o.source_order_id AS order_id,
                        p.organization_id, p.amount_minor, p.status, p.gateway_fee_minor,
                        p.captured_at
-                FROM payments p JOIN orders o ON o.id = p.order_id
+                FROM payments p JOIN orders o ON o.id = p.order_id AND o.organization_id = p.organization_id
                 WHERE p.organization_id = %s AND o.source_order_id = %s
             """,
                 (org_uuid, order_id),
@@ -1022,7 +1091,7 @@ class PostgresRepository:
                 SELECT s.source_settlement_id AS settlement_id, s.organization_id,
                        p.source_payment_id AS payment_id, s.gross_minor, s.fees_minor,
                        s.tax_minor, s.net_minor, s.settled_at, s.status
-                FROM settlements s JOIN payments p ON p.id = s.payment_id
+                FROM settlements s JOIN payments p ON p.id = s.payment_id AND p.organization_id = s.organization_id
                 WHERE s.organization_id = %s AND p.source_payment_id = ANY(%s)
             """,
                 (org_uuid, payment_ids),
@@ -1033,7 +1102,7 @@ class PostgresRepository:
                 """
                 SELECT r.source_refund_id AS refund_id, r.organization_id,
                        p.source_payment_id AS payment_id, r.amount_minor, r.status, r.processed_at
-                FROM refunds r JOIN payments p ON p.id = r.payment_id
+                FROM refunds r JOIN payments p ON p.id = r.payment_id AND p.organization_id = r.organization_id
                 WHERE r.organization_id = %s AND p.source_payment_id = ANY(%s)
             """,
                 (org_uuid, payment_ids),
@@ -1044,7 +1113,7 @@ class PostgresRepository:
                 """
                 SELECT i.source_invoice_id AS invoice_id, i.organization_id,
                        o.source_order_id AS order_id, i.gross_minor, i.status, i.created_at
-                FROM invoices i JOIN orders o ON o.id = i.order_id
+                FROM invoices i JOIN orders o ON o.id = i.order_id AND o.organization_id = i.organization_id
                 WHERE i.organization_id = %s AND o.source_order_id = %s
             """,
                 (org_uuid, order_id),
@@ -1056,7 +1125,7 @@ class PostgresRepository:
                 SELECT m.source_movement_id AS movement_id, m.organization_id,
                        o.source_order_id AS order_id, m.sku, m.quantity, m.movement_type,
                        m.occurred_at
-                FROM inventory_movements m JOIN orders o ON o.id = m.order_id
+                FROM inventory_movements m JOIN orders o ON o.id = m.order_id AND o.organization_id = m.organization_id
                 WHERE m.organization_id = %s AND o.source_order_id = %s
             """,
                 (org_uuid, order_id),
@@ -1100,7 +1169,7 @@ class PostgresRepository:
                 """
                 SELECT p.source_payment_id AS payment_id, o.source_order_id AS order_id,
                        p.amount_minor, p.status, p.gateway_fee_minor, p.captured_at
-                FROM payments p JOIN orders o ON o.id = p.order_id
+                FROM payments p JOIN orders o ON o.id = p.order_id AND o.organization_id = p.organization_id
                 WHERE p.organization_id = %s AND o.source_order_id = ANY(%s)
             """,
                 (org_uuid, order_ids),
@@ -1112,7 +1181,7 @@ class PostgresRepository:
                 """
                 SELECT s.source_settlement_id AS settlement_id, p.source_payment_id AS payment_id,
                        s.gross_minor, s.fees_minor, s.tax_minor, s.net_minor, s.settled_at, s.status
-                FROM settlements s JOIN payments p ON p.id = s.payment_id
+                FROM settlements s JOIN payments p ON p.id = s.payment_id AND p.organization_id = s.organization_id
                 WHERE s.organization_id = %s AND p.source_payment_id = ANY(%s)
             """,
                 (org_uuid, payment_ids),
@@ -1123,7 +1192,7 @@ class PostgresRepository:
                 """
                 SELECT r.source_refund_id AS refund_id, p.source_payment_id AS payment_id,
                        r.amount_minor, r.status, r.processed_at
-                FROM refunds r JOIN payments p ON p.id = r.payment_id
+                FROM refunds r JOIN payments p ON p.id = r.payment_id AND p.organization_id = r.organization_id
                 WHERE r.organization_id = %s AND p.source_payment_id = ANY(%s)
             """,
                 (org_uuid, payment_ids),
@@ -1134,7 +1203,7 @@ class PostgresRepository:
                 """
                 SELECT i.source_invoice_id AS invoice_id, o.source_order_id AS order_id,
                        i.gross_minor, i.status, i.created_at
-                FROM invoices i JOIN orders o ON o.id = i.order_id
+                FROM invoices i JOIN orders o ON o.id = i.order_id AND o.organization_id = i.organization_id
                 WHERE i.organization_id = %s AND o.source_order_id = ANY(%s)
             """,
                 (org_uuid, order_ids),
@@ -1145,7 +1214,7 @@ class PostgresRepository:
                 """
                 SELECT m.source_movement_id AS movement_id, o.source_order_id AS order_id,
                        m.sku, m.quantity, m.movement_type, m.occurred_at
-                FROM inventory_movements m JOIN orders o ON o.id = m.order_id
+                FROM inventory_movements m JOIN orders o ON o.id = m.order_id AND o.organization_id = m.organization_id
                 WHERE m.organization_id = %s AND o.source_order_id = ANY(%s)
             """,
                 (org_uuid, order_ids),
@@ -1233,14 +1302,14 @@ class PostgresRepository:
                 ),
             )
 
-    def audit_events(self, organization_id: str, resource_id: str) -> list[dict[str, str]]:
-        return self._audit_query(organization_id, "resource_id = %s", (resource_id,))
+    def audit_events(self, organization_id: str, resource_id: str, limit: int = 200) -> list[dict[str, str]]:
+        return self._audit_query(organization_id, "resource_id = %s", (resource_id,), limit)
 
-    def audit_events_for_organization(self, organization_id: str) -> list[dict[str, str]]:
-        return self._audit_query(organization_id, "TRUE", ())
+    def audit_events_for_organization(self, organization_id: str, limit: int = 200) -> list[dict[str, str]]:
+        return self._audit_query(organization_id, "TRUE", (), limit)
 
     def _audit_query(
-        self, organization_id: str, predicate: str, params: tuple[Any, ...]
+        self, organization_id: str, predicate: str, params: tuple[Any, ...], limit: int = 200
     ) -> list[dict[str, str]]:
         with connection(self._database_url) as conn:
             org_uuid = self._organization_uuid(conn, organization_id)
@@ -1253,8 +1322,9 @@ class PostgresRepository:
                 FROM audit_events
                 WHERE organization_id = %s AND {predicate}
                 ORDER BY created_at DESC
+                LIMIT %s
                 """,
-                (org_uuid, *params),
+                (org_uuid, *params, min(max(limit, 1), 500)),
             ).fetchall()
             return [
                 {
@@ -1323,15 +1393,31 @@ class PostgresRepository:
             org_uuid = self._organization_uuid(conn, organization_id)
             if org_uuid is None:
                 return None
+            lease_seconds = get_settings().idempotency_lease_seconds
+            reclaimed = conn.execute(
+                """
+                UPDATE idempotency_keys
+                SET actor_id = %s, request_hash = %s, response_status = 425,
+                    response_body = %s,
+                    expires_at = now() + make_interval(secs => %s)
+                WHERE organization_id = %s AND idempotency_key = %s
+                  AND response_status = 425
+                  AND (expires_at IS NULL OR expires_at <= now())
+                RETURNING id
+                """,
+                (actor_id, request_hash, Json({"status": "PENDING"}), lease_seconds, org_uuid, idempotency_key),
+            ).fetchone()
+            if reclaimed is not None:
+                return None
             inserted = conn.execute(
                 """
                 INSERT INTO idempotency_keys
-                  (organization_id, actor_id, idempotency_key, request_hash, response_status, response_body)
-                VALUES (%s, %s, %s, %s, 425, %s)
+                  (organization_id, actor_id, idempotency_key, request_hash, response_status, response_body, expires_at)
+                VALUES (%s, %s, %s, %s, 425, %s, now() + make_interval(secs => %s))
                 ON CONFLICT (organization_id, idempotency_key) DO NOTHING
                 RETURNING actor_id
                 """,
-                (org_uuid, actor_id, idempotency_key, request_hash, Json({"status": "PENDING"})),
+                (org_uuid, actor_id, idempotency_key, request_hash, Json({"status": "PENDING"}), lease_seconds),
             ).fetchone()
             if inserted is not None:
                 return None

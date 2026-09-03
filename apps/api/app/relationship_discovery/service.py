@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from hashlib import sha256
-from typing import Any
+from typing import Any, cast
 
 from app.controls.schemas import ActorContext
 from app.core.config import get_settings
@@ -12,6 +14,8 @@ from app.relationship_discovery.schemas import (
     RelationshipResponse,
     RelationshipStatus,
 )
+
+RelationshipList = list[dict[str, Any]]
 from app.repositories.contracts import WorkflowRepository
 from app.source_analysis.analyzer import analyze_content
 
@@ -226,7 +230,7 @@ class RelationshipDiscoveryService:
 
     def _idempotency_replay(
         self, context: ActorContext, idempotency_key: str, request_hash: str
-    ) -> list[dict[str, Any]] | None:
+    ) -> RelationshipList | None:
         if not idempotency_key or len(idempotency_key) > 128:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
         previous = self._repository.get_idempotency(context.organization_id, idempotency_key)
@@ -238,7 +242,7 @@ class RelationshipDiscoveryService:
             raise RelationshipConflict("An identical relationship operation is already in progress")
         body = previous.get("response_body", {})
         if isinstance(body, dict) and "relationships" in body:
-            return list(body["relationships"])
+            return [dict(item) for item in cast(RelationshipList, body["relationships"])]
         if isinstance(body, dict) and "relationship" in body:
             return [body["relationship"]]
         return []

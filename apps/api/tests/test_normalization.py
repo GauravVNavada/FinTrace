@@ -169,7 +169,7 @@ async def test_normalization_preserves_source_lineage_and_blocks_unconfirmed_sou
         assert blocked.status_code == 409
         await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-            headers=headers(),
+            headers=headers(key="norm-analyze"),
         )
         mappings = (
             await client.get(
@@ -181,13 +181,13 @@ async def test_normalization_preserves_source_lineage_and_blocks_unconfirmed_sou
             if mapping["required"]:
                 await client.patch(
                     f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/{mapping['id']}",
-                    headers=headers(),
+                    headers=headers(key=f"norm-mapping-{mapping['id']}"),
                     json={"canonical_field": mapping["canonical_field"], "ignored": False},
                 )
         assert (
             await client.post(
                 f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-                headers=headers(),
+                headers=headers(key="norm-confirm"),
             )
         ).status_code == 200
         normalized = await client.post(

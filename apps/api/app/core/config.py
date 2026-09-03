@@ -37,6 +37,8 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "openai/gpt-oss-120b"
     ai_timeout_seconds: float = 20.0
+    idempotency_lease_seconds: int = 900
+    audit_page_size: int = 200
     auth_mode: str = "development"
     auth_secret: str = "fintrace-development-only-secret"
     auth_issuer: str = "fintrace"

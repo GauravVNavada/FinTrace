@@ -1,6 +1,6 @@
 # FinTrace Phase Scope
 
-Status: P0 buildathon implementation · Sprints 0–7 foundation plus P0 repair complete/validated conditionally on live-provider availability · 2026-08-31
+Status: P0 buildathon implementation · Sprints 0–7 foundation plus Track 4 reliability/UX hardening complete/validated conditionally on live-provider availability · 2026-09-03
 
 ## Product evolution scope
 
@@ -27,6 +27,8 @@ P0 release contract: reconciliation consumes every normalized record in the immu
 | 5 | Real bounded AI exception investigation, visible tool trace, verification, and ambiguity refusal | Complete for the local/provider-adapter path: the configured provider selects only validated/capped read-only evidence tools; uploaded reconciliation results persist `SUPPORTED`/`UNRESOLVED`/`FAILED` through migration 010, support an opt-in OpenAI-compatible adapter, expose scoped retrieval and a controlled human-review/approval route, and show evidence/tool traces. Provider outage is an explicit unavailable state and ambiguity remains `UNRESOLVED`. The default local provider is explicitly deterministic/offline. |
 | 6 | Derived patterns, exposure analytics, populated audit, and AI evaluation metrics | Complete for deterministic patterns, potential-exposure roll-up, audit population, and measured synthetic evaluation. Uploaded-dataset AI scoring is intentionally not enabled without a ground-truth label contract. |
 | 7 | Explicit demo mode, fresh synthetic investigations, and final UX polish | Complete: fresh bounded synthetic generation, source/intake/relationship/reconciliation/investigation screens, honest demo copy, and browser-verified walkthrough are implemented. |
+
+Post-P0 hardening is included in the active product: organization-aware persistence constraints, bounded direct lookups, replay leases, complete source-mutation idempotency, security headers, accessible skip navigation, and explicit empty/forbidden/unavailable states for control screens. These changes do not expand Track 4 into autonomous payment execution or real-money movement.
 
 No sprint may be marked complete when its behavior is only visual, hardcoded, disconnected from persistence, or silently backed by fake AI.
 

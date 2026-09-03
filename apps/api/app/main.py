@@ -78,9 +78,9 @@ async def write_rate_limit_middleware(request: Request, call_next):
         "PATCH",
         "DELETE",
     }:
-        identity = request.headers.get("X-Organization-Id") or (
-            request.client.host if request.client else "unknown"
-        )
+        client_identity = request.client.host if request.client else "unknown"
+        organization = request.headers.get("X-Organization-Id", "unknown")
+        identity = f"{client_identity}:{organization}"
         now = monotonic()
         cutoff = now - settings.rate_limit_window_seconds
         with _rate_limit_lock:
@@ -103,6 +103,18 @@ async def write_rate_limit_middleware(request: Request, call_next):
                 )
             timestamps.append(now)
     return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers_middleware(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if settings.app_env == "production":
+        response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    return response
 
 
 app.include_router(v1_router, prefix=settings.api_prefix)

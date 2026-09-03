@@ -1,6 +1,6 @@
 # FinTrace Operations and Observability
 
-**Status:** local product operational contract; ingestion and reconciliation observability defined · 2026-08-31
+**Status:** local product operational contract; ingestion, reconciliation, replay recovery, and bounded audit observability defined · 2026-09-03
 
 ## Ingestion metrics
 
@@ -65,3 +65,7 @@ Alert on sustained provider failures, database errors, high unresolved growth, u
 3. Keep deterministic reconciliation and manual review available.
 4. Do not replay consequential writes without idempotency verification.
 5. Record root cause, affected organization scope, and recovery evidence.
+
+## Console state semantics (2026-09-03)
+
+The web console treats `/ready` as process/dependency connectivity only. A missing latest evaluation is a normal not-yet-run state; authorization failures and dependency failures remain distinct and expose a retry or access action. This prevents an operationally healthy API from being represented as a red outage merely because there is no result yet.

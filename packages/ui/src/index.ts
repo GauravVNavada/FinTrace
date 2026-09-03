@@ -2,6 +2,7 @@ export { Alert, AlertDescription, AlertTitle, type AlertProps } from "./componen
 export { Badge, type BadgeProps } from "./components/badge";
 export { Button, buttonVariants, type ButtonProps } from "./components/button";
 export { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "./components/card";
+export { EmptyState } from "./components/empty-state";
 export { Input } from "./components/input";
 export { FileInput } from "./components/file-input";
 export { Progress, type ProgressProps } from "./components/progress";

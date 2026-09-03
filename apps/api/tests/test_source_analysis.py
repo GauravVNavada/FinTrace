@@ -17,6 +17,10 @@ def _headers(role: str = "CONTROLLER") -> dict[str, str]:
     return {"X-Organization-Id": "ORG-001", "X-Actor-Id": "sprint2-user", "X-Actor-Role": role}
 
 
+def _operation_headers(key: str, role: str = "CONTROLLER") -> dict[str, str]:
+    return {**_headers(role), "Idempotency-Key": key}
+
+
 class _FailingSourceProvider:
     def __init__(self, *, retryable: bool) -> None:
         self.calls = 0
@@ -94,7 +98,7 @@ async def test_source_analysis_proposes_mappings_and_requires_explicit_confirmat
 
         analyzed = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-            headers=_headers(),
+            headers=_operation_headers("sprint2-analyze-analysis"),
         )
         assert analyzed.status_code == 200
         assert analyzed.json()["source_type"] == "PAYMENTS"
@@ -111,7 +115,7 @@ async def test_source_analysis_proposes_mappings_and_requires_explicit_confirmat
 
         confirmed = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-            headers=_headers(),
+            headers=_operation_headers("sprint2-confirm-analysis"),
         )
         assert confirmed.status_code == 200
         assert confirmed.json()["status"] == "CONFIRMED"
@@ -147,7 +151,7 @@ async def test_missing_required_mapping_is_blocked_and_can_be_edited() -> None:
         source_id = uploaded.json()["id"]
         analyzed = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/analyze",
-            headers=_headers(),
+            headers=_operation_headers("sprint2-analyze-missing"),
         )
         assert analyzed.status_code == 200
         mappings = await client.get(
@@ -157,7 +161,7 @@ async def test_missing_required_mapping_is_blocked_and_can_be_edited() -> None:
         assert mappings.status_code == 200
         confirmation = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/confirm",
-            headers=_headers(),
+            headers=_operation_headers("sprint2-confirm-missing"),
         )
         assert confirmation.status_code == 409
         assert "payment_id" in confirmation.json()["detail"]["missing_fields"]
@@ -167,7 +171,7 @@ async def test_missing_required_mapping_is_blocked_and_can_be_edited() -> None:
         )
         edited = await client.patch(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}/mappings/{order_mapping['id']}",
-            headers=_headers(),
+            headers=_operation_headers("sprint2-edit-missing"),
             json={"canonical_field": "payment_id", "ignored": False},
         )
         assert edited.status_code == 200
@@ -212,7 +216,7 @@ async def test_filename_signal_disambiguates_invoice_from_order_exports() -> Non
         )
         analyzed = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources/{uploaded.json()['id']}/analyze",
-            headers=_headers(),
+            headers=_operation_headers("invoice-classification-analyze"),
         )
         assert analyzed.status_code == 200
         assert analyzed.json()["source_type"] == "INVOICES"

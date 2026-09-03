@@ -1,6 +1,6 @@
 # FinTrace Testing Strategy
 
-**Status:** active; local Sprints 0–7 path verified · 2026-08-31
+**Status:** active; local Sprints 0–7 path plus Track 4 hardening verified · 2026-09-03
 
 ## Evolution test path
 
@@ -115,6 +115,8 @@ $env:DATABASE_URL = "postgresql://fintrace:fintrace@127.0.0.1:55432/fintrace"
 ```
 
 The Python runtime is installed locally. API/simulator tests run with `apps/api/.venv`; Docker PostgreSQL migrations 001–010 and seed-42 data are the local persistence verification path.
+
+The current local API contract test run is `83 passed, 3 skipped` (2026-09-03). It includes required idempotency headers for every source mutation, request-hash replay/conflict behavior, independent-approver enforcement, organization-scoped reads, and the Track 4 workflow. The PostgreSQL path must apply migration 014 before release verification; the demo adapter is process-local and is not restart durability.
 
 ## Verified local release evidence
 

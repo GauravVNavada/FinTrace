@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from threading import RLock
 from typing import cast
@@ -216,17 +216,17 @@ class DemoRepository:
             }
         )
 
-    def audit_events(self, organization_id: str, resource_id: str) -> list[dict[str, str]]:
+    def audit_events(self, organization_id: str, resource_id: str, limit: int = 200) -> list[dict[str, str]]:
         return [
             event
             for event in self._audit_events
             if event["organization_id"] == organization_id and event["resource_id"] == resource_id
-        ]
+        ][-min(max(limit, 1), 500):][::-1]
 
-    def audit_events_for_organization(self, organization_id: str) -> list[dict[str, str]]:
+    def audit_events_for_organization(self, organization_id: str, limit: int = 200) -> list[dict[str, str]]:
         return [
             event for event in self._audit_events if event["organization_id"] == organization_id
-        ]
+        ][-min(max(limit, 1), 500):][::-1]
 
     def related_exceptions(self, organization_id: str, order_id: str) -> list[ExceptionSummary]:
         return [item for item in self.list_exceptions(organization_id) if item.order_id == order_id]
@@ -626,6 +626,22 @@ class DemoRepository:
             dict(item) for item in tool_calls
         ]
 
+    def save_financial_exception_investigation_with_tool_calls(
+        self,
+        organization_id: str,
+        investigation_id: str,
+        result_id: str,
+        response: dict[str, object],
+        tool_calls: list[dict[str, object]],
+    ) -> dict[str, object]:
+        saved = self.save_financial_exception_investigation(
+            organization_id, investigation_id, result_id, response
+        )
+        self.save_financial_exception_investigation_tool_calls(
+            organization_id, str(response["investigation_id"]), tool_calls
+        )
+        return saved
+
     def get_financial_exception_investigation_tool_calls(
         self, organization_id: str, investigation_id: str
     ) -> list[dict[str, object]]:
@@ -667,12 +683,22 @@ class DemoRepository:
             key = (organization_id, idempotency_key)
             existing = self._idempotency.get(key)
             if existing is not None:
+                expires_at = existing.get("expires_at")
+                if (
+                    existing.get("response_status") == 425
+                    and isinstance(expires_at, datetime)
+                    and expires_at <= datetime.now(UTC)
+                ):
+                    existing = None
+                    self._idempotency.pop(key, None)
+            if existing is not None:
                 return dict(existing)
             self._idempotency[key] = {
                 "actor_id": actor_id,
                 "request_hash": request_hash,
                 "response_status": 425,
                 "response_body": {"status": "PENDING"},
+                "expires_at": datetime.now(UTC) + timedelta(minutes=15),
             }
             return None
 
@@ -800,7 +826,7 @@ class DemoRepository:
             if decision == "REJECTED"
             else (
                 "APPROVED"
-                if approvals_received >= int(request["required_approvals"])
+                if approvals_received >= int(cast(int, request["required_approvals"]))
                 else "PENDING_APPROVAL"
             )
         )
