@@ -69,7 +69,7 @@ export function ActionNotice({ message, variant = "info" }: { message: string | 
 }
 
 export function PageHeading({ eyebrow, title, description, children }: { eyebrow: string; title: string; description: string; children?: React.ReactNode }) {
-  return <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><div className="mb-2 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground"><span>{eyebrow}</span><span className="h-1 w-1 rounded-full bg-border" /><span>{appConfig.workspaceEnvironment}</span></div><h1 className="text-[28px] font-bold tracking-[-0.03em] text-foreground">{title}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p></div><div className="flex items-center gap-2">{children}</div></div>;
+  return <div className="mb-7 flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><div className="mb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">{eyebrow}</div><h1 className="text-[28px] font-bold tracking-[-0.03em] text-foreground">{title}</h1><p className="mt-2 max-w-2xl text-sm text-muted-foreground">{description}</p></div><div className="flex items-center gap-2">{children}</div></div>;
 }
 
 export function Overview() {

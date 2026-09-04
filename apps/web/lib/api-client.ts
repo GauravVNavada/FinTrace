@@ -282,7 +282,7 @@ export function fetchReconciliationInvestigation(investigationId: string, runId:
   return get<import("./types").ApiInvestigation>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(resultId)}/investigation`);
 }
 
-export function requestFinancialResolution(investigationId: string, runId: string, resultId: string, actionCode: ResolutionActionCode, idempotencyKey: string) {
+export function requestFinancialResolution(investigationId: string, runId: string, resultId: string, actionCode: ResolutionActionCode, idempotencyKey = requestId()) {
   return post<ApiResolutionRequest>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(resultId)}/resolution-request`, { action_code: actionCode }, idempotencyKey);
 }
 

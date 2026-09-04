@@ -1,5 +1,9 @@
 # Product Requirements Document — FinTrace
 
+## Controller close experience (2026-09-04)
+
+The primary controller experience is a month-end financial close. The visible flow is **Home → Closes → Overview / Data / Results / Attention**. Login has one controller-first action; high-confidence source mappings and data connections are handled automatically; `Run close` owns the existing normalization and deterministic reconciliation sequence; and the Attention queue contains only needs-evidence, needs-decision, and approval-required work. Audit and Evaluation remain secondary proof surfaces. Internal exception codes, reconciliation rules, tenant scope, RBAC, PostgreSQL persistence, bounded investigation tools, verification, approval, and audit behavior remain unchanged.
+
 **Product:** FinTrace  
 **Tagline:** Financial exception investigation and lifecycle observability for multi-system business operations  
 **Buildathon Track:** Razorpay AI Buildathon — Track 04: AI Finance Controller  
@@ -45,7 +49,7 @@ The four terms below are intentionally distinct:
 | `ReconciliationRun` | One deterministic execution over a specific dataset version. |
 | `EvaluationRun` | A benchmark execution against hidden synthetic ground truth. |
 
-The controller-facing close workspace also separates outcome from finding. `RECONCILED` means the lifecycle proved cleanly; `EXPLAINED` means a deterministic finding or verified investigation explains the break; `NEEDS_EVIDENCE` means the available records are insufficient; `NEEDS_HUMAN_DECISION` means evidence remains genuinely ambiguous; `APPROVAL_REQUIRED` means the conclusion is known but policy requires authorization; and `FAILED` is reserved for provider or system execution failure. These labels do not replace internal exception codes such as `MISSING_SETTLEMENT` or `ERP_AMOUNT_MISMATCH`.
+The controller-facing close workspace also separates outcome from finding. `RECONCILED` means the lifecycle proved cleanly; `EXPECTED VARIANCE` means a known timing or fee difference does not require investigation; `EXPLAINED` means a deterministic finding or verified investigation explains the break; `NEEDS EVIDENCE` means the available records are insufficient; `NEEDS DECISION` means evidence is sufficient but a human must apply policy or business judgment; `APPROVAL REQUIRED` means the conclusion is known but policy requires authorization; and `FAILED` is reserved for provider or system execution failure. Ambiguous payment associations with no unique reference are `NEEDS EVIDENCE`, not `NEEDS DECISION`. These labels do not replace internal exception codes such as `MISSING_SETTLEMENT` or `ERP_AMOUNT_MISMATCH`.
 
 Deterministic software establishes financial truth. AI interprets residual ambiguity. FinTrace is not a generic upload-and-ask-GPT system, spreadsheet chatbot, LLM arithmetic engine, autonomous money-moving agent, or replacement for accounting and audit systems.
 

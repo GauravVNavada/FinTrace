@@ -1,6 +1,6 @@
 import { AppShell } from "../../components/app-shell";
-import { FinancialInvestigationsPage } from "../../components/financial-investigations";
+import { CloseInvestigationsPage } from "../../components/close-workflow";
 
 export default function InvestigationsRoute() {
-  return <AppShell><FinancialInvestigationsPage /></AppShell>;
+  return <AppShell><CloseInvestigationsPage /></AppShell>;
 }

@@ -1,6 +1,6 @@
 import { AppShell } from "../components/app-shell";
-import { Overview } from "../components/dashboard";
+import { CloseHomePage } from "../components/close-workflow";
 
 export default function HomePage() {
-  return <AppShell><Overview /></AppShell>;
+  return <AppShell><CloseHomePage /></AppShell>;
 }

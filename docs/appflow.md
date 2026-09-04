@@ -14,15 +14,14 @@ The primary user journey is investigation-scoped:
 ```text
 Investigations
   → New financial investigation
-  → Upload sources
-  → Review mappings
-  → Review relationships
-  → Build dataset/lifecycles
-  → Reconcile
-  → Exceptions, patterns, evaluation, audit
+  → Upload sources (high-confidence setup is automatic)
+  → Review only uncertain data links
+  → Run close analysis
+  → Attention queue and human decisions
+  → Patterns, evaluation, audit
 ```
 
-The `/investigations/*` routes provide the complete local `FinancialInvestigation` close workspace and source-to-reconciliation flow. Sources can be uploaded or generated fresh; the current exception detail investigation remains a separate `ExceptionInvestigation` child workflow. The controller-facing outcome vocabulary is `RECONCILED`, `EXPLAINED`, `NEEDS_EVIDENCE`, `NEEDS_HUMAN_DECISION`, `APPROVAL_REQUIRED`, and `FAILED`; internal deterministic exception codes remain unchanged.
+The `/investigations/*` routes provide the complete local `FinancialInvestigation` close workspace. Its primary stages are **Overview**, **Data**, **Results**, and **Attention**; source files and relationships are details inside Data, while Audit remains secondary. High-confidence source mappings and relationships are prepared automatically, and only uncertainty opens a review action. The current exception detail investigation remains a separate `ExceptionInvestigation` child workflow. The controller-facing outcome vocabulary is `RECONCILED`, `EXPECTED VARIANCE`, `EXPLAINED`, `NEEDS EVIDENCE`, `NEEDS DECISION`, `APPROVAL REQUIRED`, and `FAILED`; internal deterministic exception codes remain unchanged. Ambiguous payment associations are `NEEDS EVIDENCE` when a unique reference is missing, not an invitation for a controller to guess.
 
 ### Financial investigation source intake (implemented Sprint 1)
 
@@ -32,35 +31,28 @@ The `/investigations/*` routes provide the complete local `FinancialInvestigatio
 4. The API validates format, encoding, headers, size, extracted rows/columns, organization ownership, and idempotency before storing bytes under a generated server reference.
 5. The UI refreshes the persisted source list and displays metadata/status. Unsafe or malformed files remain rejected with a safe error.
 6. Analyst may remove a source; the API deletes the stored bytes and records an audit event.
-7. The source page can analyze each file, review/edit mappings, and confirm required fields. It also offers bounded fresh synthetic generation only before sources exist. No state implies that reconciliation has run.
+7. The Data stage analyzes each file and automatically accepts complete, high-confidence mappings. The compact default view shows file readiness and opens the legacy mapping editor only when a user chooses Review mapping or uncertainty remains. No state implies that reconciliation has run.
 
 ### Source analysis and mapping review (implemented Sprint 2 slice)
 
-For an uploaded or generated source, the web flow can request bounded analysis, review classification and mapping proposals, edit or ignore columns, and explicitly confirm mappings. Required-field gaps remain visible and block confirmation. Offline analysis is labelled deterministic/offline; a configured live provider is optional and provider failure is shown as unavailable rather than presented as a successful AI result. The reconciliation screen reports primary and fallback provider/model health separately, and a completed investigation truthfully shows the actual provider/model and any fallback reason. The investigation overview and standalone relationship route can discover deterministic relationship proposals and accept or reject them; confirmed sources can then be normalized into an immutable dataset version with row-level lineage and reconciled through the deterministic lifecycle engine. Uploaded-run exceptions are investigated from the owning financial investigation; the seeded legacy queue remains a separate compatibility workflow.
+For an uploaded or generated source, the Data stage requests bounded analysis and displays a compact file-level result. Required-field gaps remain visible and block the close until reviewed; complete high-confidence mappings are confirmed automatically. Offline analysis is labelled deterministic/offline; a configured live provider is optional and provider failure is shown as unavailable rather than presented as a successful AI result. High-confidence relationships are accepted automatically; only conflicting or ambiguous links expose review actions. Confirmed sources can then be normalized into an immutable dataset version with row-level lineage and reconciled through the deterministic lifecycle engine. Uploaded-run exceptions are investigated from the owning financial investigation; the seeded legacy queue remains a separate compatibility workflow.
 
 ## 1. Navigation map
 
 ```text
 Authenticated workspace
         |
-        +--> Overview
-        |      +--> Reconciliation health
-        |      +--> Priority exceptions
-        |      +--> Recurring patterns
+        +--> Home
+        |      +--> Current close summary
         |
-        +--> Investigations
-        |      +--> Investigation workspace
-        |             +--> Overview
-        |             +--> Sources
-        |             +--> Relationships
-        |             +--> Reconciliation
-        |             +--> Attention
-        |             +--> Audit context
+        +--> Closes
+        |      +--> Overview
+        |      +--> Data (uploads + uncertain connections)
+        |      +--> Results
+        |      +--> Attention
         |
-        +--> Patterns
-        +--> Evaluations
-        +--> Audit trail
-        +--> Settings
+        +--> Audit (secondary)
+        +--> Evaluation (secondary)
 ```
 
 ## 2. Overview flow
@@ -71,7 +63,7 @@ Authenticated workspace
 4. Priority exceptions link to the canonical detail view.
 5. Pattern cards show correlation signals and a recommended control.
 6. Export report downloads the current investigation summary as a CSV; the investigation control invokes persisted deterministic normalization/reconciliation and reports completion or failure in place. Benchmark evaluation is a separate control under Evaluations.
-7. The reconciliation panel separates deterministic explanations from the attention queue. Obvious findings are explained without an AI call; only eligible cross-system or ambiguous cases offer bounded evidence investigation, and only genuine ambiguity offers a controller decision request.
+7. The Results panel separates deterministic explanations from the attention queue. Explained findings show their evidence trail and a follow-up destination where useful; only unresolved evidence gaps, genuine policy decisions, and approval-required actions enter Attention.
 
 Empty state: “No unresolved exceptions. All lifecycles reconciled for this batch.”  
 Failure state: “Dashboard unavailable. Try again. Existing run history remains available.”
@@ -164,7 +156,10 @@ Investigation requested
 | Screen | Route | Primary question | Required states |
 | --- | --- | --- | --- |
 | Overview | `/` | Are books currently reconciled? | populated, empty, unavailable |
-| Attention queue | `/investigations/:id#attention` | Investigation-scoped queue for ambiguous cases and optional residual evidence work. | populated, empty, unavailable |
+| Investigation overview | `/investigations/:id` | What is complete for this period and what is the next close action? | populated, no run, unavailable |
+| Data | `/investigations/:id/data` | Are source files ready, and are any relationships uncertain? | ready, needs review, empty, unavailable |
+| Reconciliation | `/investigations/:id/reconciliation` | What did the deterministic close analysis prove? | populated, no run, failure |
+| Attention queue | `/investigations/:id/attention` | Which items need evidence, a human decision, or approval? | populated, filtered empty, unavailable |
 | Exception queue | `/exceptions` | Compatibility-only legacy queue; not part of the primary close navigation. | populated, filtered empty, unavailable |
 | Exception detail | `/exceptions/:id` | What happened and what is safe next? | populated, missing ID, investigation unavailable |
 | Patterns | `/patterns` | What is recurring? | loading, populated, no patterns, unavailable |

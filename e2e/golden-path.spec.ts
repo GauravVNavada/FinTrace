@@ -1,9 +1,9 @@
 import { expect, test } from "@playwright/test";
 
 const investigation = {
-  id: "FIN-DEMO-001",
+  id: "FIN-591BF1714F6A",
   organization_id: "ORG-001",
-  name: "FinTrace Flagship Demo",
+  name: "August 2026 Independent Close",
   description: "Prepared synthetic lifecycle review",
   period_start: "2026-08-01",
   period_end: "2026-08-31",
@@ -21,17 +21,17 @@ const run = {
   financial_investigation_id: investigation.id,
   dataset_version_id: "DS-DEMO-001",
   status: "COMPLETED",
-  records_expected: 303,
-  records_loaded: 303,
-  records_consumed: 303,
+  records_expected: 544,
+  records_loaded: 544,
+  records_consumed: 544,
   orphan_record_count: 0,
   rejected_record_count: 0,
   failure_reason: null,
-  lifecycle_count: 50,
-  reconciled_count: 39,
-  exception_count: 7,
-  ambiguous_count: 1,
-  open_exposure_minor: 1874000,
+  lifecycle_count: 90,
+  reconciled_count: 76,
+  exception_count: 12,
+  ambiguous_count: 2,
+  open_exposure_minor: 5929300,
   started_at: "2026-08-31T09:01:00Z",
   completed_at: "2026-08-31T09:05:00Z",
 };
@@ -48,6 +48,45 @@ const exception = {
   findings: [{ code: "AMBIGUOUS_ASSOCIATION", message: "Two payment candidates remain plausible", exposure_minor: 1874000, exposure_category: "CONTROL_RISK" }],
 };
 
+const secondAmbiguous = {
+  id: "RRES-DEMO-003",
+  run_id: run.id,
+  order_id: "ORD-10088",
+  status: "AMBIGUOUS",
+  exception_type: "AMBIGUOUS_ASSOCIATION",
+  severity: "HIGH",
+  exposure_minor: 249900,
+  exposure_category: "CONTROL_RISK",
+  findings: [{ code: "AMBIGUOUS_ASSOCIATION", message: "Two payment candidates remain plausible", exposure_minor: 249900, exposure_category: "CONTROL_RISK" }],
+};
+
+const missingSettlement = {
+  id: "RRES-DEMO-002",
+  run_id: run.id,
+  order_id: "ORD-10006",
+  status: "EXCEPTION",
+  exception_type: "MISSING_SETTLEMENT",
+  severity: "HIGH",
+  exposure_minor: 2719600,
+  exposure_category: "CONTROL_RISK",
+  findings: [{ code: "MISSING_SETTLEMENT", message: "Captured payment has no matching settlement", exposure_minor: 2719600, exposure_category: "CONTROL_RISK" }],
+};
+
+const sources = Array.from({ length: 7 }, (_, index) => ({
+  id: `SRC-DEMO-${index + 1}`,
+  organization_id: "ORG-001",
+  financial_investigation_id: investigation.id,
+  original_filename: ["August_Orders.xlsx", "Gateway_Payments.csv", "Bank_Settlement_Report.xlsx", "ERP_Invoice_Register.csv", "Refund_Report.xlsx", "Inventory_Movements.csv", "Employee_Actions.csv"][index],
+  mime_type: "text/csv",
+  size_bytes: 1200,
+  row_count: [90, 94, 88, 90, 2, 90, 90][index],
+  column_count: 8,
+  status: "READY",
+  detected_source_type: ["ORDERS", "PAYMENTS", "SETTLEMENTS", "INVOICES", "REFUNDS", "INVENTORY_MOVEMENTS", "EMPLOYEE_ACTIONS"][index],
+  detection_confidence: 0.99,
+  created_at: "2026-08-31T09:00:00Z",
+}));
+
 const lifecycle = {
   organization_id: "ORG-001",
   order: { order_id: "ORD-10005", amount_minor: 1874000, status: "COMPLETED", created_at: "2026-08-01T09:00:00Z" },
@@ -60,6 +99,13 @@ const lifecycle = {
   refunds: [],
   inventory_movements: [{ movement_id: "MOV-50005", order_id: "ORD-10005", movement_type: "SALE", quantity: 1, occurred_at: "2026-08-01T09:05:00Z" }],
   employee_actions: [],
+};
+
+const missingLifecycle = {
+  organization_id: "ORG-001",
+  order: { order_id: "ORD-10006", amount_minor: 2719600, status: "COMPLETED", created_at: "2026-08-01T09:10:00Z" },
+  payments: [{ payment_id: "PAY-20006", order_id: "ORD-10006", amount_minor: 2719600, status: "CAPTURED", captured_at: "2026-08-01T09:12:00Z" }],
+  settlements: [], invoices: [{ invoice_id: "INV-40006", order_id: "ORD-10006", gross_minor: 2719600, status: "ACTIVE", created_at: "2026-08-01T09:13:00Z" }], refunds: [], inventory_movements: [{ movement_id: "MOV-50006", order_id: "ORD-10006", movement_type: "SALE", quantity: 1, occurred_at: "2026-08-01T09:14:00Z" }], employee_actions: [],
 };
 
 const aiResult = {
@@ -100,8 +146,7 @@ const auditEvent = {
   created_at: "2026-08-31T09:07:00Z",
 };
 
-test("Controller can complete the flagship investigation golden path", async ({ page }) => {
-  let launched = false;
+test("Controller can complete the canonical close golden path", async ({ page }) => {
   let reviewRequested = false;
 
   await page.route("http://127.0.0.1:8001/**", async route => {
@@ -112,15 +157,17 @@ test("Controller can complete the flagship investigation golden path", async ({ 
 
     if (path.endsWith("/ready")) return json({ status: "ready", storage_backend: "postgres" });
     if (path.endsWith("/auth/demo-login")) return json({ access_token: "e2e-controller-token", token_type: "bearer", expires_in: 3600, organization_id: "ORG-001", actor_id: "judge-controller", role: "CONTROLLER", display_name: "Judge Controller" });
-    if (path.endsWith("/financial-investigations") && request.method() === "GET") return json(launched ? [investigation] : []);
-    if (path.endsWith("/financial-investigations/flagship-demo")) { launched = true; return json(investigation); }
+    if (path.endsWith("/financial-investigations") && request.method() === "GET") return json([investigation]);
+    if (path.endsWith("/financial-investigations/flagship-demo")) return json(investigation);
     if (path.endsWith(`/financial-investigations/${investigation.id}`)) return json(investigation);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/latest`)) return json(run);
-    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results`)) return json([exception]);
+    if (path.endsWith(`/financial-investigations/${investigation.id}/sources`)) return json(sources);
+    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results`)) return json([exception, secondAmbiguous, missingSettlement]);
     if (path.endsWith(`/financial-investigations/${investigation.id}/patterns`)) return json([]);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return json({}, 404);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigate`)) return json(aiResult);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
+    if (path.endsWith(`/lifecycles/${missingSettlement.order_id}`)) return json(missingLifecycle);
     if (path.endsWith(`/lifecycles/${exception.order_id}`)) return json(lifecycle);
     if (path.endsWith("/ai/provider-health")) return json({ status: "CONNECTED", provider: "stub", model: "test-fixture", configured: true, latency_ms: 0, error_category: null, retryable: null, detail: "TEST FIXTURE / NON-LIVE", overall_status: "AVAILABLE", active_provider: "stub", providers: [] });
     if (path.endsWith("/audit-events")) return json(reviewRequested ? [auditEvent] : []);
@@ -129,21 +176,44 @@ test("Controller can complete the flagship investigation golden path", async ({ 
 
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("heading", { name: "Close the period with confidence." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Close the period with clarity." })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-login.png", fullPage: true });
   await page.getByRole("button", { name: "Continue to FinTrace" }).click();
   await expect(page).toHaveURL(/\/$/);
-  await page.getByRole("button", { name: "Launch Flagship Demo" }).last().click();
-  await expect(page).toHaveURL(/investigation=FIN-DEMO-001/);
-  await page.getByRole("link", { name: "Continue close" }).click();
-  await expect(page.locator("h1", { hasText: "FinTrace Flagship Demo" })).toBeVisible();
-  await page.getByRole("link", { name: "Reconciliation" }).click();
-  await page.getByRole("button", { name: /ORD-10005/ }).click();
+  await expect(page.getByRole("heading", { name: "Financial Close Control" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-home.png", fullPage: true });
+  await page.goto(`/investigations/${investigation.id}/data`);
+  await expect(page.getByRole("heading", { name: investigation.name })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-data.png", fullPage: true });
+  await page.goto(`/investigations/${investigation.id}/reconciliation`);
+  await expect(page.getByText("What FinTrace found")).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-results.png", fullPage: true });
+  await page.getByRole("link", { name: /ORD-10005/ }).click();
   await expect(page.getByText("What happened")).toBeVisible();
   await page.getByRole("button", { name: "Investigate evidence" }).click();
-  await expect(page.getByText("Evidence assessment")).toBeVisible();
-  await expect(page.getByText("AI investigation trace")).toBeVisible();
-  await page.getByRole("button", { name: "Request controller decision" }).click();
-  await expect(page.getByText(/Approval request · Pending Approval/)).toBeVisible();
-  await page.getByRole("link", { name: "Audit", exact: true }).click();
+  await expect(page.getByText("Result", { exact: true })).toBeVisible();
+  await expect(page.getByText("Verifier result: Evidence verified")).toBeVisible();
+  await page.getByRole("button", { name: "Request transaction reference" }).click();
+  await expect(page.getByRole("button", { name: "Reference requested" })).toBeVisible();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-ambiguous-case.png", fullPage: true });
+  await page.goto(`/investigations/${investigation.id}/reconciliation?result=${missingSettlement.id}`);
+  await expect(page.getByRole("heading", { name: "Missing settlement" })).toBeVisible();
+  await expect(page.getByText("EXPLAINED")).toBeVisible();
+  await expect(page.getByText("How FinTrace established this")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Investigate evidence" })).toHaveCount(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-missing-settlement.png", fullPage: true });
+  await page.goto(`/investigations/${investigation.id}/attention`);
+  await expect(page.getByRole("heading", { name: "Human work queue" })).toBeVisible();
+  await expect(page.getByText("NEEDS EVIDENCE").first()).toBeVisible();
+  await expect(page.getByText("EXPLAINED", { exact: true })).toHaveCount(0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: "test-results/redesign-attention.png", fullPage: true });
+  await page.getByRole("link", { name: "Audit", exact: true }).last().click();
   await expect(page.getByText("RESOLUTION_REQUESTED")).toBeVisible();
 });

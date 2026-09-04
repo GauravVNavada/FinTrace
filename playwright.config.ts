@@ -14,7 +14,7 @@ export default defineConfig({
     command: "node node_modules/next/dist/bin/next start --port 3002",
     cwd: "apps/web",
     url: "http://127.0.0.1:3002/login",
-    reuseExistingServer: false,
+    reuseExistingServer: true,
     timeout: 120_000,
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],

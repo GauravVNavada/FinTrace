@@ -4,7 +4,7 @@
 
 ## Demo modes
 
-The walkthrough demonstrates a fresh synthetic financial investigation. Use `Launch Flagship Demo` to create or resume the prepared workspace and open its live overview, or use a fresh investigation for manual source generation/upload. The web flow supports source generation or upload, bounded analysis, mapping edits, explicit confirmation, relationship decisions, immutable dataset normalization, deterministic reconciliation, uploaded-result evidence investigation, advisory patterns, evaluation, and audit. The legacy `/exceptions` queue is a separate seeded compatibility workflow; uploaded investigation results remain in their owning workspace. `Judge Demo · Controller` is a clearly labelled local review identity that uses the normal API RBAC checks to expose judging surfaces.
+The controller walkthrough uses one canonical PostgreSQL-backed investigation: the validated August close from `C:\Users\USER\Desktop\FinTrace_Independent_Test_Data`. It contains 90 lifecycles and 544 normalized source records. The web flow presents that same close across Home, Closes, Results, Attention, case detail, and Audit. The legacy `/exceptions` queue is a separate seeded compatibility workflow and is not part of the recording story. `Judge Demo · Controller` is a clearly labelled local review identity that uses the normal API RBAC checks to expose judging surfaces.
 
 ## Reproduce the dataset and benchmark
 
@@ -35,16 +35,15 @@ Open `http://localhost:3002`.
 
 ## Five-minute walkthrough
 
-1. Configure `STORAGE_BACKEND=postgres`, `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, and `GEMINI_API_KEY` in the API `.env` (never commit credentials). Open the product and choose **Judge Demo · Controller**. The signed demo identity uses the normal API RBAC path.
-2. On **Sources**, choose **Generate and attach** with a bounded order count, seed, anomaly rate, and scenario set. The generator creates separate source exports through the same upload boundary; it is disabled after sources are attached.
-3. Before starting AI work, confirm the investigation screen reports **Gemini connected** from the provider-health check. If it reports unavailable or not configured, fix the provider configuration before continuing. Analyze each source, confirm the screen identifies **Gemini · model · Live provider**, review the inferred type and unfamiliar-header mappings, edit/ignore fields when necessary, and confirm mappings explicitly. The UI discloses that bounded sample values may be sent to Gemini.
-4. Open relationship review, inspect overlap, cardinality, duplicate-key, temporal, type, and amount evidence, and accept only reviewed joins.
-5. Normalize and reconcile. Confirm the persisted run shows `records_consumed = records_expected` and a believable mix of reconciled, variance, exception, and ambiguous outcomes.
-6. Open an exception from this investigation, then run AI investigation. Confirm the actual iterative read-only tool trace, verified supporting evidence, contradictory/missing evidence, root cause, recommendation, and latency. An unresolved result is valid and must not be forced into a conclusion.
-7. Open **Evaluations** and run both **RECONCILIATION** and **AI INVESTIGATION**. Confirm the provider/model and measured metrics are distinct. Open **Audit** to verify append-only events and tool-call history.
-8. The seeded `/exceptions` route is compatibility-only and is not the primary demo story.
+1. Configure `STORAGE_BACKEND=postgres`, `AI_PROVIDER=groq`, `AI_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY` in the API `.env` (never commit credentials). Open the product and choose **Judge Demo · Controller**.
+2. Open **Closes** and select the canonical August close. Home should show `544 / 544` records accounted for, `71` reconciled, `5` expected variance, `12` explained, `2` needs evidence, and `₹59,293` potential exposure.
+3. Show **Data**, then **Results**. Normal setup remains compact; only uncertain mappings or connections open review.
+4. Open the explained missing-settlement case. Show **What happened**, the `EXPECTED BUT MISSING` settlement lifecycle state, verified evidence, **How FinTrace established this**, and the payment-operations follow-up. Do not start another investigation.
+5. Open the ambiguous payment case. Show both candidate payments, `AMBIGUOUS` lifecycle states, `NEEDS EVIDENCE`, and the request for a unique transaction reference. Do not guess or request a controller decision.
+6. Open **Attention**. Every row must be actionable and use `NEEDS EVIDENCE`, `NEEDS DECISION`, or `APPROVAL REQUIRED`; explained findings stay out.
+7. Open **Audit** briefly to verify the persisted investigation trace and follow-up event.
 
-For the recording, use **Launch Flagship Demo** from the empty Overview state. It creates/resumes the reproducible PostgreSQL-backed `FLAGSHIP_FINANCE_REVIEW` workspace, performs the real source-to-reconciliation workflow, and does not spend live AI quota until an exception is explicitly investigated.
+For the recording, use the prepared canonical August close from the Closes screen. Do not use the synthetic `Launch Flagship Demo` workspace because its metrics are not the canonical recording dataset.
 
 ## Honest limitations
 

@@ -34,13 +34,12 @@ export function InvestigationStageNav({ investigationId }: { investigationId: st
   const pathname = usePathname();
   const stages = [
     ["Overview", `/investigations/${investigationId}`],
-    ["Sources", `/investigations/${investigationId}/sources`],
-    ["Relationships", `/investigations/${investigationId}/relationships`],
-    ["Reconciliation", `/investigations/${investigationId}#reconciliation`],
-    ["Attention", `/investigations/${investigationId}#attention`],
-    ["Audit Context", `/audit?resource_id=${encodeURIComponent(investigationId)}`],
+    ["Data", `/investigations/${investigationId}/data`],
+    ["Reconciliation", `/investigations/${investigationId}/reconciliation`],
+    ["Attention", `/investigations/${investigationId}/attention`],
+    ["Audit", `/audit?resource_id=${encodeURIComponent(investigationId)}`],
   ] as const;
-  return <nav aria-label="Investigation stages" className="mb-6 flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">{stages.map(([label, href]) => { const active = label === "Overview" ? pathname === stages[0][1] : !href.includes("#") && pathname === href.split("?")[0]; return <Link key={label} href={href} aria-current={active ? "page" : undefined} className={`whitespace-nowrap rounded-md px-3 py-2 text-[11px] font-semibold transition-colors ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{label}</Link>; })}</nav>;
+  return <nav aria-label="Investigation stages" className="mb-6 flex gap-1 overflow-x-auto rounded-lg border border-border bg-card p-1">{stages.map(([label, href]) => { const active = label === "Overview" ? pathname === stages[0][1] : label === "Data" ? pathname.includes("/data") || pathname.includes("/sources") || pathname.includes("/relationships") : pathname === href.split("?")[0]; return <Link key={label} href={href} aria-current={active ? "page" : undefined} className={`whitespace-nowrap rounded-md px-3 py-2 text-[11px] font-semibold transition-colors ${active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}>{label}</Link>; })}</nav>;
 }
 
 type LifecycleStepState = "PRESENT" | "EXPECTED BUT MISSING" | "NOT APPLICABLE" | "MISMATCH" | "AMBIGUOUS";
@@ -132,6 +131,7 @@ function closeStateForResult(result: ApiReconciliationResult, investigation?: Ap
   if (result.status === "AMBIGUOUS") return "NEEDS_HUMAN_DECISION" as const;
   if (investigation?.status === "FAILED") return "FAILED" as const;
   if (investigation?.status === "UNRESOLVED") return "NEEDS_EVIDENCE" as const;
+  if (isAiEligibleResult(result)) return "NEEDS_EVIDENCE" as const;
   return "EXPLAINED" as const;
 }
 
@@ -334,10 +334,11 @@ function ReconciliationStory({ run, results, currency }: { run: ApiReconciliatio
   const count = (status: string) => results.filter(item => item.status === status).length;
   const categories = ["POTENTIAL_EXPOSURE", "TIMING_VARIANCE", "DATA_QUALITY", "CONTROL_RISK"];
   const categoryCount = (category: string) => results.reduce((total, item) => total + item.findings.filter(finding => finding.exposure_category === category).length, 0);
-  const explained = results.filter(item => item.status === "EXCEPTION").length;
+  const explained = results.filter(item => item.status === "EXCEPTION" && !isAiEligibleResult(item)).length;
+  const needsEvidence = results.filter(item => item.status === "EXCEPTION" && isAiEligibleResult(item)).length;
   const needsDecision = results.filter(item => item.status === "AMBIGUOUS").length;
   const cleanReconciled = run.reconciled_count - count("RECONCILED_WITH_VARIANCE");
-  return <div className="rounded-lg border border-border p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Financial close status</div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5"><MetricCell label="Reconciled" value={cleanReconciled.toLocaleString()} /><MetricCell label="Expected variance" value={count("RECONCILED_WITH_VARIANCE").toLocaleString()} /><MetricCell label="Explained" value={explained.toLocaleString()} /><MetricCell label="Needs human decision" value={needsDecision.toLocaleString()} /><MetricCell label="Potential exposure" value={((run.open_exposure_minor ?? 0) / 100).toLocaleString("en-IN", { style: "currency", currency })} /></div><div className="mt-4 border-t border-border pt-4"><div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Input integrity</div><div className="mt-2 text-lg font-bold text-foreground">{run.records_loaded.toLocaleString()} / {run.records_expected.toLocaleString()} normalized records accounted for</div><div className="mt-1 text-[11px] text-muted-foreground">{run.records_loaded.toLocaleString()} loaded · {run.records_consumed.toLocaleString()} consumed · {run.rejected_record_count.toLocaleString()} rejected · {run.orphan_record_count.toLocaleString()} orphaned</div></div><div className="mt-4 border-t border-border pt-4"><div className="flex items-center justify-between gap-3"><div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Risk categories</div><span className="text-[10px] text-muted-foreground">Finding counts; categories may overlap.</span></div><div className="mt-2 grid gap-2 sm:grid-cols-4">{categories.map(category => <div key={category} className="rounded-md border border-border p-3"><div className="text-[10px] text-muted-foreground">{displayStatus(category)}</div><div className="mt-1 text-lg font-bold text-foreground">{categoryCount(category).toLocaleString()}</div></div>)}</div></div></div>;
+  return <div className="rounded-lg border border-border p-4"><div className="text-[10px] font-bold uppercase tracking-[0.14em] text-muted-foreground">Financial close status</div><div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-6"><MetricCell label="Reconciled" value={cleanReconciled.toLocaleString()} /><MetricCell label="Expected variance" value={count("RECONCILED_WITH_VARIANCE").toLocaleString()} /><MetricCell label="Explained" value={explained.toLocaleString()} /><MetricCell label="Needs evidence" value={needsEvidence.toLocaleString()} /><MetricCell label="Needs human decision" value={needsDecision.toLocaleString()} /><MetricCell label="Potential exposure" value={((run.open_exposure_minor ?? 0) / 100).toLocaleString("en-IN", { style: "currency", currency })} /></div><div className="mt-4 border-t border-border pt-4"><div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Input integrity</div><div className="mt-2 text-lg font-bold text-foreground">{run.records_loaded.toLocaleString()} / {run.records_expected.toLocaleString()} normalized records accounted for</div><div className="mt-1 text-[11px] text-muted-foreground">{run.records_loaded.toLocaleString()} loaded · {run.records_consumed.toLocaleString()} consumed · {run.rejected_record_count.toLocaleString()} rejected · {run.orphan_record_count.toLocaleString()} orphaned</div></div><div className="mt-4 border-t border-border pt-4"><div className="flex items-center justify-between gap-3"><div className="text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Risk categories</div><span className="text-[10px] text-muted-foreground">Finding counts; categories may overlap.</span></div><div className="mt-2 grid gap-2 sm:grid-cols-4">{categories.map(category => <div key={category} className="rounded-md border border-border p-3"><div className="text-[10px] text-muted-foreground">{displayStatus(category)}</div><div className="mt-1 text-lg font-bold text-foreground">{categoryCount(category).toLocaleString()}</div></div>)}</div></div></div>;
 }
 
 // Kept as a compatibility reference while the uploaded-investigation panel is the primary flow.
@@ -517,11 +518,15 @@ export function ReconciliationRunPanel({ investigationId, currency, investigatio
 
   React.useEffect(() => { void load(); }, [load]);
   React.useEffect(() => { fetchProviderHealth().then(setProviderHealth).catch(() => setProviderHealth(null)); }, []);
+  React.useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("result");
+    if (requested && results.some(item => item.id === requested)) setSelectedId(requested);
+  }, [results]);
 
   const selected = results.find(item => item.id === selectedId) ?? null;
   const exceptions = results.filter(item => item.status === "EXCEPTION" || item.status === "AMBIGUOUS");
-  const attention = exceptions.filter(item => item.status === "AMBIGUOUS" || isAiEligibleResult(item));
-  const explained = exceptions.filter(item => item.status === "EXCEPTION");
+  const attention = exceptions.filter(item => item.status === "AMBIGUOUS");
+  const explained = exceptions.filter(item => item.status === "EXCEPTION" && !isAiEligibleResult(item));
   const findingCodes = Array.from(new Set(exceptions.flatMap(item => item.findings.map(finding => finding.code))));
 
   async function reconcile() {
