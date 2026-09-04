@@ -322,7 +322,7 @@ def test_provider_health_classifies_malformed_success_response(monkeypatch: pyte
     assert result.retryable is False
 
 
-def test_provider_health_requires_structured_tool_capability(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_provider_health_accepts_structured_response(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         def __enter__(self) -> Self:
             return self
@@ -331,7 +331,7 @@ def test_provider_health_requires_structured_tool_capability(monkeypatch: pytest
             return None
 
         def read(self) -> bytes:
-            return b'{"choices":[{"message":{"tool_calls":[{"function":{"name":"fintrace_health_probe","arguments":"{}"}}]}}]}'
+            return b'{"choices":[{"message":{"content":"OK"}}]}'
 
     monkeypatch.setattr("app.investigations.provider.request.urlopen", lambda *args, **kwargs: FakeResponse())
     client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)

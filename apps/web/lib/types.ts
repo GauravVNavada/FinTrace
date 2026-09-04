@@ -410,6 +410,16 @@ export interface ApiDatasetVersion {
   created_at: string;
 }
 
+export interface ApiNormalizedRecord {
+  id: string;
+  source_file_id: string;
+  source_row_number: number;
+  source_record_id: string | null;
+  source_type: string;
+  values: Record<string, string | number | null>;
+  lineage: Record<string, Record<string, string | number | null>>;
+}
+
 export interface ApiReconciliationRun {
   id: string;
   organization_id: string;

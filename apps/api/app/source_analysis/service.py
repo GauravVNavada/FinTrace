@@ -15,8 +15,8 @@ from app.source_analysis.analyzer import analyze_content
 from app.source_analysis.provider import (
     CANONICAL_ALIASES,
     REQUIRED_FIELDS,
+    OfflineSourceAnalysisProvider,
     SourceAnalysisProviderUnavailable,
-    get_source_analysis_provider,
 )
 from app.source_analysis.schemas import (
     MappingConfirmationResponse,
@@ -94,17 +94,12 @@ class SourceAnalysisService:
                 max_columns=settings.max_upload_columns,
                 truncate=True,
             )
-            provider = get_source_analysis_provider(
-                provider_name or settings.ai_provider,
-                settings.configured_ai_api_keys,
-                settings.resolved_ai_base_url,
-                settings.resolved_ai_model,
-                settings.ai_timeout_seconds,
-                settings.ai_fallback_provider,
-                settings.configured_ai_fallback_api_keys,
-                settings.resolved_ai_fallback_base_url,
-                settings.resolved_ai_fallback_model,
-            )
+            # Source classification and canonical mapping are deterministic data
+            # preparation, not an AI investigation. Keeping this path offline
+            # prevents a provider-specific structured-output failure from
+            # blocking otherwise valid CSV/XLSX uploads. The configured live
+            # provider remains available to the exception investigation service.
+            provider = OfflineSourceAnalysisProvider()
             classification = provider.classify(str(source["original_filename"]), document)
             mappings = provider.propose_mappings(classification.source_type, document)
             mapping_records = self._mapping_records(

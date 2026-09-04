@@ -22,7 +22,7 @@ Investigations
   → Exceptions, patterns, evaluation, audit
 ```
 
-The `/investigations/*` routes provide the complete local `FinancialInvestigation` workspace and source-to-reconciliation flow. Sources can be uploaded or generated fresh; the current exception detail investigation remains a separate `ExceptionInvestigation` child workflow.
+The `/investigations/*` routes provide the complete local `FinancialInvestigation` close workspace and source-to-reconciliation flow. Sources can be uploaded or generated fresh; the current exception detail investigation remains a separate `ExceptionInvestigation` child workflow. The controller-facing outcome vocabulary is `RECONCILED`, `EXPLAINED`, `NEEDS_EVIDENCE`, `NEEDS_HUMAN_DECISION`, `APPROVAL_REQUIRED`, and `FAILED`; internal deterministic exception codes remain unchanged.
 
 ### Financial investigation source intake (implemented Sprint 1)
 
@@ -54,7 +54,7 @@ Authenticated workspace
         |             +--> Sources
         |             +--> Relationships
         |             +--> Reconciliation
-        |             +--> Exceptions
+        |             +--> Attention
         |             +--> Audit context
         |
         +--> Patterns
@@ -71,7 +71,7 @@ Authenticated workspace
 4. Priority exceptions link to the canonical detail view.
 5. Pattern cards show correlation signals and a recommended control.
 6. Export report downloads the current investigation summary as a CSV; the investigation control invokes persisted deterministic normalization/reconciliation and reports completion or failure in place. Benchmark evaluation is a separate control under Evaluations.
-7. The reconciliation panel lists every exception and ambiguous result, lets the user select one, investigates it, and requests controlled human review without silently choosing the first result.
+7. The reconciliation panel separates deterministic explanations from the attention queue. Obvious findings are explained without an AI call; only eligible cross-system or ambiguous cases offer bounded evidence investigation, and only genuine ambiguity offers a controller decision request.
 
 Empty state: “No unresolved exceptions. All lifecycles reconciled for this batch.”  
 Failure state: “Dashboard unavailable. Try again. Existing run history remains available.”
@@ -164,7 +164,8 @@ Investigation requested
 | Screen | Route | Primary question | Required states |
 | --- | --- | --- | --- |
 | Overview | `/` | Are books currently reconciled? | populated, empty, unavailable |
-| Exception queue | `/exceptions` | Compatibility-only legacy queue; uploaded results are reviewed from an investigation workspace. | populated, filtered empty, unavailable |
+| Attention queue | `/investigations/:id#attention` | Investigation-scoped queue for ambiguous cases and optional residual evidence work. | populated, empty, unavailable |
+| Exception queue | `/exceptions` | Compatibility-only legacy queue; not part of the primary close navigation. | populated, filtered empty, unavailable |
 | Exception detail | `/exceptions/:id` | What happened and what is safe next? | populated, missing ID, investigation unavailable |
 | Patterns | `/patterns` | What is recurring? | loading, populated, no patterns, unavailable |
 | Runs | `/runs` | What was processed and when? | populated, in progress, failure |

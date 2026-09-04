@@ -30,7 +30,7 @@ const run = {
   lifecycle_count: 50,
   reconciled_count: 39,
   exception_count: 7,
-  ambiguous_count: 2,
+  ambiguous_count: 1,
   open_exposure_minor: 1874000,
   started_at: "2026-08-31T09:01:00Z",
   completed_at: "2026-08-31T09:05:00Z",
@@ -40,18 +40,21 @@ const exception = {
   id: "RRES-DEMO-001",
   run_id: run.id,
   order_id: "ORD-10005",
-  status: "EXCEPTION",
-  exception_type: "MISSING_SETTLEMENT",
+  status: "AMBIGUOUS",
+  exception_type: "AMBIGUOUS_ASSOCIATION",
   severity: "HIGH",
   exposure_minor: 1874000,
-  exposure_category: "POTENTIAL_EXPOSURE",
-  findings: [{ code: "SETTLEMENT_MISSING", message: "Captured payment has no settlement", exposure_minor: 1874000, exposure_category: "POTENTIAL_EXPOSURE" }],
+  exposure_category: "CONTROL_RISK",
+  findings: [{ code: "AMBIGUOUS_ASSOCIATION", message: "Two payment candidates remain plausible", exposure_minor: 1874000, exposure_category: "CONTROL_RISK" }],
 };
 
 const lifecycle = {
   organization_id: "ORG-001",
   order: { order_id: "ORD-10005", amount_minor: 1874000, status: "COMPLETED", created_at: "2026-08-01T09:00:00Z" },
-  payments: [{ payment_id: "PAY-20005", order_id: "ORD-10005", amount_minor: 1874000, status: "CAPTURED", captured_at: "2026-08-01T09:02:00Z", gateway_reference: "GTW-500005" }],
+  payments: [
+    { payment_id: "PAY-20005-A", order_id: "ORD-10005", amount_minor: 1874000, status: "CAPTURED", captured_at: "2026-08-01T09:02:00Z", gateway_reference: "GTW-500005-A" },
+    { payment_id: "PAY-20005-B", order_id: "ORD-10005", amount_minor: 1874000, status: "CAPTURED", captured_at: "2026-08-01T09:03:00Z", gateway_reference: "GTW-500005-B" },
+  ],
   settlements: [],
   invoices: [{ invoice_id: "INV-40005", order_id: "ORD-10005", gross_minor: 1874000, status: "ACTIVE", created_at: "2026-08-01T09:04:00Z" }],
   refunds: [],
@@ -62,20 +65,18 @@ const lifecycle = {
 const aiResult = {
   investigation_id: "INV-DEMO-001",
   exception_id: exception.id,
-  status: "SUPPORTED",
-  root_cause_code: "SETTLEMENT_MISSING",
-  summary: "Captured payment exists, but no settlement was found in the scoped settlement records.",
-  supporting_evidence: [
-    { source: "payment", record_id: "PAY-20005", fact: "Payment status is CAPTURED.", field: "status", operator: "equals", expected_value: "CAPTURED", verified: true },
-  ],
+  status: "UNRESOLVED",
+  root_cause_code: null,
+  summary: "Two candidate payments satisfy the available evidence; additional transaction reference or settlement evidence is required to resolve the ambiguous association.",
+  supporting_evidence: [],
   contradictory_evidence: [],
-  missing_evidence: ["Settlement record unavailable"],
-  recommended_action_code: "REQUEST_SETTLEMENT_REVIEW",
+  missing_evidence: ["Transaction reference", "Settlement record"],
+  recommended_action_code: "REQUEST_PAYMENT_REVIEW",
   requires_human_review: true,
   evidence_score: 70,
   tool_calls: [
-    { name: "get_payments_for_order", target: "ORD-10005", status: "SUCCEEDED", duration_ms: 12, sequence_no: 1, arguments: {}, result_record_ids: ["PAY-20005"], result_summary: "1 payment returned · PAY-20005 · CAPTURED · INR 18,740" },
-    { name: "get_settlements_for_payment", target: "PAY-20005", status: "SUCCEEDED", duration_ms: 10, sequence_no: 2, arguments: {}, result_record_ids: [], result_summary: "No settlement found" },
+    { name: "get_payments_for_order", target: "ORD-10005", status: "SUCCEEDED", duration_ms: 12, sequence_no: 1, arguments: {}, result_record_ids: ["PAY-20005-A", "PAY-20005-B"], result_summary: "2 payment candidates returned · CAPTURED · INR 18,740 each" },
+    { name: "get_settlements_for_payment", target: "ORD-10005", status: "SUCCEEDED", duration_ms: 10, sequence_no: 2, arguments: {}, result_record_ids: [], result_summary: "Settlement reference cannot disambiguate the two candidates" },
   ],
   created_at: "2026-08-31T09:06:00Z",
   provider: "stub",
@@ -119,7 +120,7 @@ test("Controller can complete the flagship investigation golden path", async ({ 
     if (path.endsWith(`/financial-investigations/${investigation.id}/patterns`)) return json([]);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return json({}, 404);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigate`)) return json(aiResult);
-    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_SETTLEMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
+    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
     if (path.endsWith(`/lifecycles/${exception.order_id}`)) return json(lifecycle);
     if (path.endsWith("/ai/provider-health")) return json({ status: "CONNECTED", provider: "stub", model: "test-fixture", configured: true, latency_ms: 0, error_category: null, retryable: null, detail: "TEST FIXTURE / NON-LIVE", overall_status: "AVAILABLE", active_provider: "stub", providers: [] });
     if (path.endsWith("/audit-events")) return json(reviewRequested ? [auditEvent] : []);
@@ -128,21 +129,21 @@ test("Controller can complete the flagship investigation golden path", async ({ 
 
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
-  await expect(page.getByRole("heading", { name: "See where the transaction lifecycle broke." })).toBeVisible();
-  await page.getByRole("button", { name: "Judge Demo · Controller" }).click();
+  await expect(page.getByRole("heading", { name: "Close the period with confidence." })).toBeVisible();
+  await page.getByRole("button", { name: "Continue to FinTrace" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.getByRole("button", { name: "Launch Flagship Demo" }).last().click();
   await expect(page).toHaveURL(/investigation=FIN-DEMO-001/);
-  await page.getByRole("link", { name: "Open investigation" }).click();
-  await expect(page.getByRole("heading", { name: "FinTrace Flagship Demo" })).toBeVisible();
+  await page.getByRole("link", { name: "Continue close" }).click();
+  await expect(page.locator("h1", { hasText: "FinTrace Flagship Demo" })).toBeVisible();
   await page.getByRole("link", { name: "Reconciliation" }).click();
   await page.getByRole("button", { name: /ORD-10005/ }).click();
-  await expect(page.getByText("Exception investigation")).toBeVisible();
-  await page.getByRole("button", { name: "Investigate with AI" }).click();
-  await expect(page.getByText("AI investigation")).toBeVisible();
-  await expect(page.getByText("AI stopped after 2 bounded tool calls.")).toBeVisible();
-  await page.getByRole("button", { name: "Request human review" }).click();
-  await expect(page.getByText(/Human review · Pending Approval/)).toBeVisible();
+  await expect(page.getByText("What happened")).toBeVisible();
+  await page.getByRole("button", { name: "Investigate evidence" }).click();
+  await expect(page.getByText("Evidence assessment")).toBeVisible();
+  await expect(page.getByText("AI investigation trace")).toBeVisible();
+  await page.getByRole("button", { name: "Request controller decision" }).click();
+  await expect(page.getByText(/Approval request · Pending Approval/)).toBeVisible();
   await page.getByRole("link", { name: "Audit", exact: true }).click();
   await expect(page.getByText("RESOLUTION_REQUESTED")).toBeVisible();
 });

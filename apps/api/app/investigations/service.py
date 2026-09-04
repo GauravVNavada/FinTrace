@@ -603,12 +603,13 @@ def _complete_missing_predicate(
         return item
     source = item.get("source")
     for fact in authoritative_evidence:
-        if fact.source.value == source and fact.record_id is None and fact.operator.value == "missing":
+        operator = fact.operator
+        if fact.source.value == source and fact.record_id is None and operator is not None and operator.value == "missing":
             return {
                 **item,
                 "fact": fact.fact,
                 "field": fact.field,
-                "operator": fact.operator.value,
+                "operator": operator.value,
                 "expected_value": fact.expected_value,
             }
     return item

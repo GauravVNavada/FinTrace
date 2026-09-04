@@ -381,18 +381,12 @@ class OpenAICompatibleAIClient:
         started = time.perf_counter()
         try:
             self._chat(
-                "Call fintrace_health_probe exactly once. Return no prose.",
+                "Reply with a short acknowledgement only.",
                 {"health_check": "fintrace-provider-health"},
-                max_tokens=40,
-                tools=[{
-                    "type": "function",
-                    "function": {
-                        "name": "fintrace_health_probe",
-                        "description": "Minimal no-op capability probe.",
-                        "parameters": {"type": "object", "properties": {}, "additionalProperties": False},
-                    },
-                }],
-                require_tool_call=True,
+                max_tokens=128,
+                tools=None,
+                require_tool_call=False,
+                json_response=False,
                 rotate_keys=False,
                 request_stage="provider_health",
             )
@@ -568,6 +562,7 @@ class OpenAICompatibleAIClient:
         max_tokens: int = 800,
         tools: list[dict[str, Any]] | None = None,
         require_tool_call: bool = False,
+        json_response: bool = True,
         rotate_keys: bool = True,
         request_stage: str = "unknown",
         tool_loop_iteration: int | None = None,
@@ -593,7 +588,7 @@ class OpenAICompatibleAIClient:
                 if require_tool_call
                 else "auto"
             )
-        else:
+        elif json_response:
             body_payload["response_format"] = {"type": "json_object"}
         body = json.dumps(body_payload).encode()
         last_error: ProviderUnavailable | None = None
@@ -674,11 +669,13 @@ class OpenAICompatibleAIClient:
                     if require_tool_call:
                         raise ProviderUnavailable(
                             "Provider does not support the required tool-calling capability.",
-                            info=ProviderFailureInfo(
-                                "unsupported_model_capability", False,
-                                stage=request_stage, iteration=tool_loop_iteration,
-                            ),
-                        )
+                                info=ProviderFailureInfo(
+                                    "unsupported_model_capability", False,
+                                    stage=request_stage, iteration=tool_loop_iteration,
+                                ),
+                            )
+                    if not json_response:
+                        return {"ok": True}
                     parsed = json.loads(re.sub(r"^```(?:json)?|```$", "", content.strip()).strip())
                     if not isinstance(parsed, dict):
                         raise ProviderUnavailable(
@@ -694,8 +691,8 @@ class OpenAICompatibleAIClient:
                 except HTTPError as error:
                     provider_detail = _safe_http_detail(error)
                     if tools and allow_invalid_tool_correction and error.code == 400 and (
-                        "not in request.tools" in provider_detail
-                        or "Failed to parse tool call arguments as JSON" in provider_detail
+                        "not in request.tools" in (provider_detail or "")
+                        or "Failed to parse tool call arguments as JSON" in (provider_detail or "")
                     ):
                         correction = (
                             " The previous response attempted an unavailable tool. The provider rejected it, "

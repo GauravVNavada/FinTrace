@@ -173,6 +173,8 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
         "receiptnumber": "order_id",
         "amount": "amount",
         "amountminor": "amount",
+        "grossminor": "amount",
+        "grossamount": "amount",
         "invoicetotal": "amount",
         "total": "amount",
         "currency": "currency",

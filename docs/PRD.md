@@ -45,6 +45,8 @@ The four terms below are intentionally distinct:
 | `ReconciliationRun` | One deterministic execution over a specific dataset version. |
 | `EvaluationRun` | A benchmark execution against hidden synthetic ground truth. |
 
+The controller-facing close workspace also separates outcome from finding. `RECONCILED` means the lifecycle proved cleanly; `EXPLAINED` means a deterministic finding or verified investigation explains the break; `NEEDS_EVIDENCE` means the available records are insufficient; `NEEDS_HUMAN_DECISION` means evidence remains genuinely ambiguous; `APPROVAL_REQUIRED` means the conclusion is known but policy requires authorization; and `FAILED` is reserved for provider or system execution failure. These labels do not replace internal exception codes such as `MISSING_SETTLEMENT` or `ERP_AMOUNT_MISMATCH`.
+
 Deterministic software establishes financial truth. AI interprets residual ambiguity. FinTrace is not a generic upload-and-ask-GPT system, spreadsheet chatbot, LLM arithmetic engine, autonomous money-moving agent, or replacement for accounting and audit systems.
 
 ---

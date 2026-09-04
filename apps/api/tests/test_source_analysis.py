@@ -270,3 +270,22 @@ def test_offline_provider_maps_canonical_minor_unit_export_headers() -> None:
     assert settlement_mappings["fees_minor"].canonical_field == "fee_amount"
     assert settlement_mappings["tax_minor"].canonical_field == "tax_amount"
     assert settlement_mappings["net_minor"].canonical_field == "net_amount"
+
+
+def test_offline_provider_maps_invoice_gross_minor_and_ignores_tenant_scope() -> None:
+    invoices = analyze_content(
+        "invoices.csv",
+        b"created_at,gross_minor,invoice_id,order_id,organization_id,status\n"
+        b"2026-08-01T08:04:00+00:00,249000,INV-1,ORD-1,ORG-001,ACTIVE\n",
+        100,
+        20,
+    )
+    mappings = {
+        item.source_column: item
+        for item in OfflineSourceAnalysisProvider().propose_mappings(SourceType.INVOICES, invoices)
+    }
+
+    assert mappings["gross_minor"].canonical_field == "amount"
+    assert mappings["gross_minor"].ignored is False
+    assert mappings["organization_id"].canonical_field is None
+    assert mappings["organization_id"].ignored is True

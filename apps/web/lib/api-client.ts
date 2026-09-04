@@ -1,4 +1,4 @@
-import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiDemoDataResponse, ApiEvaluation, ApiExceptionSummary, ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiLifecycleGraph, ApiLifecycleResponse, ApiPattern, ApiReconciliationResult, ApiReconciliationRun, ApiRelationshipProposal, ApiResolutionRequest, ApiSourceAnalysis, ApiSourceFile, ApiSourceMapping, DemoDataRequest, EvaluationRunRequest, ResolutionActionCode, SourceType } from "./types";
+import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiDemoDataResponse, ApiEvaluation, ApiExceptionSummary, ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiLifecycleGraph, ApiLifecycleResponse, ApiNormalizedRecord, ApiPattern, ApiReconciliationResult, ApiReconciliationRun, ApiRelationshipProposal, ApiResolutionRequest, ApiSourceAnalysis, ApiSourceFile, ApiSourceMapping, DemoDataRequest, EvaluationRunRequest, ResolutionActionCode, SourceType } from "./types";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
 const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "ORG-001";
@@ -252,6 +252,10 @@ export function normalizeDataset(investigationId: string) {
 
 export function fetchLatestDataset(investigationId: string) {
   return get<ApiDatasetVersion>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/dataset-versions/latest`);
+}
+
+export function fetchNormalizedRecords(investigationId: string, datasetVersionId: string, limit = 10000) {
+  return get<ApiNormalizedRecord[]>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/dataset-versions/${encodeURIComponent(datasetVersionId)}/records?limit=${limit}`);
 }
 
 export function runInvestigationReconciliation(investigationId: string, datasetVersionId?: string) {
