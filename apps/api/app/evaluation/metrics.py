@@ -26,6 +26,16 @@ def _ratio(numerator: int, denominator: int) -> float:
     return round(numerator / denominator * 100, 2) if denominator else 0.0
 
 
+def _canonical_exception(value: str | None) -> str | None:
+    return {
+        "MISSING_INVOICE": "ERP_INVOICE_MISSING",
+        "INVOICE_AMOUNT_MISMATCH": "ERP_AMOUNT_MISMATCH",
+        "REFUND_INVENTORY_MISSING": "REFUND_WITHOUT_INVENTORY_RETURN",
+        "REFUND_ERP_REVERSAL_MISSING": "REFUND_WITHOUT_ERP_REVERSAL",
+        "AMBIGUOUS_PAYMENT": "AMBIGUOUS_ASSOCIATION",
+    }.get(value, value)
+
+
 def evaluate_dataset(dataset: Any) -> tuple[EvaluationReport, list[ReconciliationResult]]:
     started = perf_counter()
     results = reconcile_dataset(dataset)
@@ -49,7 +59,7 @@ def evaluate_dataset(dataset: Any) -> tuple[EvaluationReport, list[Reconciliatio
         1
         for result in detected_exceptions
         if truth_by_order[result.order_id]["expected_status"] == "EXCEPTION"
-        and truth_by_order[result.order_id].get("exception_type") == result.exception_type
+        and _canonical_exception(truth_by_order[result.order_id].get("exception_type")) == result.exception_type
     )
     actual_severity_cases = [
         item for item in dataset.ground_truth if item["expected_status"] == "EXCEPTION"

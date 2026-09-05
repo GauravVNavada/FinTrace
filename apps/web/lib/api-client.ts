@@ -141,6 +141,10 @@ export function fetchLifecycle(orderId: string) {
   return get<ApiLifecycleResponse>(`/api/v1/lifecycles/${encodeURIComponent(orderId)}`);
 }
 
+export function fetchUploadedLifecycle(investigationId: string, runId: string, resultId: string) {
+  return get<ApiLifecycleResponse>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results/${encodeURIComponent(resultId)}/lifecycle`);
+}
+
 export function fetchExceptionGraph(exceptionId: string) {
   return get<ApiLifecycleGraph>(`/api/v1/exceptions/${encodeURIComponent(exceptionId)}/graph`);
 }
@@ -281,7 +285,7 @@ export function fetchLatestReconciliation(investigationId: string) {
 }
 
 export function fetchReconciliationResults(investigationId: string, runId: string) {
-  return get<ApiReconciliationResult[]>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results`);
+  return get<ApiReconciliationResult[]>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results?limit=10000`);
 }
 
 export function fetchFinancialInvestigationPatterns(investigationId: string) {

@@ -53,7 +53,7 @@ async def test_flagship_investigation_is_cited_and_idempotent(client: AsyncClien
     )
     assert detail.status_code == 200
     assert calls.status_code == 200
-    assert calls.json()[4]["name"] == "get_inventory_movements"
+    assert "get_inventory_movements" in {call["name"] for call in calls.json()}
 
 
 @pytest.mark.asyncio

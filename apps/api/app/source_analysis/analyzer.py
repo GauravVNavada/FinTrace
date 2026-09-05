@@ -211,27 +211,12 @@ def _display(value: Any, header: str | None = None) -> str | None:
 
 
 def _looks_like_date_header(header: str) -> bool:
+    # Never infer a date from a word fragment: CapturedAmount and
+    # RefundedAmount are monetary columns, not Excel date serials.
+    from app.source_analysis.provider import CANONICAL_ALIASES
+
     normalized = "".join(character for character in header.casefold() if character.isalnum())
-    return any(
-        token in normalized
-        for token in (
-            "date",
-            "time",
-            "timestamp",
-            "createdat",
-            "createdon",
-            "captured",
-            "paidat",
-            "processedat",
-            "refunded",
-            "credited",
-            "occurred",
-            "issued",
-            "settled",
-            "booked",
-            "recorded",
-            "movement",
-            "event",
-            "actionat",
-        )
-    ) or normalized.endswith("at")
+    fields = {aliases[normalized] for aliases in CANONICAL_ALIASES.values() if normalized in aliases}
+    if fields:
+        return all(field.endswith(("_at", "_date")) for field in fields)
+    return normalized.endswith(("timestamp", "date", "time", "createdat", "occurredat"))

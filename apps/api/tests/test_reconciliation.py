@@ -1,4 +1,5 @@
 from datetime import UTC, datetime
+from dataclasses import replace
 
 import pytest
 
@@ -231,3 +232,23 @@ def test_reconcile_detects_row_level_inventory_value_calculation_error():
     result = reconcile_lifecycle(lifecycle)
     assert result.exception_type == "INVENTORY_VALUE_MISMATCH"
     assert any(finding.code == "INVENTORY_VALUE_CALCULATION_ERROR" for finding in result.findings)
+
+
+def test_payment_identifiers_do_not_decide_ambiguity():
+    lifecycle = _valued_inventory_lifecycle(refund=False)
+    payments = ({**lifecycle.payments[0], "payment_id": "RANDOM-A"}, {**lifecycle.payments[0], "payment_id": "RANDOM-B"})
+    result = reconcile_lifecycle(replace(lifecycle, payments=payments))
+    assert result.status == "AMBIGUOUS"
+    settled = ({"payment_id": "RANDOM-A"}, {"payment_id": "RANDOM-B"})
+    assert reconcile_lifecycle(replace(lifecycle, payments=payments, settlements=settled)).exception_type == "DUPLICATE_PAYMENT"
+
+
+def test_wrong_money_status_currency_cannot_reconcile():
+    lifecycle = _valued_inventory_lifecycle(refund=False)
+    order = {**lifecycle.order, "currency": "INR", "status": "CANCELLED"}
+    payments = ({**lifecycle.payments[0], "amount_minor": 123, "currency": "USD", "status": "FAILED"},)
+    settlements = ({**lifecycle.settlements[0], "gross_minor": 10000, "net_minor": 9999},)
+    result = reconcile_lifecycle(replace(lifecycle, order=order, payments=payments, settlements=settlements))
+    codes = {finding.code for finding in result.findings}
+    assert {"CURRENCY_MISMATCH", "ORDER_STATUS_MISMATCH", "PAYMENT_STATUS_MISMATCH", "PAYMENT_AMOUNT_MISMATCH", "SETTLEMENT_GROSS_MISMATCH", "SETTLEMENT_NET_MISMATCH"} <= codes
+    assert result.status == "EXCEPTION"

@@ -27,6 +27,22 @@ class ReconciliationService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self._repository = repository
 
+    def lifecycle(self, organization_id: str, investigation_id: str, run_id: str, result_id: str):
+        """Read immutable uploaded evidence, never the seeded demo lifecycle."""
+        result = self._repository.get_reconciliation_result(organization_id, investigation_id, run_id, result_id)
+        run = self._repository.latest_reconciliation_run(organization_id, investigation_id)
+        if result is None or run is None or run["id"] != run_id:
+            raise ReconciliationNotFound(result_id)
+        versions = self._repository.list_dataset_versions(organization_id, investigation_id)
+        version = next((v for v in versions if v["id"] == run["dataset_version_id"]), None)
+        if version is None:
+            raise ReconciliationNotFound(result_id)
+        records = self._repository.list_normalized_records(organization_id, investigation_id, str(version["id"]), max(1, int(version["record_count"])))
+        lifecycle = next((item for item in construct_lifecycles(organization_id, records) if item.order["order_id"] == result["order_id"]), None)
+        if lifecycle is None:
+            raise ReconciliationNotFound(result_id)
+        return lifecycle
+
     def run(
         self,
         context: ActorContext,

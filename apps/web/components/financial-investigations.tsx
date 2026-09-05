@@ -10,7 +10,7 @@ import type { ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiIn
 import { PageHeading } from "./dashboard";
 
 const allowedExtensions = [".csv", ".xlsx"];
-const canonicalFieldsBySourceType: Record<SourceType, string[]> = {
+export const canonicalFieldsBySourceType: Record<SourceType, string[]> = {
   SALES: ["order_id", "store_code", "amount", "currency", "created_at"],
   ORDERS: ["order_id", "store_code", "amount", "currency", "status", "created_at"],
   PAYMENTS: ["payment_id", "order_id", "amount", "gateway_fee_amount", "currency", "status", "captured_at"],

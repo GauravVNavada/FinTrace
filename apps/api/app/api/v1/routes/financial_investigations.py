@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, Response
 from app.api.deps import get_actor_context
 from app.controls.schemas import ActorContext, Capability
 from app.core.config import get_settings
+from app.domain.schemas import LifecycleResponse
 from app.financial_exception_investigations.service import (
     FinancialExceptionConflict,
     FinancialExceptionInvestigationService,
@@ -781,6 +782,19 @@ def reconciliation_results(
 ) -> list[ReconciliationResultResponse]:
     _require(context, Capability.FINANCIAL_INVESTIGATION_READ)
     return reconciliation_service.results(context.organization_id, investigation_id, run_id, limit)
+
+
+@router.get("/{investigation_id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle", response_model=LifecycleResponse)
+def reconciliation_lifecycle(investigation_id: str, run_id: str, result_id: str,
+                             context: Annotated[ActorContext, Depends(get_actor_context)]) -> LifecycleResponse:
+    _require(context, Capability.FINANCIAL_INVESTIGATION_READ)
+    try:
+        item = reconciliation_service.lifecycle(context.organization_id, investigation_id, run_id, result_id)
+    except ReconciliationNotFound as error:
+        raise HTTPException(status_code=404, detail="Uploaded lifecycle not found") from error
+    return LifecycleResponse(organization_id=context.organization_id, order=item.order,
+        payments=list(item.payments), settlements=list(item.settlements), invoices=list(item.invoices),
+        refunds=list(item.refunds), inventory_movements=list(item.inventory_movements), employee_actions=list(item.employee_actions))
 
 
 @router.post(

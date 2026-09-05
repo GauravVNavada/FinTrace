@@ -544,6 +544,9 @@ class OpenAICompatibleAIClient:
             instruction += (
                 " For inventory conclusions, cite the order and the relevant inventory SALE and RETURN records. "
                 "For INVENTORY_RESTORED_WITHOUT_REFUND, also cite the explicit missing refund evidence. "
+                "For quantity/value mismatches, also cite the refund record. Include order amount, "
+                "SALE and RETURN movement_type, each movement's quantity, SKU, unit_cost_minor and "
+                "inventory_value_minor predicates when supplied. Do not cite movement_type alone. "
                 "Use the deterministic finding values as supplied; do not perform new monetary calculations. "
                 "Use INVENTORY_VALUE_CALCULATION_ERROR only when that exact deterministic finding is present; "
                 "otherwise use INVENTORY_VALUE_MISMATCH for a sale-versus-return cost difference."
@@ -580,6 +583,21 @@ class OpenAICompatibleAIClient:
             }
             for name in available_tools
         ]
+        if exception.type.value in {"INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH", "INVENTORY_RESTORED_WITHOUT_REFUND", "REFUND_WITHOUT_INVENTORY_RETURN"} and evidence:
+            tool_specs = []
+            required = [item.model_dump(mode="json") for item in evidence if (
+                (item.source.value == "order" and item.field == "amount_minor") or
+                (item.source.value == "refund" and (item.field == "amount_minor" or item.record_id is None)) or
+                (item.source.value == "inventory" and (item.field in {"movement_type", "quantity", "sku", "unit_cost_minor", "inventory_value_minor"} or item.record_id is None))
+            )]
+            payload["mandatory_citations"] = required
+            instruction += (
+                " Required scoped evidence has been collected. Return action=final now. "
+                "For a SUPPORTED inventory conclusion, supporting_evidence MUST include EVERY object "
+                "in mandatory_citations, copied unchanged (including refund evidence). These are a "
+                "small required evidence bundle, not optional examples. Do not drop refund/order "
+                "citations to shorten the response. Keep summary under 600 characters."
+            )
         if exception.type.value == "AMBIGUOUS_ASSOCIATION" and evidence:
             # The mandatory comparison evidence is already collected. Mixing
             # native tool calls with final JSON here causes avoidable Groq 400s.

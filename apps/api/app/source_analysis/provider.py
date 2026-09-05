@@ -303,6 +303,72 @@ CANONICAL_ALIASES: dict[SourceType, dict[str, str]] = {
     },
 }
 
+# Vendor vocabulary is source-scoped: e.g. CreditAmount is a refund amount
+# in a returns export, but a net amount in a settlement export.
+VENDOR_FIELDS = {
+    SourceType.ORDERS: {
+        "order_id": "TxnReceipt OrderNumber TicketID SaleID RetailOrder OrderID",
+        "store_code": "StoreID OutletCode Branch LocationID SiteCode",
+        "amount": "OrderTotal NetSale TicketAmount OrderGross OrderAmount",
+        "created_at": "BookedOn OrderCreated OpenedAt SaleTime EnteredAt",
+    },
+    SourceType.PAYMENTS: {
+        "payment_id": "TxnID AcquirerRef CaptureID AcquirerTransaction",
+        "amount": "CapturedValue CaptureAmount PaidAmount TransactionAmount",
+        "captured_at": "TransactionTime CapturedOn CaptureTime PaidTime CapturedTimestamp",
+        "gateway_fee_amount": "Fee MDR GatewayCharge FeeAmount AcquirerFee",
+        "gateway_reference": "MerchantRef MerchantReference",
+        "status": "Result",
+    },
+    SourceType.SETTLEMENTS: {
+        "settlement_id": "CreditID PayoutRef TreasuryRef AdviceNumber",
+        "payment_id": "TxnID AcquirerRef CaptureID AcquirerTransaction",
+        "gross_amount": "GrossCredit GrossValue GrossSettlement",
+        "fee_amount": "MerchantFee Charges GatewayCharge FeeAmount",
+        "tax_amount": "GSTOnFee ChargesTax TaxComponent FeeTax TaxAmount",
+        "net_amount": "PayoutValue NetSettlement CreditAmount NetPayout",
+        "settled_at": "ValueDate PayoutDate SettlementTimestamp SettledTime AdviceDate PayoutAt",
+    },
+    SourceType.INVOICES: {
+        "invoice_id": "DocumentNo InvoiceReference DocID ERPDocument",
+        "amount": "DocumentValue BilledValue DocAmount InvoiceGross ERPAmount",
+        "created_at": "DocumentDate InvoiceCreated DocCreatedAt InvoiceTime ERPPostedAt",
+        "status": "State DocumentStatus DocStatus InvoiceStatus ERPStatus",
+    },
+    SourceType.REFUNDS: {
+        "refund_id": "ReturnRef CreditRef AdviceID RefundNumber",
+        "payment_id": "TxnID AcquirerRef CaptureID AcquirerTransaction",
+        "amount": "CreditAmount CreditValue RefundGross",
+        "processed_at": "ReturnTime CreditCreated AdviceTime RefundTime RefundPostedAt",
+    },
+    SourceType.INVENTORY_MOVEMENTS: {
+        "movement_id": "StockEvent StockTxn InventoryID WarehouseEvent",
+        "movement_type": "EventType StockAction InventoryEvent EventCode",
+        "quantity": "Count UnitsMoved",
+        "sku": "ItemSKU ProductSKU StockCode",
+        "occurred_at": "RecordedAt EventCreated StockTime InventoryTime EventTimestamp",
+    },
+    SourceType.EMPLOYEE_ACTIONS: {
+        "action_id": "ActivityID LogReference ActivityNumber",
+        "employee_id": "UserCode OperatorID StaffNumber AgentID",
+        "entity_type": "ObjectType SubjectType EntityKind",
+        "entity_id": "ObjectRef SubjectRef EntityNumber",
+        "action": "Operation ActionType ActionCode ActivityCode",
+        "occurred_at": "LoggedAt ActionTimestamp ActionTime ActivityTimestamp",
+    },
+}
+for _source_type, _fields in VENDOR_FIELDS.items():
+    for _canonical, _headers in _fields.items():
+        for _header in _headers.split():
+            CANONICAL_ALIASES[_source_type][_header.casefold()] = _canonical
+CANONICAL_ALIASES[SourceType.SALES].update(CANONICAL_ALIASES[SourceType.ORDERS])
+for _source_type, _aliases in CANONICAL_ALIASES.items():
+    for _header in ("ccy", "ccycode", "currencycode"):
+        _aliases[_header] = "currency"
+    if _source_type not in (SourceType.SETTLEMENTS, SourceType.EMPLOYEE_ACTIONS):
+        for _header in "TxnReceipt OrderNumber TicketID SaleID RetailOrder OrderID".split():
+            _aliases[_header.casefold()] = "order_id"
+
 REQUIRED_FIELDS: dict[SourceType, frozenset[str]] = {
     SourceType.SALES: frozenset({"order_id", "amount"}),
     SourceType.ORDERS: frozenset({"order_id", "amount"}),
@@ -341,6 +407,23 @@ class OfflineSourceAnalysisProvider:
             for source_type, tokens in SOURCE_TOKENS.items()
         }
         source_type, score = max(scores.items(), key=lambda item: (item[1], item[0].value))
+        signatures = []
+        for candidate, aliases in CANONICAL_ALIASES.items():
+            fields = {aliases.get(_normalize(header)) for header in document.headers}
+            required = REQUIRED_FIELDS[candidate]
+            if required.issubset(fields):
+                signatures.append(candidate)
+        # Rich source contracts outrank shared order/amount columns. Do not
+        # auto-accept a mixed export satisfying multiple specialist contracts.
+        specialists = [candidate for candidate in signatures if candidate not in (SourceType.SALES, SourceType.ORDERS)]
+        if len(specialists) == 1:
+            source_type = specialists[0]
+            score = max(score, 4)
+        elif len(specialists) > 1:
+            return ClassificationResult(SourceType.UNKNOWN, 0.0, "Multiple source contracts match; split the mixed export or select its source type.", "OFFLINE_DETERMINISTIC")
+        elif signatures and (source_type in (SourceType.SALES, SourceType.ORDERS) or score == 0):
+            source_type = max(signatures, key=lambda candidate: scores[candidate])
+            score = max(score, 4)
         if score == 0:
             return ClassificationResult(
                 SourceType.UNKNOWN,

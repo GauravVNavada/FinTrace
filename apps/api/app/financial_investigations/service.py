@@ -142,6 +142,10 @@ class FinancialInvestigationService:
             None,
         )
         if successful is not None:
+            internal = self._repository.get_source_file_internal(context.organization_id, investigation_id, successful.id)
+            if internal is not None and internal.get("sha256") != data.get("sha256"):
+                self._repository.release_idempotency(context.organization_id, idempotency_key)
+                raise FinancialInvestigationConflict("A successfully processed file has this name but different contents. The existing file was preserved; use a new close for a revised export.")
             self._remove_unready_sources(
                 context, investigation_id, same_name_sources, keep_id=successful.id
             )

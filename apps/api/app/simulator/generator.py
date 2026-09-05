@@ -132,7 +132,7 @@ def generate_dataset(config: GeneratorConfig | None = None) -> GeneratedDataset:
             "gross_minor": _money(amount),
             "fees_minor": _money(fee),
             "tax_minor": _money(fee * Decimal("0.18")),
-            "net_minor": _money(amount - fee - fee * Decimal("0.18")),
+            "net_minor": _money(amount) - _money(fee) - _money(fee * Decimal("0.18")),
             "settled_at": (created_at + timedelta(days=2)).isoformat(),
             "status": "RECEIVED",
         }
@@ -200,10 +200,14 @@ def generate_dataset(config: GeneratorConfig | None = None) -> GeneratedDataset:
             settlement["fees_minor"] += 500
             settlement["net_minor"] -= 500
         elif scenario == "DUPLICATE_PAYMENT":
+            # Distinct processor references make this distinguishable from
+            # unresolved candidate payments without encoding truth in IDs.
+            payment["gateway_reference"] = f"CAPTURE-{index}-A"
             records["payments"].append(
                 {
                     **payment,
                     "payment_id": f"PAY-DUP-{index}",
+                    "gateway_reference": f"CAPTURE-{index}-B",
                     "captured_at": (created_at + timedelta(minutes=3)).isoformat(),
                 }
             )

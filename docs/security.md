@@ -1,5 +1,9 @@
 # FinTrace Security Design
 
+## Final local validation — 2026-09-05
+
+See [final-validation.md](final-validation.md) for tested behavior and explicit remaining production limitations. Inventory investigations precollect bounded read-only evidence and allow one verification-correction turn, never bypassing the verifier. Failed verification remains unresolved and can be retried with a new idempotency key. Uploaded lifecycle reads are authenticated tenant/run/result scoped. Development authentication remains local-demo-only; no financial execution integration is implied.
+
 **Status:** MVP security baseline plus tenant-integrity and replay hardening · 2026-09-03
 
 ## File-ingestion security requirements

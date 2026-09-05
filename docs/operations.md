@@ -1,5 +1,9 @@
 # FinTrace Operations and Observability
 
+## Final local validation — 2026-09-05
+
+See [final-validation.md](final-validation.md) for tested behavior and explicit remaining production limitations. Inventory investigations precollect bounded read-only evidence and allow one verification-correction turn, never bypassing the verifier. Failed verification remains unresolved and can be retried with a new idempotency key. Uploaded lifecycle reads are authenticated tenant/run/result scoped. Development authentication remains local-demo-only; no financial execution integration is implied.
+
 **Status:** local product operational contract; ingestion, reconciliation, replay recovery, and bounded audit observability defined · 2026-09-03
 
 ## Ingestion metrics

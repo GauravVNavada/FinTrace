@@ -58,7 +58,7 @@ class FinancialExceptionInvestigationService:
         # Old zero-lookup assessments can be refreshed by an explicit new POST.
         # Replays using the same idempotency key still return the original result.
         refresh_legacy = existing is not None and (
-            existing.get("status") == "FAILED" or (
+            existing.get("status") == "FAILED" or (existing.get("verifier_passed") is False and existing.get("provider") != "stub") or (
                 not existing.get("tool_calls") and existing.get("provider") != "stub"
             )
         )

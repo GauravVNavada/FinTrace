@@ -1,5 +1,15 @@
 # FinTrace Requirements Specification
 
+## Final intake and evidence corrections — 2026-09-05
+
+See [final-validation.md](final-validation.md) for the current implementation and acceptance record. This correction supersedes older references to a hardwired August close, ID-prefix ambiguity, seed lifecycle detail, and automatic “Explained” labels for open exceptions.
+
+Routine CSV/XLSX mapping is deterministic and source-scoped, with complete specialist field signatures preferred over filename words. Excel serial dates are converted only for recognized timestamp fields; captured/refunded monetary amounts are never dates. Unknown or incomplete input remains reviewable. A batch continues after an individual failure and refreshes uploaded sources; close execution waits for setup completion. Same-name changed content cannot silently replace a successful upload.
+
+The read-only GET `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle` returns the existing LifecycleResponse shape from the run’s normalized dataset, scoped to the authenticated tenant and latest run. No database migration. Missing evidence is displayed as missing, never substituted with exposure or seed data.
+
+Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local demo is not a production banking integration.
+
 The web client must clear its stored session and redirect to `/login` when an authenticated API request receives HTTP 401, including access-token expiry. The local controller demo identity is displayed as “Gaurav.”
 
 ## Investigation evidence improvement (2026-09-05)

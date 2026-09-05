@@ -61,5 +61,10 @@ class LifecycleStore:
             invoices=related("invoices"),
             refunds=refunds,
             inventory_movements=related("inventory_movements"),
-            employee_actions=related("employee_actions"),
+            employee_actions=tuple(item for item in self._records.get("employee_actions", [])
+                if item.get("organization_id") == organization_id and (
+                    item.get("order_id") == order_id or
+                    (item.get("entity_type") == "ORDER" and item.get("entity_id") == order_id) or
+                    (item.get("entity_type") == "REFUND" and item.get("entity_id") in {refund.get("refund_id") for refund in refunds})
+                )),
         )

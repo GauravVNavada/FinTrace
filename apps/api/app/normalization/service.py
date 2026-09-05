@@ -16,7 +16,10 @@ from app.source_analysis.analyzer import analyze_content
 class NormalizationBlocked(ValueError):
     def __init__(self, reasons: list[str]) -> None:
         self.reasons = reasons
-        super().__init__("Normalization requires review: " + "; ".join(reasons))
+        summary = "; ".join(reasons[:3])
+        if len(reasons) > 3:
+            summary += f"; and {len(reasons) - 3} additional row issues. Correct the source format and upload the corrected file."
+        super().__init__("Normalization requires review: " + summary)
 
 
 class DatasetVersionNotFound(LookupError):

@@ -70,10 +70,14 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
     amount_minor = int(order["amount_minor"])
 
     if len(lifecycle.payments) > 1:
-        ambiguous = any(
-            str(payment.get("payment_id", "")).startswith("PAY-AMB-")
-            for payment in lifecycle.payments
-        )
+        payment_ids = {str(payment.get("payment_id")) for payment in lifecycle.payments}
+        settled_ids = {str(item.get("payment_id")) for item in lifecycle.settlements}
+        references = [str(item.get("gateway_reference") or item.get("merchant_ref") or "") for item in lifecycle.payments]
+        # IDs carry no business meaning. Independent settlement records or
+        # distinct processor references support duplicate captures; otherwise
+        # the association still requires evidence.
+        ambiguous = not (payment_ids.issubset(settled_ids) or
+                         (all(references) and len(set(references)) == len(references)))
         code = "AMBIGUOUS_ASSOCIATION" if ambiguous else "DUPLICATE_PAYMENT"
         message = (
             "Multiple payment candidates satisfy the available association criteria."
@@ -105,6 +109,30 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
         )
 
     payment = lifecycle.payments[0]
+    for record in (order, *lifecycle.payments, *lifecycle.refunds, *lifecycle.settlements):
+        if order.get("currency") and record.get("currency") and record["currency"] != order["currency"]:
+            findings.append(RuleFinding("CURRENCY_MISMATCH", "Source currency differs from the order; no FX rate has been assumed.", 0, "DATA_QUALITY"))
+    if order.get("status") and str(order["status"]).upper() in {"CANCELLED", "CANCELED", "FAILED", "VOID"}:
+        findings.append(RuleFinding("ORDER_STATUS_MISMATCH", "A cancelled or failed order has payment records.", amount_minor, "CONTROL_RISK"))
+    if payment.get("status") and str(payment["status"]).upper() not in {"CAPTURED", "SUCCESS", "SUCCESSFUL", "COMPLETED", "PAID", "SETTLED"}:
+        findings.append(RuleFinding("PAYMENT_STATUS_MISMATCH", "Payment is not confirmed captured; it cannot reconcile the order.", amount_minor, "CONTROL_RISK"))
+    if payment.get("amount_minor") is not None and int(payment["amount_minor"]) != amount_minor:
+        findings.append(RuleFinding("PAYMENT_AMOUNT_MISMATCH", "Captured payment amount differs from the order amount.", abs(int(payment["amount_minor"]) - amount_minor), "POTENTIAL_EXPOSURE"))
+    for refund in lifecycle.refunds:
+        if refund.get("status") and str(refund["status"]).upper() not in {"PROCESSED", "COMPLETED", "SUCCESS", "SUCCESSFUL", "REFUNDED"}:
+            findings.append(RuleFinding("REFUND_STATUS_MISMATCH", "Refund record is not confirmed completed.", 0, "CONTROL_RISK"))
+    if len(lifecycle.settlements) > 1:
+        findings.append(RuleFinding("MULTIPLE_SETTLEMENTS_REVIEW", "Multiple settlements require allocation review; they are not silently treated as one.", 0, "DATA_QUALITY"))
+    if len(lifecycle.refunds) > 1:
+        findings.append(RuleFinding("MULTIPLE_REFUNDS_REVIEW", "Multiple refunds require line-item review; no refund record is assumed to represent the total.", 0, "DATA_QUALITY"))
+    for item in lifecycle.settlements:
+        if item.get("gross_minor") is not None and payment.get("amount_minor") is not None and int(item["gross_minor"]) != int(payment["amount_minor"]):
+            findings.append(RuleFinding("SETTLEMENT_GROSS_MISMATCH", "Settlement gross differs from the captured payment.", abs(int(item["gross_minor"]) - int(payment["amount_minor"])), "POTENTIAL_EXPOSURE"))
+        fields = ("gross_minor", "fees_minor", "tax_minor", "net_minor")
+        if all(item.get(field) is not None for field in fields):
+            expected_net = int(item["gross_minor"]) - int(item["fees_minor"]) - int(item["tax_minor"])
+            if expected_net != int(item["net_minor"]):
+                findings.append(RuleFinding("SETTLEMENT_NET_MISMATCH", "Settlement net does not equal gross minus fees and fee tax.", abs(expected_net - int(item["net_minor"])), "POTENTIAL_EXPOSURE"))
     if not lifecycle.settlements:
         finding = RuleFinding(
             "SETTLEMENT_MISSING", "Captured payment has no settlement record.", amount_minor
@@ -248,7 +276,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                 RuleFinding(
                     "INVENTORY_RETURN_MISSING",
                     "Full refund has no corresponding inventory return.",
-                    refund_amount,
+                    sale_value if sale_value is not None else 0,
                     "CONTROL_RISK",
                 )
             )
@@ -260,7 +288,7 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     RuleFinding(
                         "INVENTORY_QUANTITY_MISMATCH",
                         "Returned inventory quantity does not equal the quantity sold.",
-                        abs(expected_value - observed_value) if expected_value and observed_value else abs(sale_quantity - return_quantity),
+                        abs(expected_value - observed_value) if sale_value is not None and return_value is not None else 0,
                         "CONTROL_RISK",
                     )
                 )

@@ -8,6 +8,7 @@ from app.financial_investigations.files import UploadValidationError
 from app.financial_investigations.schemas import SourceType
 from app.main import app
 from app.source_analysis.analyzer import analyze_content
+from app.source_analysis.analyzer import _display
 from app.source_analysis.provider import (
     REQUIRED_FIELDS,
     ClassificationResult,
@@ -69,6 +70,34 @@ def test_source_analysis_failover_is_transient_only() -> None:
     with pytest.raises(SourceAnalysisProviderUnavailable, match="source provider unavailable"):
         FailoverSourceAnalysisProvider((permanent, fallback)).classify("orders.csv", object())
     assert fallback.calls == 0
+
+
+def test_excel_money_headers_never_become_dates():
+    assert _display(6250, "CapturedValue") == "6250"
+    assert _display(6250, "RefundedAmount") == "6250"
+    assert _display(46128, "InvoiceCreated").startswith("2026-")
+
+
+@pytest.mark.asyncio
+async def test_successful_filename_with_changed_content_is_not_silently_deduplicated():
+    from uuid import uuid4
+    def headers():
+        return {**_headers(), "Idempotency-Key": uuid4().hex}
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        created = await client.post("/api/v1/financial-investigations", headers=headers(), json={"name": "Changed content protection", "base_currency": "INR", "period_start": "2026-03-01", "period_end": "2026-03-31"})
+        assert created.status_code == 201, created.text
+        base = f"/api/v1/financial-investigations/{created.json()['id']}"
+        original = b"PaymentID,OrderID,Amount\nPAY-1,ORD-1,100.00\n"
+        upload = await client.post(base + "/sources", headers=headers(), files={"file": ("payments.csv", original, "text/csv")})
+        source_id = upload.json()["id"]
+        source = base + f"/sources/{source_id}"
+        assert (await client.post(source + "/analyze", headers=headers())).status_code == 200
+        assert (await client.post(source + "/mappings/confirm", headers=headers())).status_code == 200
+        changed = await client.post(base + "/sources", headers=headers(), files={"file": ("payments.csv", original.replace(b"100.00", b"200.00"), "text/csv")})
+        assert changed.status_code == 422, changed.text
+        assert "different contents" in changed.text
+        sources = await client.get(base + "/sources", headers=headers())
+        assert [item["id"] for item in sources.json()] == [source_id]
 
 
 @pytest.mark.asyncio

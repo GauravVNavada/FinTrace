@@ -183,7 +183,7 @@ class InvestigationService:
             # Ambiguity requires comparison, even when a provider thinks the
             # exception label alone is enough to answer. Collect the bounded
             # baseline through the same scoped, audited tools before synthesis.
-            if exception.type == ExceptionType.AMBIGUOUS_ASSOCIATION:
+            if exception.type in {ExceptionType.AMBIGUOUS_ASSOCIATION, ExceptionType.INVENTORY_VALUE_MISMATCH, ExceptionType.INVENTORY_QUANTITY_MISMATCH, ExceptionType.INVENTORY_RESTORED_WITHOUT_REFUND, ExceptionType.REFUND_WITHOUT_INVENTORY_RETURN}:
                 for name in self._fallback_tools(exception):
                     try:
                         result = self._tools.invoke(name, organization_id, lifecycle, exception.id)
@@ -440,6 +440,18 @@ class InvestigationService:
 
         assert candidate is not None
         verification = verify_candidate(candidate, exception.type, lifecycle)
+        if verification.issues and callable(next_step) and getattr(self._provider, "provider", "stub") != "stub":
+            # One correction using the same bounded evidence. Never weaken the
+            # verifier or attach citations that the provider did not select.
+            try:
+                correction = next_step(exception,
+                    [*findings, {"code": "EVIDENCE_CORRECTION", "message": "Correct the final candidate using only supplied evidence. Verification issues: " + "; ".join(verification.issues)}],
+                    evidence, [], [])
+                if correction.action == "final":
+                    corrected = InvestigationCandidate.model_validate(_normalize_provider_candidate(correction.candidate or {}, evidence))
+                    verification = verify_candidate(corrected, exception.type, lifecycle)
+            except (ProviderUnavailable, ValidationError, TypeError, ValueError):
+                pass
         return _with_metadata(InvestigationResponse(
             **verification.candidate.model_dump(),
             investigation_id=f"INV-{uuid4().hex[:12].upper()}",
@@ -497,6 +509,8 @@ class InvestigationService:
     @staticmethod
     def _fallback_tools(exception: ExceptionSummary) -> list[str]:
         common = ["get_order", "get_payments_for_order"]
+        if exception.type.value in {"INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH", "INVENTORY_RESTORED_WITHOUT_REFUND", "REFUND_WITHOUT_INVENTORY_RETURN"}:
+            return ["get_order", "get_refunds_for_order", "get_inventory_movements", "get_invoice_for_order"]
         if exception.type.value in {"DUPLICATE_PAYMENT", "AMBIGUOUS_ASSOCIATION"}:
             return [
                 *common,

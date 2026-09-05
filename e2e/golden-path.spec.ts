@@ -172,8 +172,8 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return retryFailed ? json({ ...aiResult, status: "FAILED", summary: "The AI response could not be validated.", supporting_evidence: [], verifier_passed: false }) : json({}, 404);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigate`)) return json(aiResult);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
-    if (path.endsWith(`/lifecycles/${missingSettlement.order_id}`)) return json(missingLifecycle);
-    if (path.endsWith(`/lifecycles/${exception.order_id}`)) return json(lifecycle);
+    if (path.endsWith(`/results/${missingSettlement.id}/lifecycle`)) return json(missingLifecycle);
+    if (path.endsWith(`/results/${exception.id}/lifecycle`)) return json(lifecycle);
     if (path.endsWith("/ai/provider-health")) return json({ status: "CONNECTED", provider: "stub", model: "test-fixture", configured: true, latency_ms: 0, error_category: null, retryable: null, detail: "TEST FIXTURE / NON-LIVE", overall_status: "AVAILABLE", active_provider: "stub", providers: [] });
     if (path.endsWith("/audit-events")) return json(reviewRequested ? [auditEvent] : []);
     return json({}, 404);
@@ -192,7 +192,7 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
   await page.goto("/investigations");
   await expect(page.getByRole("heading", { name: "Financial closes" })).toBeVisible();
   await expect(page.getByRole("link", { name: "Start a new close" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Open prepared August 2026 close" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Open latest close" })).toBeVisible();
   await page.goto(`/investigations/${investigation.id}/data`);
   await expect(page.getByRole("heading", { name: investigation.name })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -219,9 +219,8 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
   await page.screenshot({ path: "test-results/redesign-ambiguous-case.png", fullPage: true });
   await page.goto(`/investigations/${investigation.id}/reconciliation?result=${missingSettlement.id}`);
   await expect(page.getByRole("heading", { name: "Missing settlement" })).toBeVisible();
-  await expect(page.getByText("EXPLAINED")).toBeVisible();
-  await expect(page.getByText("How FinTrace established this")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Investigate evidence" })).toHaveCount(0);
+  await expect(page.getByText("NEEDS DECISION", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Investigate evidence" })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/redesign-missing-settlement.png", fullPage: true });
   await page.goto(`/investigations/${investigation.id}/attention`);
