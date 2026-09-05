@@ -52,6 +52,7 @@ def construct_lifecycles(
     by_order: dict[str, dict[str, list[dict[str, Any]]]] = defaultdict(lambda: defaultdict(list))
     payment_keyed: dict[str, list[dict[str, Any]]] = defaultdict(list)
     order_keyed_actions: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    refund_keyed_actions: dict[str, list[dict[str, Any]]] = defaultdict(list)
     keyed_records: set[int] = set()
     for record in records:
         values = _canonical_values(record, organization_id)
@@ -68,7 +69,11 @@ def construct_lifecycles(
             payment_keyed[str(values["payment_id"])].append(values)
             keyed_records.add(id(values))
         elif collection == "employee_actions" and values.get("entity_id"):
-            order_keyed_actions[str(values["entity_id"])].append(values)
+            entity_type = str(values.get("entity_type", "")).upper()
+            if entity_type in {"REFUND", "REFUNDS"}:
+                refund_keyed_actions[str(values["entity_id"])].append(values)
+            else:
+                order_keyed_actions[str(values["entity_id"])].append(values)
             keyed_records.add(id(values))
         elif collection is None:
             raise LifecycleConstructionError(
@@ -90,9 +95,17 @@ def construct_lifecycles(
             )
         invoices = grouped.get("invoices", [])
         if len(invoices) > 1:
-            raise LifecycleConstructionError(
-                f"{order_id} has {len(invoices)} invoice records; at most one is supported"
-            )
+            active = [item for item in invoices if item.get("status") == "ACTIVE"]
+            reversals = [item for item in invoices if item.get("status") == "REVERSED"]
+            if len(active) == 1 and len(active) + len(reversals) == len(invoices):
+                # A refund commonly emits a second ERP row that reverses the
+                # original invoice. Keep both rows for accounting completeness,
+                # while putting the active sale invoice first for reconciliation.
+                invoices = active + reversals
+            else:
+                raise LifecycleConstructionError(
+                    f"{order_id} has {len(invoices)} invoice records; at most one active invoice is supported"
+                )
         payments = grouped.get("payments", [])
         payment_ids = {item.get("payment_id") for item in payments}
         settlements = [
@@ -109,7 +122,15 @@ def construct_lifecycles(
         employee_actions = list(grouped.get("employee_actions", []))
         keyed_actions = order_keyed_actions.get(order_id, [])
         employee_actions.extend(keyed_actions)
+        refund_ids = {str(item.get("refund_id")) for item in refunds if item.get("refund_id")}
+        refund_actions = [
+            action
+            for refund_id in refund_ids
+            for action in refund_keyed_actions.get(refund_id, [])
+        ]
+        employee_actions.extend(refund_actions)
         attached_keyed_records.update(id(item) for item in keyed_actions)
+        attached_keyed_records.update(id(item) for item in refund_actions)
         lifecycles.append(
             CanonicalLifecycle(
                 order=orders[0],

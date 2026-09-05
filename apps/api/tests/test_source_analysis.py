@@ -1,3 +1,6 @@
+from io import BytesIO
+
+import openpyxl
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -6,6 +9,7 @@ from app.financial_investigations.schemas import SourceType
 from app.main import app
 from app.source_analysis.analyzer import analyze_content
 from app.source_analysis.provider import (
+    REQUIRED_FIELDS,
     ClassificationResult,
     FailoverSourceAnalysisProvider,
     OfflineSourceAnalysisProvider,
@@ -270,6 +274,219 @@ def test_offline_provider_maps_canonical_minor_unit_export_headers() -> None:
     assert settlement_mappings["fees_minor"].canonical_field == "fee_amount"
     assert settlement_mappings["tax_minor"].canonical_field == "tax_amount"
     assert settlement_mappings["net_minor"].canonical_field == "net_amount"
+
+
+def test_offline_provider_maps_inventory_valuation_headers() -> None:
+    inventory = analyze_content(
+        "inventory.csv",
+        b"MoveID,OrderRef,MovementType,Qty,ProductCode,CostPerUnit,StockValue,EventTime,Currency\n"
+        b"MOV-1,ORD-1,SALE,2,SKU-1,24.00,48.00,2026-08-01T08:00:00+00:00,INR\n",
+        100,
+        20,
+    )
+    mappings = {
+        item.source_column: item
+        for item in OfflineSourceAnalysisProvider().propose_mappings(
+            SourceType.INVENTORY_MOVEMENTS, inventory
+        )
+    }
+    assert mappings["MoveID"].canonical_field == "movement_id"
+    assert mappings["OrderRef"].canonical_field == "order_id"
+    assert mappings["ProductCode"].canonical_field == "sku"
+    assert mappings["Qty"].canonical_field == "quantity"
+    assert mappings["CostPerUnit"].canonical_field == "unit_cost"
+    assert mappings["StockValue"].canonical_field == "inventory_value"
+    assert mappings["EventTime"].canonical_field == "occurred_at"
+    assert mappings["Currency"].canonical_field == "currency"
+
+
+def test_offline_provider_maps_february_generated_export_headers() -> None:
+    provider = OfflineSourceAnalysisProvider()
+    cases = {
+        SourceType.SALES: [
+            "OrderRef",
+            "BranchCode",
+            "GrossAmount",
+            "SaleTimestamp",
+            "Currency",
+        ],
+        SourceType.PAYMENTS: [
+            "PaymentRef",
+            "OrderRef",
+            "AmountPaid",
+            "PaidAt",
+            "Currency",
+        ],
+        SourceType.SETTLEMENTS: [
+            "BankCreditRef",
+            "PaymentRef",
+            "GrossPaid",
+            "FeeCharged",
+            "NetPaid",
+            "SettlementDate",
+            "Currency",
+        ],
+        SourceType.REFUNDS: [
+            "RefundID",
+            "PaymentRef",
+            "OrderRef",
+            "RefundAmount",
+            "ProcessedAt",
+            "Currency",
+        ],
+        SourceType.INVOICES: [
+            "BillingNo",
+            "OrderRef",
+            "InvoiceAmount",
+            "CreatedOn",
+            "Currency",
+        ],
+        SourceType.INVENTORY_MOVEMENTS: [
+            "MoveID",
+            "OrderRef",
+            "MovementType",
+            "Quantity",
+            "ProductCode",
+            "CostPerUnit",
+            "StockValue",
+            "EventTime",
+            "Currency",
+        ],
+        SourceType.EMPLOYEE_ACTIONS: [
+            "LogID",
+            "StaffID",
+            "Entity",
+            "EntityRef",
+            "Event",
+            "EventTime",
+        ],
+    }
+
+    for source_type, headers in cases.items():
+        document = analyze_content(
+            "february-export.csv",
+            (",".join(headers) + "\n" + ",".join(["value"] * len(headers))).encode(),
+            100,
+            30,
+        )
+        mappings = provider.propose_mappings(source_type, document)
+        mapped_fields = {item.canonical_field for item in mappings if item.canonical_field}
+        assert REQUIRED_FIELDS[source_type].issubset(mapped_fields), source_type
+
+
+def test_offline_provider_classifies_february_generated_export_files() -> None:
+    provider = OfflineSourceAnalysisProvider()
+    cases = {
+        "Feb_Order_Export.csv": (SourceType.ORDERS, ["OrderRef", "GrossAmount", "SaleTimestamp"]),
+        "PaymentGateway_Feb.xlsx": (SourceType.PAYMENTS, ["PaymentRef", "OrderRef", "AmountPaid"]),
+        "BankCredits_Feb.csv": (
+            SourceType.SETTLEMENTS,
+            ["BankCreditRef", "PaymentRef", "GrossPaid", "FeeCharged", "NetPaid"],
+        ),
+        "Billing_February.xlsx": (SourceType.INVOICES, ["BillingNo", "OrderRef", "InvoiceAmount"]),
+        "Refunds_Feb.csv": (SourceType.REFUNDS, ["RefundID", "PaymentRef", "RefundAmount"]),
+        "Warehouse_February.xlsx": (
+            SourceType.INVENTORY_MOVEMENTS,
+            ["MoveID", "OrderRef", "MovementType", "Quantity", "ProductCode"],
+        ),
+        "Branch_Activity_Feb.csv": (
+            SourceType.EMPLOYEE_ACTIONS,
+            ["LogID", "StaffID", "Entity", "EntityRef", "Event"],
+        ),
+    }
+
+    for filename, (expected_type, headers) in cases.items():
+        document = analyze_content(
+            filename.replace(".xlsx", ".csv"),
+            (",".join(headers) + "\n" + ",".join(["value"] * len(headers))).encode(),
+            100,
+            30,
+        )
+        classification = provider.classify(filename, document)
+        assert classification.source_type == expected_type, filename
+        assert classification.confidence >= 0.9, filename
+
+
+@pytest.mark.parametrize(
+    ("source_type", "headers"),
+    [
+        (SourceType.SALES, ["ReceiptNo", "Outlet", "SaleValue", "CreatedAt", "Currency"]),
+        (
+            SourceType.PAYMENTS,
+            ["GatewayTxn", "ReceiptNo", "PaidValue", "CapturedWhen", "Currency", "GatewayFee"],
+        ),
+        (
+            SourceType.SETTLEMENTS,
+            [
+                "SettlementRef",
+                "GatewayTxn",
+                "SettlementGross",
+                "ProcessingFee",
+                "TaxOnFee",
+                "NetCredit",
+                "CreditedOn",
+            ],
+        ),
+        (
+            SourceType.REFUNDS,
+            ["RefundRef", "GatewayTxn", "ReceiptNo", "RefundValue", "RefundedAt"],
+        ),
+        (
+            SourceType.INVOICES,
+            ["InvoiceNo", "ReceiptNo", "InvoiceTotal", "IssuedAt", "InvoiceState"],
+        ),
+        (
+            SourceType.INVENTORY_MOVEMENTS,
+            ["MovementRef", "ReceiptNo", "Movement", "Units", "SKU", "OccurredAt"],
+        ),
+        (
+            SourceType.EMPLOYEE_ACTIONS,
+            ["ActionRef", "EmployeeCode", "RecordType", "RecordRef", "ActionName", "ActionAt"],
+        ),
+    ],
+)
+def test_offline_provider_maps_common_operational_export_headers(
+    source_type: SourceType, headers: list[str]
+) -> None:
+    document = analyze_content(
+        "export.csv",
+        (",".join(headers) + "\n" + ",".join(["value"] * len(headers))).encode(),
+        100,
+        30,
+    )
+    mappings = OfflineSourceAnalysisProvider().propose_mappings(source_type, document)
+    mapped_fields = {item.canonical_field for item in mappings if item.canonical_field}
+
+    assert REQUIRED_FIELDS[source_type].issubset(mapped_fields)
+
+
+def test_xlsx_reader_converts_excel_serial_dates_to_utc_timestamps() -> None:
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["ReceiptNo", "CreatedAt"])
+    sheet.append(["ORD-1", 46030.413194444445])
+    output = BytesIO()
+    workbook.save(output)
+
+    document = analyze_content("sales.xlsx", output.getvalue(), 100, 20)
+
+    assert document.rows[0][1].startswith("2026-01-")
+    assert document.rows[0][1].endswith("+00:00")
+
+
+@pytest.mark.parametrize("header", ["PaidAt", "CreatedOn", "EventTime"])
+def test_xlsx_reader_converts_vendor_date_alias_headers(header: str) -> None:
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append([header])
+    sheet.append([46058.51736111111])
+    output = BytesIO()
+    workbook.save(output)
+
+    document = analyze_content("vendor-export.xlsx", output.getvalue(), 100, 20)
+
+    assert document.rows[0][0].startswith("2026-")
+    assert document.rows[0][0].endswith("+00:00")
 
 
 def test_offline_provider_maps_invoice_gross_minor_and_ignores_tenant_scope() -> None:

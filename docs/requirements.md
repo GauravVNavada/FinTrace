@@ -31,12 +31,12 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | ID | Requirement | Status / acceptance criteria |
 | --- | --- | --- |
 | FIN-001 | Create a financial investigation workspace | Complete Sprint 1; persists organization, period, currency, creator, status, and timestamps. |
-| FIN-002 | Upload supported source files | Complete Sprint 1; accepts CSV/XLSX only, validates type/size/content, stores safe metadata, and never trusts a browser path. |
+| FIN-002 | Upload supported source files | Complete Sprint 1; accepts CSV/XLSX only, validates type/size/content, stores safe metadata, never trusts a browser path, locks successful source slots against repeat uploads, and replaces same-name non-ready source rows instead of appending them. |
 | FIN-003 | Preserve source lineage | Implemented Sprint 3; normalized records retain source file, row, column, and source-record references. |
 | FIN-004 | Keep domain terms distinct | Active; financial workspace, exception investigation, reconciliation run, and evaluation run have separate identifiers and lifecycles. |
 | FIN-005 | Require explicit mapping confirmation | Implemented Sprint 2 slice; web review, allowlisted edits, and unresolved-required-field blocking are active before normalization. |
 | FIN-006 | Keep ambiguity first-class | Active; uncertain relationships become `AMBIGUOUS`/`UNRESOLVED` and are never guessed. |
-| FIN-007 | Analyze bounded source structure | Active Sprint 2; only headers, inferred column profiles, bounded samples, and row/column counts are analyzed. |
+| FIN-007 | Analyze bounded source structure | Active Sprint 2; only headers, inferred column profiles, bounded samples, and row/column counts are analyzed. Common CSV/XLSX naming conventions are mapped through the deterministic alias catalog before any review is requested. |
 | FIN-008 | Produce reviewable source classification | Active Sprint 2; deterministic offline classification is available and an explicitly configured provider may propose a classification; provider status is persisted. |
 | FIN-009 | Persist mapping proposals and edits | Active Sprint 2; proposals are tenant-scoped, canonical fields are allowlisted, and confirmed mappings cannot be edited in place. |
 | FIN-010 | Record source-analysis outcomes | Active Sprint 2; analysis, mapping, confirmation, edit, and provider-failure events are auditable and safe to inspect. |
@@ -45,13 +45,14 @@ Authorization is enforced in the API. UI visibility is not evidence of authoriza
 | FIN-013 | Expose investigation-scoped outcomes | Implemented Sprint 4–6 slice; persisted run metrics, results, advisory patterns, and uploaded exception investigation traces are retrieved only through the owning financial investigation and organization scope. |
 | FIN-014 | Generate fresh synthetic source exports | Implemented Sprint 7; bounded `orders`, `seed`, `anomaly_rate`, and allowlisted scenario selection create source files through the same upload pipeline, require idempotency, and refuse overwrite when sources already exist. |
 | FIN-015 | Route uploaded outcomes into controlled review | Uploaded `EXCEPTION` and `AMBIGUOUS` results expose an idempotent, organization-scoped review-request path that reuses server-side action and approval policy. |
+| FIN-016 | Auto-resolve unambiguous source mappings | Complete for the supported source export vocabulary; required fields with high-confidence deterministic aliases are confirmed automatically, while genuinely unknown or conflicting columns remain reviewable. |
 
 ### RECON — Reconciliation
 
 | ID | Requirement | Acceptance criteria |
 | --- | --- | --- |
 | RECON-001 | Process a reproducible synthetic batch | Seed and record count are configurable; seed 42 produces the demo batch. |
-| RECON-002 | Normalize source records | Implemented Sprint 3 slice; decimal monetary fields become integer minor units, timestamps and source references are validated, malformed/duplicate records block the dataset, and unknown/unjoinable rows are refused. |
+| RECON-002 | Normalize source records | Implemented Sprint 3 slice; decimal monetary fields become integer minor units, timestamps and source references are validated, malformed/duplicate records block the dataset, a single active invoice plus explicit reversed invoice rows is treated as one refund lifecycle, and unknown/unjoinable rows are refused. |
 | RECON-003 | Reconcile deterministically | Exact IDs, references, amount consistency, fees, taxes, and timing windows are evaluated without an LLM. |
 | RECON-004 | Assign one lifecycle status | Each lifecycle is `RECONCILED`, `RECONCILED_WITH_VARIANCE`, `EXCEPTION`, `AMBIGUOUS`, or `PENDING`. |
 | RECON-005 | Preserve ground truth isolation | The investigator cannot access `ground_truth.json`; only evaluation code can. |
@@ -126,6 +127,10 @@ Current evidence for UI-001 through UI-006 is maintained in [`ui_component_inven
 6. Repeated resolution request with the same idempotency key creates one workflow effect.
 7. Analyst and Finance Manager cannot approve a high-value request; an authorized Controller can approve it exactly once.
 8. Export actions produce a CSV of the current screen's scoped data; run/evaluation actions report their API result and disable duplicate submissions while pending.
+
+9. Monthly synthetic packs contain one to three distinct anomalous lifecycles, including cost-basis inventory mismatches that are detectable from uploaded source records.
+10. Inventory valuation uses integer minor units for `unit_cost_minor` and `inventory_value_minor`; absent valuation columns remain explicit rather than being guessed.
+11. Inventory return quantity/value mismatches and inventory restoration without refund produce distinct deterministic findings and bounded review actions.
 
 ## 6. Traceability
 

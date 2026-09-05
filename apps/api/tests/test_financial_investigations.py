@@ -5,6 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from openpyxl import Workbook
 
 from app.main import app
+from app.repositories.factory import get_demo_repository
 
 
 def _headers(role: str = "CONTROLLER", key: str = "test-financial-investigation") -> dict[str, str]:
@@ -58,6 +59,29 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
         assert replay.status_code == 201
         assert replay.json()["id"] == source_id
 
+        replacement_content = (
+            b"Receipt No,Store Code,Final Total\nORD-1,BLR-01,1250.00\nORD-2,BLR-02,901.00\n"
+        )
+        replacement = await client.post(
+            f"/api/v1/financial-investigations/{investigation_id}/sources",
+            headers=_headers(key="upload-sprint1-csv-new-key"),
+            files={"file": ("sales_aug.csv", replacement_content, "text/csv")},
+        )
+        assert replacement.status_code == 201
+        replacement_id = replacement.json()["id"]
+        assert replacement_id != source_id
+        assert replacement.json()["deduplicated"] is False
+
+        get_demo_repository()._source_files[("ORG-001", replacement_id)]["status"] = "READY"
+        reupload = await client.post(
+            f"/api/v1/financial-investigations/{investigation_id}/sources",
+            headers=_headers(key="upload-sprint1-csv-ready-new-key"),
+            files={"file": ("renamed_sales_aug.csv", replacement_content, "text/csv")},
+        )
+        assert reupload.status_code == 201
+        assert reupload.json()["id"] == replacement_id
+        assert reupload.json()["deduplicated"] is True
+
         refreshed = await client.get(
             f"/api/v1/financial-investigations/{investigation_id}",
             headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"},
@@ -70,7 +94,7 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
             headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "ANALYST"},
         )
         assert sources.status_code == 200
-        assert [item["id"] for item in sources.json()] == [source_id]
+        assert [item["id"] for item in sources.json()] == [replacement_id]
 
         audit = await client.get(
             "/api/v1/audit-events",
@@ -83,7 +107,7 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
         }
 
         deleted = await client.delete(
-            f"/api/v1/financial-investigations/{investigation_id}/sources/{source_id}",
+            f"/api/v1/financial-investigations/{investigation_id}/sources/{replacement_id}",
             headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER", "Idempotency-Key": "delete-sprint1-upload"},
         )
         assert deleted.status_code == 204

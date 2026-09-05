@@ -273,6 +273,19 @@ class DemoRepository:
         investigation = self._financial_investigations.get((organization_id, investigation_id))
         if investigation is None:
             return {}
+        with self._idempotency_lock:
+            existing = next(
+                (
+                    record
+                    for (org, _), record in self._source_files.items()
+                    if org == organization_id
+                    and record.get("financial_investigation_id") == investigation_id
+                    and record.get("sha256") == data.get("sha256")
+                ),
+                None,
+            )
+            if existing is not None:
+                return _public_source_file(existing)
         record = {
             **data,
             "organization_id": organization_id,

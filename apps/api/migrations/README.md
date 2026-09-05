@@ -1,6 +1,6 @@
 # FinTrace migrations
 
-Migrations 001–013 define the seeded MVP canonical/workflow tables, source intake and analysis, relationship proposals, immutable normalized datasets, investigation-scoped reconciliation runs/results, uploaded-result exception investigations, durable approval requests, and live-provider health/failure diagnostics. Application startup must never apply migrations automatically.
+Migrations 001–014 define the seeded MVP canonical/workflow tables, source intake and analysis, relationship proposals, immutable normalized datasets, investigation-scoped reconciliation runs/results, uploaded-result exception investigations, durable approval requests, tenant integrity, and live-provider health/failure diagnostics. Migration 015 adds the source content fingerprint used to make repeated uploads idempotent within one investigation. Migration 016 adds optional cost-basis inventory valuation fields used by lifecycle reconciliation. Application startup must never apply migrations automatically.
 
 Migrations are forward-only and version-controlled. Apply them only against an approved local/test PostgreSQL instance during the persistence sprint.
 

@@ -44,6 +44,8 @@ Sprint 1 includes multipart validation, safe filename/path tests, empty/malforme
 
 ## Scenario fixtures
 
+Every month in the reusable export pack intentionally includes at least one `AMBIGUOUS_PAYMENT_ASSOCIATION` lifecycle. Uploading any month’s seven source exports and running the close must produce at least one `NEEDS EVIDENCE` result; each case is intentionally unresolved because two captured payment candidates are associated with the order and the available records do not establish which one is valid. Each monthly pack keeps its other clean, variance, and exception cases alongside the ambiguity case.
+
 | Fixture | Expected result |
 | --- | --- |
 | clean_sale | `RECONCILED` |
@@ -139,3 +141,9 @@ Sprint 4 adds capability authorization, signed bearer-claim verification, action
 Sprint 5 adds graph derivation and tenant isolation tests, deterministic pattern grouping and detail lookup, analytics capability checks, evaluation idempotency, hidden-ground-truth response assertions, and web route smoke checks. The browser smoke check verifies Patterns, Evaluations, and Audit loading/empty/populated states against a running Next.js server. The release script is exercised with a fixed seed and bounded 50-order run so its output is reproducible without PostgreSQL or an external AI provider. CI also provisions PostgreSQL, applies migrations, seeds a bounded dataset, and runs `tests/test_postgres_integration.py`.
 
 CI now runs frontend quality gates, API tests/static checks, dependency audits, the mocked-AI browser golden path, and the PostgreSQL integration suite including the upload-to-reconciliation-to-investigation vertical slice. The local release scan found no credential-shaped matches outside ignored runtime secrets.
+# Lifecycle mismatch benchmark checks
+
+- Regenerate the eight monthly packs and assert each month contains one to three anomalous lifecycles.
+- Assert inventory `inventory_value` equals `unit_cost * quantity` for healthy rows and that each injected mismatch is detectable without reading hidden ground truth.
+- Exercise missing inventory return, wrong return value, wrong return quantity, inventory restored without refund, and ambiguous payment cases.
+- Verify live investigation metadata identifies the actual provider/model; deterministic fixtures are restricted to explicitly offline tests.

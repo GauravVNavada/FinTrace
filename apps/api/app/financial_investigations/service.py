@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from app.controls.schemas import ActorContext
+from app.financial_investigations.files import read_upload, remove_upload
 from app.financial_investigations.schemas import (
     FinancialInvestigationCreate,
     FinancialInvestigationResponse,
@@ -133,6 +134,50 @@ class FinancialInvestigationService:
                     "An identical source upload is already in progress"
                 )
             return SourceFileResponse.model_validate(reserved["response_body"])
+        same_name_sources = self._find_sources_by_filename(
+            context.organization_id, investigation_id, str(data["original_filename"])
+        )
+        successful = next(
+            (source for source in same_name_sources if source.status.value == "READY"),
+            None,
+        )
+        if successful is not None:
+            self._remove_unready_sources(
+                context, investigation_id, same_name_sources, keep_id=successful.id
+            )
+            result = successful.model_copy(update={"deduplicated": True})
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, result.model_dump(mode="json")
+            )
+            self._repository.record_audit_event(
+                context.organization_id,
+                "SOURCE_FILE_UPLOAD_DEDUPLICATED",
+                result.id,
+                context.actor_id,
+            )
+            return result
+        existing = self._find_existing_source(
+            context.organization_id, investigation_id, str(data["sha256"])
+        )
+        if existing is not None and existing.status.value == "READY":
+            self._remove_unready_sources(
+                context, investigation_id, same_name_sources, keep_id=existing.id
+            )
+            result = existing.model_copy(update={"deduplicated": True})
+            self._repository.complete_idempotency(
+                context.organization_id, idempotency_key, 200, result.model_dump(mode="json")
+            )
+            self._repository.record_audit_event(
+                context.organization_id,
+                "SOURCE_FILE_UPLOAD_DEDUPLICATED",
+                result.id,
+                context.actor_id,
+            )
+            return result
+        replaceable = list(same_name_sources)
+        if existing is not None and existing.id not in {source.id for source in replaceable}:
+            replaceable.append(existing)
+        self._remove_unready_sources(context, investigation_id, replaceable)
         try:
             response = self._repository.add_source_file(
                 context.organization_id, investigation_id, data
@@ -144,13 +189,84 @@ class FinancialInvestigationService:
             self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise FinancialInvestigationNotFound(investigation_id)
         result = SourceFileResponse.model_validate(response)
+        is_deduplicated = result.id != str(data["id"])
+        result = result.model_copy(update={"deduplicated": is_deduplicated})
         self._repository.complete_idempotency(
             context.organization_id, idempotency_key, 200, result.model_dump(mode="json")
         )
         self._repository.record_audit_event(
-            context.organization_id, "SOURCE_FILE_UPLOADED", result.id, context.actor_id
+            context.organization_id,
+            "SOURCE_FILE_UPLOAD_DEDUPLICATED" if is_deduplicated else "SOURCE_FILE_UPLOADED",
+            result.id,
+            context.actor_id,
         )
         return result
+
+    def _find_sources_by_filename(
+        self, organization_id: str, investigation_id: str, filename: str
+    ) -> list[SourceFileResponse]:
+        normalized = _normalize_filename(filename)
+        return [
+            SourceFileResponse.model_validate(source)
+            for source in self._repository.list_source_files(
+                organization_id, investigation_id, limit=1000
+            )
+            if _normalize_filename(str(source["original_filename"])) == normalized
+        ]
+
+    def _remove_unready_sources(
+        self,
+        context: ActorContext,
+        investigation_id: str,
+        sources: list[SourceFileResponse],
+        keep_id: str | None = None,
+    ) -> None:
+        for source in sources:
+            if source.id == keep_id or source.status.value == "READY":
+                continue
+            deleted = self._repository.delete_source_file(
+                context.organization_id, investigation_id, source.id
+            )
+            if deleted is None:
+                continue
+            try:
+                remove_upload(str(deleted["storage_reference"]))
+            except OSError:
+                pass
+            self._repository.record_audit_event(
+                context.organization_id,
+                "SOURCE_FILE_REPLACED",
+                source.id,
+                context.actor_id,
+            )
+
+    def _find_existing_source(
+        self, organization_id: str, investigation_id: str, content_sha256: str
+    ) -> SourceFileResponse | None:
+        """Find identical bytes already attached to this investigation.
+
+        The persisted hash is the fast path. Older source rows predate the hash
+        column, so their server-side files are checked once as a compatibility
+        fallback; browser filenames are intentionally not used as identity.
+        """
+        for source in self._repository.list_source_files(organization_id, investigation_id):
+            internal = self._repository.get_source_file_internal(
+                organization_id, investigation_id, str(source["id"])
+            )
+            if internal is None:
+                continue
+            stored_hash = internal.get("content_sha256") or internal.get("sha256")
+            if stored_hash == content_sha256:
+                return SourceFileResponse.model_validate(source)
+            if stored_hash or not internal.get("storage_reference"):
+                continue
+            try:
+                _, content = read_upload(str(internal["storage_reference"]))
+            except (OSError, ValueError):
+                continue
+            if hashlib.sha256(content).hexdigest() == content_sha256:
+                return SourceFileResponse.model_validate(source)
+        return None
 
     def delete_source(
         self, context: ActorContext, investigation_id: str, source_file_id: str, idempotency_key: str
@@ -226,3 +342,7 @@ def _request_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
+
+
+def _normalize_filename(filename: str) -> str:
+    return filename.strip().casefold()

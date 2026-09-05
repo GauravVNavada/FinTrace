@@ -13,7 +13,7 @@ The existing exception-level investigation schema remains valid for `ExceptionIn
 | `ReconciliationRun` | Deterministic execution over one dataset version | counts, statuses, exposure, throughput, and run lifecycle |
 | `EvaluationRun` | Benchmark execution against hidden synthetic ground truth | measured deterministic/AI metrics and evaluation configuration |
 
-Migration 005 adds the `financial_investigations` and `source_files` tables for the Sprint 1 source-intake boundary. Migration 006 adds tenant-scoped `source_analyses` and `source_mappings` for the Sprint 2 analysis/confirmation boundary. Migration 007 adds tenant-scoped `relationship_proposals`; proposals are deterministic evidence, never automatic acceptance. Migration 008 adds immutable `dataset_versions` and tenant-scoped `normalized_records` with source lineage. Migration 009 adds investigation-scoped `financial_reconciliation_runs` and `financial_reconciliation_results` linked to the immutable dataset version. Migration 010 adds uploaded-result `financial_exception_investigations` with durable bounded responses. Migration 011 allows `approval_requests` to reference either a canonical exception or an uploaded reconciliation result, enforcing exactly one subject. Existing canonical entities and migration ordering must be preserved.
+Migration 005 adds the `financial_investigations` and `source_files` tables for the Sprint 1 source-intake boundary. Migration 006 adds tenant-scoped `source_analyses` and `source_mappings` for the Sprint 2 analysis/confirmation boundary. Migration 007 adds tenant-scoped `relationship_proposals`; proposals are deterministic evidence, never automatic acceptance. Migration 008 adds immutable `dataset_versions` and tenant-scoped `normalized_records` with source lineage. Migration 009 adds investigation-scoped `financial_reconciliation_runs` and `financial_reconciliation_results` linked to the immutable dataset version. Migration 010 adds uploaded-result `financial_exception_investigations` with durable bounded responses. Migration 011 allows `approval_requests` to reference either a canonical exception or an uploaded reconciliation result, enforcing exactly one subject. Migration 015 adds `source_files.content_sha256` and its investigation-scoped lookup index for repeat-upload deduplication. Existing canonical entities and migration ordering must be preserved.
 
 Fresh synthetic source generation does not add a parallel schema: it persists generated CSV exports through `source_files`, then follows the same analysis, mapping, relationship, normalization, reconciliation, and uploaded-result investigation boundaries. The seeded `exceptions` table remains a compatibility resource and is not a hidden projection of `financial_reconciliation_results`.
 
@@ -53,7 +53,7 @@ Every business-scoped record includes `organization_id`. IDs are immutable exter
 | Investigation tool call | id, organization_id, investigation_id, sequence_no, name, payload, created_at | ordered, organization-scoped read-only evidence calls |
 | Evaluation run | id, organization_id, source_evaluation_id, response, created_at | latest public benchmark result per organization |
 | Financial investigation | id, organization_id, source_investigation_id, name, period, base_currency, status, created_by, created_at | owns source files and later immutable dataset versions |
-| Source file | id, organization_id, financial_investigation_id, source_file_id, original_filename, storage_reference, mime_type, size_bytes, row/column counts, status, created_at | metadata and generated storage reference for one bounded upload |
+| Source file | id, organization_id, financial_investigation_id, source_file_id, original_filename, storage_reference, mime_type, size_bytes, row/column counts, content_sha256, status, created_at | metadata, content identity, and generated storage reference for one bounded upload; non-ready rows can be replaced by a same-name upload |
 
 ## Reconciliation status
 
@@ -97,7 +97,7 @@ Investigation output is strict and uses controlled codes. The evidence score is 
 
 ## Controlled taxonomies
 
-Root cause codes include `SETTLEMENT_TIMING`, `SETTLEMENT_FEE_VARIANCE`, `SETTLEMENT_MISSING`, `DUPLICATE_PAYMENT`, `ERP_INVOICE_MISSING`, `ERP_AMOUNT_MISMATCH`, `INCOMPLETE_REFUND_WORKFLOW`, `INVENTORY_REVERSAL_MISSING`, `ERP_REVERSAL_MISSING`, `REFERENCE_MAPPING_FAILURE`, `PARTIAL_REFUND_MISMATCH`, `DATA_QUALITY_ERROR`, `AMBIGUOUS_ASSOCIATION`, and `UNKNOWN`.
+Root cause codes include `SETTLEMENT_TIMING`, `SETTLEMENT_FEE_VARIANCE`, `SETTLEMENT_MISSING`, `DUPLICATE_PAYMENT`, `ERP_INVOICE_MISSING`, `ERP_AMOUNT_MISMATCH`, `INCOMPLETE_REFUND_WORKFLOW`, `INVENTORY_REVERSAL_MISSING`, `ERP_REVERSAL_MISSING`, `REFERENCE_MAPPING_FAILURE`, `PARTIAL_REFUND_MISMATCH`, `DATA_QUALITY_ERROR`, `INVENTORY_VALUE_MISMATCH`, `INVENTORY_QUANTITY_MISMATCH`, `INVENTORY_RESTORED_WITHOUT_REFUND`, `INVENTORY_VALUE_CALCULATION_ERROR`, `AMBIGUOUS_ASSOCIATION`, and `UNKNOWN`.
 
 ## Workflow persistence
 
@@ -161,3 +161,7 @@ Migrations are version-controlled and forward-compatible. Required changes follo
 The repository contract must make `organization_id` a required argument, not an optional filter. Tests must include two organizations with identical source IDs and assert that reads, writes, investigation tools, aggregates, and audit history cannot cross the boundary.
 
 Sprint 3 uses canonical lifecycle records and bounded investigation tools. Sprint 4 defines `organization_members`, `idempotency_keys`, `approval_requests`, and `approval_decisions` in migration 002; migration 003 adds stable public exception IDs; migration 004 adds durable investigations, ordered tool calls, evaluations, and public workflow identifiers; migration 005 adds financial-investigation/source-file intake; migration 006 adds source analyses and mappings. The PostgreSQL repository supports canonical lifecycle, exception, aggregate, audit, financial investigation, source analysis, mapping, investigation, evaluation, and control reads/writes when `STORAGE_BACKEND=postgres`. The demo runtime keeps an equivalent process-local contract for isolated tests.
+
+## Inventory valuation additions
+
+`inventory_movements` includes optional `unit_cost_minor` and `inventory_value_minor` columns from migration 016. The values are nullable for ordinary source exports and non-negative when present. The reconciliation engine derives expected cost value as `unit_cost_minor * quantity` and never treats customer refund amount as inventory cost. Inventory mismatch findings include missing returns, quantity differences, return-value differences, and row-level value-calculation errors.

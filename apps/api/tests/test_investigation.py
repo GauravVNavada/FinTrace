@@ -200,3 +200,21 @@ def test_empty_settlement_lookup_returns_verifiable_missing_evidence() -> None:
     assert result.call.evidence[0].record_id is None
     assert result.call.evidence[0].operator.value == "missing"
     assert result.call.evidence[0].expected_value is None
+
+
+def test_inventory_tool_returns_sale_and_return_valuation_evidence():
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-INVENTORY-001", "amount_minor": 10000},
+        payments=(), settlements=(), invoices=(), refunds=(),
+        inventory_movements=(
+            {"movement_id": "MOV-SALE", "order_id": "ORD-INVENTORY-001", "movement_type": "SALE", "sku": "SKU-1", "quantity": 1, "unit_cost_minor": 2400, "inventory_value_minor": 2400},
+            {"movement_id": "MOV-RETURN", "order_id": "ORD-INVENTORY-001", "movement_type": "RETURN", "sku": "SKU-1", "quantity": 1, "unit_cost_minor": 2500, "inventory_value_minor": 2500},
+        ),
+        employee_actions=(),
+    )
+    result = EvidenceToolRegistry(demo_repository).invoke(
+        "get_inventory_movements", "org-1", lifecycle
+    )
+    fields = {item.field for item in result.call.evidence}
+    assert {"movement_type", "quantity", "unit_cost_minor", "inventory_value_minor"} <= fields
+    assert {"MOV-SALE", "MOV-RETURN"} <= set(result.call.result_record_ids)

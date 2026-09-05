@@ -21,7 +21,10 @@ const reviewActionByType: Partial<Record<ExceptionType, ResolutionActionCode>> =
   ERP_AMOUNT_MISMATCH: "REQUEST_ERP_INVOICE_CORRECTION",
   DUPLICATE_PAYMENT: "REQUEST_PAYMENT_REVIEW",
   AMBIGUOUS_ASSOCIATION: "REQUEST_PAYMENT_REVIEW",
-  MANUAL_WORKFLOW_ANOMALY: "ESCALATE_TO_FINANCE_MANAGER"
+  MANUAL_WORKFLOW_ANOMALY: "ESCALATE_TO_FINANCE_MANAGER",
+  INVENTORY_VALUE_MISMATCH: "REQUEST_INVENTORY_VERIFICATION",
+  INVENTORY_QUANTITY_MISMATCH: "REQUEST_INVENTORY_VERIFICATION",
+  INVENTORY_RESTORED_WITHOUT_REFUND: "REQUEST_PAYMENT_REVIEW"
 };
 
 const lifecycleStyles: Record<LifecycleRecord["status"], { icon: React.ReactNode; marker: string; surface: string }> = {
@@ -128,7 +131,7 @@ function PageBack({ id }: { id?: string }) { return <div className="mb-5 flex it
 function labelForException(type: ExceptionType) { return type.replaceAll("_", " ").toLowerCase().replace(/(^| )\w/g, value => value.toUpperCase()); }
 function policyFor(severity: string) { return severity === "CRITICAL" || severity === "HIGH" ? { owner: "Controller", state: "Approval required", reason: "High exposure or financial reversal" } : { owner: "Finance Manager", state: "Approval required", reason: "Controlled financial action" }; }
 function textValue(value: unknown) { return value === null || value === undefined || value === "" ? null : String(value); }
-function amountValue(record: Record<string, unknown>) { const amount = record.amount_minor ?? record.gross_minor ?? record.net_minor; return amount === null || amount === undefined ? undefined : formatCurrency(Number(amount) / 100); }
+function amountValue(record: Record<string, unknown>) { const amount = record.amount_minor ?? record.gross_minor ?? record.net_minor ?? record.inventory_value_minor; return amount === null || amount === undefined ? undefined : formatCurrency(Number(amount) / 100); }
 function recordTime(record: Record<string, unknown>) { return ["created_at", "captured_at", "settled_at", "processed_at", "occurred_at"].map(key => textValue(record[key])).find(Boolean) ?? null; }
 function lifecycleRows(lifecycle: ApiLifecycleResponse, key: "order" | "payments" | "settlements" | "invoices" | "refunds" | "inventory_movements" | "employee_actions") { const value = lifecycle[key]; return Array.isArray(value) ? value : [value]; }
 
@@ -151,6 +154,7 @@ function buildLifecycleRecords(exception: ApiExceptionSummary, lifecycle: ApiLif
   if (exception.type === "MISSING_SETTLEMENT" && lifecycle.settlements.length === 0) missing.push({ source: "Settlement", detail: "Expected settlement was not observed" });
   if (exception.type === "ERP_INVOICE_MISSING" && lifecycle.invoices.length === 0) missing.push({ source: "Invoice", detail: "Expected invoice was not observed" });
   if (exception.type === "REFUND_WITHOUT_INVENTORY_RETURN" && lifecycle.refunds.length > 0 && !lifecycle.inventory_movements.some(item => item.movement_type === "RETURN")) missing.push({ source: "Inventory return", detail: "Expected RETURN movement was not observed" });
+  if (exception.type === "INVENTORY_RESTORED_WITHOUT_REFUND" && lifecycle.inventory_movements.some(item => item.movement_type === "RETURN") && lifecycle.refunds.length === 0) missing.push({ source: "Refund", detail: "Expected customer refund was not observed" });
   if ((exception.type === "REFUND_WITHOUT_ERP_REVERSAL" || exception.rules_triggered.includes("ERP_REVERSAL_MISSING")) && lifecycle.invoices.length > 0) missing.push({ source: "ERP reversal", detail: "Expected reversal was not observed" });
   return [...records, ...missing.map(item => ({ id: "—", source: item.source, status: "missing" as const, detail: item.detail }))];
 }

@@ -34,6 +34,8 @@ _MONEY_FIELDS = {
     "gateway_fee_amount": "gateway_fee_minor",
     "tax_amount": "tax_minor",
     "net_amount": "net_minor",
+    "unit_cost": "unit_cost_minor",
+    "inventory_value": "inventory_value_minor",
 }
 
 _PRIMARY_SOURCE_RECORD_FIELDS = {

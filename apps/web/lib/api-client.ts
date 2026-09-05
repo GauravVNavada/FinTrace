@@ -25,6 +25,10 @@ const baseHeaders = {
 
 export type ClientIdentity = { actor_id: string; role: string; display_name: string; organization_id: string };
 
+export function getDefaultClientIdentity(): ClientIdentity {
+  return { actor_id: configuredActorId, role: configuredActorRole, display_name: "Development user", organization_id: organizationId };
+}
+
 export function getClientIdentity(): ClientIdentity {
   if (typeof window !== "undefined") {
     try {
@@ -32,7 +36,7 @@ export function getClientIdentity(): ClientIdentity {
       if (stored) return JSON.parse(stored) as ClientIdentity;
     } catch { /* fall through to the explicit development defaults */ }
   }
-  return { actor_id: configuredActorId, role: configuredActorRole, display_name: "Development user", organization_id: organizationId };
+  return getDefaultClientIdentity();
 }
 
 function runtimeIdentity() {

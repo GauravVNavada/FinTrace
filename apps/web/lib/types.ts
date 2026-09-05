@@ -13,7 +13,10 @@ export type ExceptionType =
   | "REFUND_WITHOUT_ERP_REVERSAL"
   | "PARTIAL_REFUND_MISMATCH"
   | "SETTLEMENT_FEE_VARIANCE"
-  | "AMBIGUOUS_ASSOCIATION";
+  | "AMBIGUOUS_ASSOCIATION"
+  | "INVENTORY_VALUE_MISMATCH"
+  | "INVENTORY_QUANTITY_MISMATCH"
+  | "INVENTORY_RESTORED_WITHOUT_REFUND";
 
 export interface Metric {
   label: string;
@@ -324,6 +327,7 @@ export interface ApiSourceFile {
   detected_source_type: string | null;
   detection_confidence: number | null;
   created_at: string;
+  deduplicated?: boolean;
 }
 
 export interface DemoDataRequest {

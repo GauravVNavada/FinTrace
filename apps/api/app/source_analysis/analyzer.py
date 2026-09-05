@@ -1,6 +1,6 @@
 import csv
 import io
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any
@@ -110,7 +110,10 @@ def _read_xlsx(
                     "The XLSX contains more rows than the configured analysis limit"
                 )
             rows.append(
-                [None if value is None else _display(value) for value in raw_row[: len(headers)]]
+                [
+                    None if value is None else _display(value, headers[index])
+                    for index, value in enumerate(raw_row[: len(headers)])
+                ]
                 + [None] * max(0, len(headers) - len(raw_row))
             )
             if len(rows) >= max_rows and truncate:
@@ -186,9 +189,49 @@ def _decimal(value: str) -> Decimal:
     return Decimal(value)
 
 
-def _display(value: Any) -> str | None:
+def _display(value: Any, header: str | None = None) -> str | None:
     if value is None:
         return None
     if isinstance(value, datetime):
+        return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+    if isinstance(value, date):
         return value.isoformat()
+    if header and _looks_like_date_header(header) and isinstance(value, (int, float)):
+        try:
+            from openpyxl.utils.datetime import from_excel
+
+            converted = from_excel(value)
+            if isinstance(converted, datetime):
+                return (converted if converted.tzinfo else converted.replace(tzinfo=UTC)).isoformat()
+            if isinstance(converted, date):
+                return converted.isoformat()
+        except (TypeError, ValueError, OverflowError):
+            pass
     return str(value)
+
+
+def _looks_like_date_header(header: str) -> bool:
+    normalized = "".join(character for character in header.casefold() if character.isalnum())
+    return any(
+        token in normalized
+        for token in (
+            "date",
+            "time",
+            "timestamp",
+            "createdat",
+            "createdon",
+            "captured",
+            "paidat",
+            "processedat",
+            "refunded",
+            "credited",
+            "occurred",
+            "issued",
+            "settled",
+            "booked",
+            "recorded",
+            "movement",
+            "event",
+            "actionat",
+        )
+    ) or normalized.endswith("at")

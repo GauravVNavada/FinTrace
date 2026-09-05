@@ -422,6 +422,15 @@ class InvestigationService:
                 "get_order", "get_payments_for_order", "get_refunds_for_order",
                 "get_invoice_for_order", "get_inventory_movements", "get_employee_action_logs",
             ],
+            ExceptionType.INVENTORY_VALUE_MISMATCH: [
+                "get_order", "get_refunds_for_order", "get_inventory_movements",
+            ],
+            ExceptionType.INVENTORY_QUANTITY_MISMATCH: [
+                "get_order", "get_refunds_for_order", "get_inventory_movements",
+            ],
+            ExceptionType.INVENTORY_RESTORED_WITHOUT_REFUND: [
+                "get_order", "get_refunds_for_order", "get_inventory_movements",
+            ],
             ExceptionType.REFUND_WITHOUT_ERP_REVERSAL: [
                 "get_order", "get_refunds_for_order", "get_invoice_for_order"
             ],
@@ -590,7 +599,18 @@ def _normalize_provider_candidate(
     missing = result.get("missing_evidence", [])
     if isinstance(missing, str):
         result["missing_evidence"] = [missing]
-    elif not isinstance(missing, list):
+    elif isinstance(missing, list):
+        # Some OpenAI-compatible models echo bounded evidence objects here even
+        # though the public contract is a list of human-readable strings. Keep
+        # the provider's cited fact, without allowing arbitrary nested data to
+        # cross the API boundary.
+        result["missing_evidence"] = [
+            item
+            if isinstance(item, str)
+            else str(item.get("fact") or item.get("message") or json.dumps(item, sort_keys=True))
+            for item in missing
+        ]
+    else:
         result["missing_evidence"] = []
     return result
 

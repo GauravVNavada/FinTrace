@@ -121,6 +121,42 @@ def _base(order_id: str, amount: int = 10000) -> CanonicalLifecycle:
     )
 
 
+def _inventory_case_lifecycle(
+    order_id: str,
+    *,
+    sale_quantity: int = 1,
+    return_quantity: int | None = 1,
+    return_unit_cost: int = 2400,
+    include_refund: bool = True,
+) -> CanonicalLifecycle:
+    lifecycle = _base(order_id)
+    sale = {
+        "movement_id": f"MOV-SALE-{order_id}",
+        "order_id": order_id,
+        "movement_type": "SALE",
+        "quantity": sale_quantity,
+        "unit_cost_minor": 2400,
+        "inventory_value_minor": 2400 * sale_quantity,
+    }
+    movements: tuple[dict[str, Any], ...] = (sale,)
+    if return_quantity is not None:
+        movements += ({
+            "movement_id": f"MOV-RETURN-{order_id}",
+            "order_id": order_id,
+            "movement_type": "RETURN",
+            "quantity": return_quantity,
+            "unit_cost_minor": return_unit_cost,
+            "inventory_value_minor": return_unit_cost * return_quantity,
+        },)
+    refund = ({
+        "refund_id": f"RF-{order_id}",
+        "payment_id": f"PAY-{order_id}",
+        "amount_minor": 10000,
+        "status": "PROCESSED",
+    },) if include_refund else ()
+    return replace(lifecycle, refunds=refund, inventory_movements=movements)
+
+
 def _case(organization_id: str, number: int, exception_type: ExceptionType, lifecycle: CanonicalLifecycle, root: str | None, supported: bool) -> dict[str, Any]:
     return {
         "lifecycle": lifecycle,
@@ -149,4 +185,11 @@ def _cases(organization_id: str) -> list[dict[str, Any]]:
         lifecycle = _base(f"AIE{number:03d}", 12000)
         invoice = {"invoice_id": f"INV-AIE{number:03d}", "order_id": f"AIE{number:03d}", "amount_minor": 9000, "status": "ACTIVE"}
         cases.append(_case(organization_id, number, ExceptionType.ERP_AMOUNT_MISMATCH, replace(lifecycle, invoices=(invoice,)), "ERP_AMOUNT_MISMATCH", True))
+    inventory_cases = [
+        (ExceptionType.INVENTORY_VALUE_MISMATCH, _inventory_case_lifecycle("AIE010", return_unit_cost=2500), "INVENTORY_VALUE_MISMATCH"),
+        (ExceptionType.INVENTORY_QUANTITY_MISMATCH, _inventory_case_lifecycle("AIE011", sale_quantity=2), "INVENTORY_QUANTITY_MISMATCH"),
+        (ExceptionType.INVENTORY_RESTORED_WITHOUT_REFUND, _inventory_case_lifecycle("AIE012", include_refund=False), "INVENTORY_RESTORED_WITHOUT_REFUND"),
+    ]
+    for number, (exception_type, lifecycle, root) in enumerate(inventory_cases, start=10):
+        cases.append(_case(organization_id, number, exception_type, lifecycle, root, True))
     return cases

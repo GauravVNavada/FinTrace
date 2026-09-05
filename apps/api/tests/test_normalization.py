@@ -1,5 +1,7 @@
+from io import BytesIO
 from uuid import uuid4
 
+import openpyxl
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -209,3 +211,55 @@ async def test_normalization_preserves_source_lineage_and_blocks_unconfirmed_sou
         )
         assert replay.status_code == 200
         assert replay.json() == normalized.json()
+
+
+@pytest.mark.asyncio
+async def test_normalization_converts_inventory_valuation_to_minor_units():
+    inventory_csv = (
+        b"MovementRef,ReceiptNo,Movement,Units,SKU,UnitCost,InventoryValue,OccurredAt\n"
+        b"MOV-1,ORD-1,SALE,2,SKU-1,24.00,48.00,2026-08-01T08:00:00+00:00\n"
+    )
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        investigation_id, _ = await _prepare_source(
+            client, "inventory.csv", inventory_csv, "inventory-valuation"
+        )
+        normalized = await client.post(
+            f"/api/v1/financial-investigations/{investigation_id}/dataset-versions/normalize",
+            headers=headers(key=f"inventory-valuation-normalize-{uuid4().hex}"),
+        )
+        assert normalized.status_code == 200, normalized.text
+        records = await client.get(
+            f"/api/v1/financial-investigations/{investigation_id}/dataset-versions/{normalized.json()['id']}/records",
+            headers=headers("ANALYST"),
+        )
+        values = records.json()[0]["values"]
+        assert values["unit_cost_minor"] == 2400
+        assert values["inventory_value_minor"] == 4800
+
+
+@pytest.mark.asyncio
+async def test_normalization_converts_excel_serial_vendor_payment_timestamps():
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.append(["PaymentRef", "OrderRef", "AmountPaid", "PaidAt", "Status"])
+    sheet.append(["PAY-1", "ORD-1", 100.00, 46058.51736111111, "CAPTURED"])
+    output = BytesIO()
+    workbook.save(output)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        investigation_id, _ = await _prepare_source(
+            client, "PaymentGateway_Feb.xlsx", output.getvalue(), "excel-payment-timestamp"
+        )
+        normalized = await client.post(
+            f"/api/v1/financial-investigations/{investigation_id}/dataset-versions/normalize",
+            headers=headers(key=f"excel-payment-timestamp-normalize-{uuid4().hex}"),
+        )
+
+        assert normalized.status_code == 200, normalized.text
+        records = await client.get(
+            f"/api/v1/financial-investigations/{investigation_id}/dataset-versions/{normalized.json()['id']}/records",
+            headers=headers("ANALYST"),
+        )
+        assert records.status_code == 200
+        assert records.json()[0]["values"]["captured_at"].startswith("2026-")
+        assert records.json()[0]["values"]["captured_at"].endswith("+00:00")

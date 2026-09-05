@@ -68,6 +68,19 @@ def action_allowed(exception: ExceptionSummary, action: ActionCode) -> bool:
             ActionCode.ESCALATE_TO_FINANCE_MANAGER,
             ActionCode.ESCALATE_TO_CONTROLLER,
         },
+        ExceptionType.INVENTORY_VALUE_MISMATCH: {
+            ActionCode.REQUEST_INVENTORY_VERIFICATION,
+            ActionCode.ESCALATE_TO_CONTROLLER,
+        },
+        ExceptionType.INVENTORY_QUANTITY_MISMATCH: {
+            ActionCode.REQUEST_INVENTORY_VERIFICATION,
+            ActionCode.ESCALATE_TO_CONTROLLER,
+        },
+        ExceptionType.INVENTORY_RESTORED_WITHOUT_REFUND: {
+            ActionCode.REQUEST_PAYMENT_REVIEW,
+            ActionCode.REQUEST_INVENTORY_VERIFICATION,
+            ActionCode.ESCALATE_TO_CONTROLLER,
+        },
     }
     return action in allowed.get(
         exception.type, {ActionCode.REQUEST_REFUND_REVIEW, ActionCode.ESCALATE_TO_CONTROLLER}

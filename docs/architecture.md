@@ -150,6 +150,8 @@ The API exposes `/health`, `/ready`, demo-login, dashboard/exception/lifecycle r
 
 For Sprint 5 analytics, the graph service first applies organization scope and lifecycle lookup, then derives bounded nodes/edges. The pattern service reconciles the organization-scoped lifecycle set and groups stable exception signatures. The evaluation service alone can access hidden labels; its public report contains metrics, never ground-truth records.
 
+Inventory valuation follows the same boundary: source analysis and normalization preserve optional `unit_cost_minor` and `inventory_value_minor`, reconciliation derives cost-basis expectations using integer arithmetic, and bounded AI receives only the resulting scoped evidence. Providers cannot alter inventory, financial state, or deterministic exception status.
+
 ## Failure and timeout policy
 
 Database, provider, and external source calls require explicit timeouts. Retries are only allowed for safe, idempotent transient operations with bounded backoff and configured-key rotation. Daily quota exhaustion, authorization, unsupported-model, malformed tool arguments, verifier rejection, and invalid FinTrace input are not retried or hidden by fallback. Provider failure returns a typed investigation-unavailable state with no credential or provider payload logging; it never changes reconciliation state or triggers a resolution. Provider health performs one bounded structured/tool-capability probe per provider and caches the result briefly.

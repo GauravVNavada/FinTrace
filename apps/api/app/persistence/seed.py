@@ -211,8 +211,9 @@ def _insert_inventory(
     conn.execute(
         """
         INSERT INTO inventory_movements
-          (organization_id, source_movement_id, order_id, sku, quantity, movement_type, occurred_at)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
+          (organization_id, source_movement_id, order_id, sku, quantity, movement_type,
+           unit_cost_minor, inventory_value_minor, occurred_at)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
         """,
         (
             organization_uuid,
@@ -221,6 +222,8 @@ def _insert_inventory(
             row["sku"],
             row["quantity"],
             row["movement_type"],
+            row.get("unit_cost_minor"),
+            row.get("inventory_value_minor"),
             _date(row["occurred_at"]),
         ),
     )

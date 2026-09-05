@@ -96,6 +96,38 @@ def test_reconcile_lifecycle_accepts_timezone_aware_datetime_timestamps() -> Non
     assert result.status == "RECONCILED"
 
 
+def test_reconcile_lifecycle_accepts_a_reversed_invoice_for_a_refund() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-REFUND", "amount_minor": 10000},
+        payments=(
+            {
+                "payment_id": "PAY-REFUND",
+                "amount_minor": 10000,
+                "gateway_fee_minor": 180,
+                "captured_at": "2026-01-01T08:00:00+00:00",
+            },
+        ),
+        settlements=(
+            {
+                "settlement_id": "SET-REFUND",
+                "fees_minor": 180,
+                "settled_at": "2026-01-02T08:00:00+00:00",
+            },
+        ),
+        invoices=(
+            {"invoice_id": "INV-REFUND", "gross_minor": 10000, "status": "ACTIVE"},
+            {"invoice_id": "INV-REVERSAL", "gross_minor": -10000, "status": "REVERSED"},
+        ),
+        refunds=({"refund_id": "REF-REFUND", "amount_minor": 10000},),
+        inventory_movements=({"movement_type": "RETURN"},),
+        employee_actions=(),
+    )
+
+    result = reconcile_lifecycle(lifecycle)
+
+    assert result.status == "RECONCILED"
+
+
 def test_timezone_naive_timestamps_are_rejected_before_subtraction():
     lifecycle = CanonicalLifecycle(
         order={"order_id": "ORD-NAIVE", "amount_minor": 10000},
@@ -116,3 +148,55 @@ def test_timezone_naive_timestamps_are_rejected_before_subtraction():
     )
     with pytest.raises(ValueError, match="timezone offset"):
         reconcile_lifecycle(lifecycle)
+
+
+def _valued_inventory_lifecycle(refund=True, return_quantity=1, return_value=2400):
+    return CanonicalLifecycle(
+        order={"order_id": "ORD-INVENTORY", "amount_minor": 10000},
+        payments=({"payment_id": "PAY-INVENTORY", "amount_minor": 10000, "gateway_fee_minor": 180},),
+        settlements=({"settlement_id": "SET-INVENTORY", "fees_minor": 180, "tax_minor": 32, "net_minor": 9788},),
+        invoices=({"invoice_id": "INV-INVENTORY", "gross_minor": 10000, "status": "ACTIVE"},),
+        refunds=({"refund_id": "REF-INVENTORY", "amount_minor": 10000},) if refund else (),
+        inventory_movements=(
+            {"movement_id": "MOV-SALE", "movement_type": "SALE", "quantity": 1, "unit_cost_minor": 2400, "inventory_value_minor": 2400},
+            {"movement_id": "MOV-RETURN", "movement_type": "RETURN", "quantity": return_quantity, "unit_cost_minor": 2400, "inventory_value_minor": return_value},
+        ),
+        employee_actions=(),
+    )
+
+
+def test_reconcile_detects_inventory_return_value_mismatch():
+    result = reconcile_lifecycle(_valued_inventory_lifecycle(return_value=2550))
+    assert result.status == "EXCEPTION"
+    assert result.exception_type == "INVENTORY_VALUE_MISMATCH"
+    assert any(finding.code == "INVENTORY_VALUE_MISMATCH" for finding in result.findings)
+
+
+def test_reconcile_detects_inventory_return_quantity_mismatch():
+    result = reconcile_lifecycle(_valued_inventory_lifecycle(return_quantity=2, return_value=4800))
+    assert result.status == "EXCEPTION"
+    assert result.exception_type == "INVENTORY_QUANTITY_MISMATCH"
+
+
+def test_reconcile_detects_inventory_restored_without_refund():
+    result = reconcile_lifecycle(_valued_inventory_lifecycle(refund=False))
+    assert result.status == "EXCEPTION"
+    assert result.exception_type == "INVENTORY_RESTORED_WITHOUT_REFUND"
+
+
+def test_reconcile_detects_row_level_inventory_value_calculation_error():
+    lifecycle = _valued_inventory_lifecycle(return_value=2400)
+    lifecycle = lifecycle.__class__(
+        order=lifecycle.order,
+        payments=lifecycle.payments,
+        settlements=lifecycle.settlements,
+        invoices=lifecycle.invoices,
+        refunds=(),
+        inventory_movements=(
+            {"movement_id": "MOV-SALE", "movement_type": "SALE", "quantity": 1, "unit_cost_minor": 2400, "inventory_value_minor": 2500},
+        ),
+        employee_actions=(),
+    )
+    result = reconcile_lifecycle(lifecycle)
+    assert result.exception_type == "INVENTORY_VALUE_MISMATCH"
+    assert any(finding.code == "INVENTORY_VALUE_CALCULATION_ERROR" for finding in result.findings)

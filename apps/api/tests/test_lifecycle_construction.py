@@ -66,3 +66,78 @@ def test_duplicate_invoice_records_are_rejected_instead_of_ignoring_the_second_i
     ]
     with pytest.raises(LifecycleConstructionError, match="invoice records"):
         construct_lifecycles("ORG-001", records)
+
+
+def test_active_invoice_and_reversed_invoice_are_consumed_as_one_refund_lifecycle():
+    records = [
+        {
+            "id": "ORDER-1",
+            "source_type": "SALES",
+            "values": {"order_id": "ORD-1", "amount_minor": 10000},
+        },
+        {
+            "id": "PAYMENT-1",
+            "source_type": "PAYMENTS",
+            "values": {"payment_id": "PAY-1", "order_id": "ORD-1", "amount_minor": 10000},
+        },
+        {
+            "id": "INVOICE-1",
+            "source_type": "INVOICES",
+            "values": {
+                "invoice_id": "INV-1",
+                "order_id": "ORD-1",
+                "gross_minor": 10000,
+                "status": "ACTIVE",
+            },
+        },
+        {
+            "id": "INVOICE-REVERSAL-1",
+            "source_type": "INVOICES",
+            "values": {
+                "invoice_id": "INV-R-1",
+                "order_id": "ORD-1",
+                "gross_minor": -10000,
+                "status": "REVERSED",
+            },
+        },
+    ]
+
+    lifecycle = construct_lifecycles("ORG-001", records)[0]
+
+    assert [invoice["status"] for invoice in lifecycle.invoices] == ["ACTIVE", "REVERSED"]
+
+
+def test_refund_employee_action_is_attached_by_refund_id():
+    records = [
+        {
+            "source_type": "SALES",
+            "values": {"order_id": "ORD-1", "amount_minor": 10000},
+        },
+        {
+            "source_type": "PAYMENTS",
+            "values": {"payment_id": "PAY-1", "order_id": "ORD-1", "amount_minor": 10000},
+        },
+        {
+            "source_type": "REFUNDS",
+            "values": {
+                "refund_id": "REF-1",
+                "payment_id": "PAY-1",
+                "order_id": "ORD-1",
+                "amount_minor": 10000,
+            },
+        },
+        {
+            "source_type": "EMPLOYEE_ACTIONS",
+            "values": {
+                "action_id": "ACT-1",
+                "entity_type": "REFUND",
+                "entity_id": "REF-1",
+                "employee_id": "EMP-1",
+                "action": "MANUAL_REFUND_APPROVED",
+            },
+        },
+    ]
+
+    lifecycle = construct_lifecycles("ORG-001", records)[0]
+
+    assert lifecycle.employee_actions[0]["entity_id"] == "REF-1"

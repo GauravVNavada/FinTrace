@@ -76,6 +76,16 @@ class SourceAnalysisService:
             if int(reserved.get("response_status", 425)) == 425:
                 raise MappingConflict("An identical source analysis is already in progress")
             return SourceAnalysisResponse.model_validate(reserved["response_body"])
+        if source.get("status") == "READY":
+            existing_analysis = self._repository.get_source_analysis(
+                context.organization_id, investigation_id, source_file_id
+            )
+            if existing_analysis is not None:
+                result = SourceAnalysisResponse.model_validate(existing_analysis)
+                self._repository.complete_idempotency(
+                    context.organization_id, idempotency_key, 200, result.model_dump(mode="json")
+                )
+                return result
         settings = get_settings()
         try:
             self._repository.update_source_analysis_state(

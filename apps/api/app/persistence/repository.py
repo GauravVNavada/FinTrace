@@ -221,18 +221,40 @@ class PostgresRepository:
             if org_uuid is None:
                 return {}
             investigation = conn.execute(
-                "SELECT id FROM financial_investigations WHERE organization_id = %s AND source_investigation_id = %s",
+                "SELECT id FROM financial_investigations WHERE organization_id = %s AND source_investigation_id = %s FOR UPDATE",
                 (org_uuid, investigation_id),
             ).fetchone()
             if investigation is None:
                 return {}
+            existing = conn.execute(
+                """
+                SELECT sf.source_file_id AS id, sf.organization_id::text AS organization_id,
+                       fi.source_investigation_id AS financial_investigation_id,
+                       sf.original_filename, sf.mime_type, sf.size_bytes,
+                       sf.row_count, sf.column_count, sf.status,
+                       sf.detected_source_type, sf.classification_confidence,
+                       sf.created_at
+                FROM source_files sf
+                JOIN financial_investigations fi
+                  ON fi.id = sf.financial_investigation_id
+                 AND fi.organization_id = sf.organization_id
+                WHERE sf.organization_id = %s
+                  AND sf.financial_investigation_id = %s
+                  AND sf.content_sha256 = %s
+                ORDER BY sf.created_at ASC
+                LIMIT 1
+                """,
+                (org_uuid, investigation["id"], data["sha256"]),
+            ).fetchone()
+            if existing is not None:
+                return self._public_organization(existing, organization_id)
             conn.execute(
                 """
                 INSERT INTO source_files
                   (organization_id, financial_investigation_id, source_file_id,
                    original_filename, storage_reference, mime_type, size_bytes,
-                   row_count, column_count, status, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                   row_count, column_count, status, content_sha256, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 """,
                 (
                     org_uuid,
@@ -245,6 +267,7 @@ class PostgresRepository:
                     data["row_count"],
                     data["column_count"],
                     data["status"],
+                    data["sha256"],
                     data["created_at"],
                 ),
             )
@@ -341,7 +364,8 @@ class PostgresRepository:
                        fi.source_investigation_id AS financial_investigation_id,
                        sf.original_filename, sf.storage_reference, sf.mime_type,
                        sf.size_bytes, sf.row_count, sf.column_count, sf.status,
-                       sf.detected_source_type, sf.classification_confidence, sf.created_at
+                       sf.detected_source_type, sf.classification_confidence,
+                       sf.content_sha256, sf.created_at
                 FROM source_files sf
                 JOIN financial_investigations fi
                   ON fi.id = sf.financial_investigation_id
@@ -1124,7 +1148,7 @@ class PostgresRepository:
                 """
                 SELECT m.source_movement_id AS movement_id, m.organization_id,
                        o.source_order_id AS order_id, m.sku, m.quantity, m.movement_type,
-                       m.occurred_at
+                       m.unit_cost_minor, m.inventory_value_minor, m.occurred_at
                 FROM inventory_movements m JOIN orders o ON o.id = m.order_id AND o.organization_id = m.organization_id
                 WHERE m.organization_id = %s AND o.source_order_id = %s
             """,
@@ -1213,7 +1237,8 @@ class PostgresRepository:
                 conn,
                 """
                 SELECT m.source_movement_id AS movement_id, o.source_order_id AS order_id,
-                       m.sku, m.quantity, m.movement_type, m.occurred_at
+                       m.sku, m.quantity, m.movement_type, m.unit_cost_minor,
+                       m.inventory_value_minor, m.occurred_at
                 FROM inventory_movements m JOIN orders o ON o.id = m.order_id AND o.organization_id = m.organization_id
                 WHERE m.organization_id = %s AND o.source_order_id = ANY(%s)
             """,

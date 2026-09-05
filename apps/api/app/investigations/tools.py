@@ -1,7 +1,7 @@
 import re
 from dataclasses import dataclass
 from time import monotonic
-from typing import Any
+from typing import Any, cast
 
 from app.domain.lifecycle import CanonicalLifecycle
 from app.investigations.schemas import EvidenceItem, EvidenceOperator, EvidenceSource, ToolCall
@@ -124,6 +124,17 @@ class EvidenceToolRegistry:
                 for item in values
                 for fact in _record_evidence(EvidenceSource.REFUND, item, str(item["refund_id"]))
             ]
+            if not values:
+                evidence.append(
+                    EvidenceItem(
+                        source=EvidenceSource.REFUND,
+                        record_id=None,
+                        fact="No refund record exists for the scoped order.",
+                        field="refund_id",
+                        operator=EvidenceOperator.MISSING,
+                        expected_value=None,
+                    )
+                )
             target = order_id
         elif name == "get_invoice_for_order":
             values = lifecycle.invoices
@@ -136,7 +147,7 @@ class EvidenceToolRegistry:
             values = lifecycle.inventory_movements
             returns = [item for item in values if item.get("movement_type") == "RETURN"]
             evidence = [fact
-                for item in returns
+                for item in values
                 for fact in _record_evidence(EvidenceSource.INVENTORY, item, str(item["movement_id"]))
             ]
             if not returns:
@@ -254,7 +265,7 @@ def _record_evidence(source: EvidenceSource, record: dict[str, Any], record_id: 
         EvidenceSource.SETTLEMENT: (("payment_id", "payment_id"), ("gross_minor", "gross_minor"), ("fees_minor", "fees_minor"), ("tax_minor", "tax_minor"), ("net_minor", "net_minor"), ("settled_at", "settled_at"), ("status", "status")),
         EvidenceSource.INVOICE: (("order_id", "order_id"), ("gross_minor", "gross_minor"), ("created_at", "created_at"), ("status", "status")),
         EvidenceSource.REFUND: (("payment_id", "payment_id"), ("amount_minor", "amount_minor"), ("processed_at", "processed_at"), ("status", "status")),
-        EvidenceSource.INVENTORY: (("order_id", "order_id"), ("movement_type", "movement_type"), ("quantity", "quantity"), ("occurred_at", "occurred_at")),
+        EvidenceSource.INVENTORY: (("order_id", "order_id"), ("movement_type", "movement_type"), ("sku", "sku"), ("quantity", "quantity"), ("unit_cost_minor", "unit_cost_minor"), ("inventory_value_minor", "inventory_value_minor"), ("occurred_at", "occurred_at")),
         EvidenceSource.EMPLOYEE_ACTION: (("entity_id", "entity_id"), ("employee_id", "employee_id"), ("action", "action"), ("occurred_at", "occurred_at")),
     }
     facts: list[EvidenceItem] = []
@@ -264,6 +275,23 @@ def _record_evidence(source: EvidenceSource, record: dict[str, Any], record_id: 
             continue
         expected = str(value) if not isinstance(value, (str, int, float, bool)) else value
         facts.append(_evidence(source, record_id, display_field, "equals", expected, f"{label} {display_field} is {value}."))
+    if source == EvidenceSource.INVENTORY:
+        unit_cost = record.get("unit_cost_minor")
+        quantity = record.get("quantity")
+        inventory_value = record.get("inventory_value_minor")
+        if unit_cost not in (None, "") and quantity not in (None, "") and inventory_value not in (None, ""):
+            expected_value = int(cast(str | int | float, unit_cost)) * int(cast(str | int | float, quantity))
+            if int(cast(str | int | float, inventory_value)) != expected_value:
+                facts.append(
+                    _evidence(
+                        source,
+                        record_id,
+                        "inventory_value_minor",
+                        EvidenceOperator.NOT_EQUALS,
+                        expected_value,
+                        f"Inventory value {inventory_value} does not equal unit cost {unit_cost} multiplied by quantity {quantity}.",
+                    )
+                )
     if not facts:
         facts.append(_evidence(source, record_id, None, "exists", None, f"{label} record exists."))
     facts.sort(key=lambda item: 0 if item.field == "status" else 1)

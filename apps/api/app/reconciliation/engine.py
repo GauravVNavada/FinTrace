@@ -36,6 +36,33 @@ def _timestamp(value: Any) -> datetime:
     return parsed
 
 
+def _minor_value(value: Any) -> int | None:
+    if value in (None, ""):
+        return None
+    return int(value)
+
+
+def _sum_inventory_value(movements: list[dict[str, Any]]) -> int | None:
+    values = [_minor_value(item.get("inventory_value_minor")) for item in movements]
+    if not values or any(value is None for value in values):
+        return None
+    return sum(value for value in values if value is not None)
+
+
+def _sum_expected_inventory_value(movements: list[dict[str, Any]]) -> int | None:
+    values: list[int] = []
+    for item in movements:
+        unit_cost = _minor_value(item.get("unit_cost_minor"))
+        if unit_cost is None:
+            return None
+        values.append(unit_cost * int(item.get("quantity", 0)))
+    return sum(values) if values else None
+
+
+def _sum_quantity(movements: list[dict[str, Any]]) -> int:
+    return sum(int(item.get("quantity", 0)) for item in movements)
+
+
 def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
     """Reconcile one lifecycle using only canonical records and deterministic rules."""
     findings: list[RuleFinding] = []
@@ -150,12 +177,46 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
             )
         )
 
+    sale_movements = [
+        movement for movement in lifecycle.inventory_movements
+        if str(movement.get("movement_type", "")).upper() == "SALE"
+    ]
+    return_movements = [
+        movement for movement in lifecycle.inventory_movements
+        if str(movement.get("movement_type", "")).upper() == "RETURN"
+    ]
+    for movement in lifecycle.inventory_movements:
+        unit_cost = _minor_value(movement.get("unit_cost_minor"))
+        inventory_value = _minor_value(movement.get("inventory_value_minor"))
+        quantity = int(movement.get("quantity", 0))
+        if unit_cost is not None and inventory_value is not None and inventory_value != unit_cost * quantity:
+            findings.append(
+                RuleFinding(
+                    "INVENTORY_VALUE_CALCULATION_ERROR",
+                    "Inventory value does not equal unit cost multiplied by quantity.",
+                    abs(inventory_value - (unit_cost * quantity)),
+                    "DATA_QUALITY",
+                )
+            )
+
+    sale_quantity = _sum_quantity(sale_movements) if sale_movements else 0
+    return_quantity = _sum_quantity(return_movements) if return_movements else 0
+    sale_value = _sum_expected_inventory_value(sale_movements)
+    return_value = _sum_inventory_value(return_movements)
+    if return_movements and not lifecycle.refunds:
+        findings.append(
+            RuleFinding(
+                "INVENTORY_RESTORED_WITHOUT_REFUND",
+                "Inventory was restored without a corresponding customer refund.",
+                return_value or 0,
+                "CONTROL_RISK",
+            )
+        )
+
     if lifecycle.refunds:
         refund = lifecycle.refunds[0]
         refund_amount = int(refund["amount_minor"])
-        has_return = any(
-            movement.get("movement_type") == "RETURN" for movement in lifecycle.inventory_movements
-        )
+        has_return = bool(return_movements)
         if any(
             action.get("action") == "MANUAL_REFUND_APPROVED"
             for action in lifecycle.employee_actions
@@ -186,7 +247,29 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
                     "CONTROL_RISK",
                 )
             )
-        if lifecycle.invoices and lifecycle.invoices[0].get("status") == "ACTIVE":
+        elif refund_amount >= amount_minor and sale_movements:
+            if sale_quantity != return_quantity:
+                expected_value = sale_value or 0
+                observed_value = return_value or 0
+                findings.append(
+                    RuleFinding(
+                        "INVENTORY_QUANTITY_MISMATCH",
+                        "Returned inventory quantity does not equal the quantity sold.",
+                        abs(expected_value - observed_value) if expected_value and observed_value else abs(sale_quantity - return_quantity),
+                        "CONTROL_RISK",
+                    )
+                )
+            elif sale_value is not None and return_value is not None and sale_value != return_value:
+                findings.append(
+                    RuleFinding(
+                        "INVENTORY_VALUE_MISMATCH",
+                        "Returned inventory value does not equal the cost value of the sold item.",
+                        abs(sale_value - return_value),
+                        "CONTROL_RISK",
+                    )
+                )
+        has_reversal = any(invoice.get("status") == "REVERSED" for invoice in lifecycle.invoices)
+        if lifecycle.invoices and lifecycle.invoices[0].get("status") == "ACTIVE" and not has_reversal:
             findings.append(
                 RuleFinding(
                     "ERP_REVERSAL_MISSING",
@@ -229,11 +312,18 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
         "ERP_AMOUNT_MISMATCH": "ERP_AMOUNT_MISMATCH",
         "PAYMENT_FEE_MISSING": "PAYMENT_FEE_MISSING",
         "SETTLEMENT_FEE_MISSING": "SETTLEMENT_FEE_MISSING",
+        "INVENTORY_VALUE_MISMATCH": "INVENTORY_VALUE_MISMATCH",
+        "INVENTORY_VALUE_CALCULATION_ERROR": "INVENTORY_VALUE_MISMATCH",
+        "INVENTORY_QUANTITY_MISMATCH": "INVENTORY_QUANTITY_MISMATCH",
+        "INVENTORY_RESTORED_WITHOUT_REFUND": "INVENTORY_RESTORED_WITHOUT_REFUND",
     }.get(primary.code, primary.code)
     severity = (
         "HIGH"
         if exception_type
-        in {"REFUND_WITHOUT_INVENTORY_RETURN", "REFUND_WITHOUT_ERP_REVERSAL", "DUPLICATE_PAYMENT"}
+        in {
+            "REFUND_WITHOUT_INVENTORY_RETURN", "REFUND_WITHOUT_ERP_REVERSAL", "DUPLICATE_PAYMENT",
+            "INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH", "INVENTORY_RESTORED_WITHOUT_REFUND",
+        }
         else "MEDIUM"
     )
     category = max(

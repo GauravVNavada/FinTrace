@@ -103,6 +103,7 @@ class SourceFileResponse(BaseModel):
     detected_source_type: SourceType | None = None
     classification_confidence: float | None = Field(default=None, ge=0, le=1)
     created_at: datetime
+    deduplicated: bool = False
 
 
 class DemoDataResponse(BaseModel):

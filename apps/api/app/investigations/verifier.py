@@ -220,6 +220,16 @@ def _compatibility_issues(
             RootCauseCode.SETTLEMENT_FEE_MISSING,
             RootCauseCode.DATA_QUALITY_ERROR,
         },
+        ExceptionType.INVENTORY_VALUE_MISMATCH: {
+            RootCauseCode.INVENTORY_VALUE_MISMATCH,
+            RootCauseCode.INVENTORY_VALUE_CALCULATION_ERROR,
+        },
+        ExceptionType.INVENTORY_QUANTITY_MISMATCH: {
+            RootCauseCode.INVENTORY_QUANTITY_MISMATCH,
+        },
+        ExceptionType.INVENTORY_RESTORED_WITHOUT_REFUND: {
+            RootCauseCode.INVENTORY_RESTORED_WITHOUT_REFUND,
+        },
     }
     if exception_type in expected and candidate.root_cause_code not in expected[exception_type]:
         return ["Root-cause code is not compatible with the deterministic exception type."]
@@ -240,6 +250,74 @@ def _compatibility_issues(
             return [
                 "Refund workflow conclusions require refund evidence and an explicit missing-return finding."
             ]
+    if candidate.root_cause_code in {
+        RootCauseCode.INVENTORY_VALUE_MISMATCH,
+        RootCauseCode.INVENTORY_VALUE_CALCULATION_ERROR,
+        RootCauseCode.INVENTORY_QUANTITY_MISMATCH,
+    }:
+        has_order = any(item.source.value == "order" for item in candidate.supporting_evidence)
+        has_sale = any(
+            item.source.value == "inventory"
+            and item.field == "movement_type"
+            and item.operator == "equals"
+            and str(item.expected_value).upper() == "SALE"
+            for item in candidate.supporting_evidence
+        )
+        has_return = any(
+            item.source.value == "inventory"
+            and item.field == "movement_type"
+            and item.operator == "equals"
+            and str(item.expected_value).upper() == "RETURN"
+            for item in candidate.supporting_evidence
+        )
+        has_calculation_mismatch = any(
+            item.source.value == "inventory"
+            and item.field == "inventory_value_minor"
+            and item.operator == "not_equals"
+            for item in candidate.supporting_evidence
+        )
+        if not has_order or not has_sale:
+            return [
+                "Inventory mismatch conclusions require cited order and inventory SALE evidence."
+            ]
+        if candidate.root_cause_code == RootCauseCode.INVENTORY_VALUE_CALCULATION_ERROR:
+            if not has_calculation_mismatch:
+                return [
+                    "Inventory value-calculation conclusions require a cited unit-cost multiplication mismatch."
+                ]
+        else:
+            if not has_return:
+                return [
+                    "Inventory return conclusions require cited inventory RETURN evidence."
+                ]
+            has_refund = any(item.source.value == "refund" for item in candidate.supporting_evidence)
+            if not has_refund:
+                return ["Inventory return conclusions require refund evidence."]
+    if candidate.root_cause_code == RootCauseCode.INVENTORY_RESTORED_WITHOUT_REFUND:
+        has_sale = any(
+            item.source.value == "inventory"
+            and item.record_id
+            and item.field == "movement_type"
+            and item.operator == "equals"
+            and str(item.expected_value).upper() == "SALE"
+            for item in candidate.supporting_evidence
+        )
+        has_return = any(
+            item.source.value == "inventory"
+            and item.record_id
+            and item.field == "movement_type"
+            and item.operator == "equals"
+            and str(item.expected_value).upper() == "RETURN"
+            for item in candidate.supporting_evidence
+        )
+        has_missing_refund = any(
+            item.source.value == "refund" and item.record_id is None and item.operator is not None and item.operator.value == "missing"
+            for item in candidate.supporting_evidence
+        )
+        if not has_sale or not has_return or not has_missing_refund:
+            return [
+                "Inventory-restored conclusions require cited sale, return, and explicit missing-refund evidence."
+            ]
     return []
 
 
@@ -250,6 +328,10 @@ def _action_allowed(action: RecommendationCode, root_cause: RootCauseCode | None
         RootCauseCode.ERP_REVERSAL_MISSING: RecommendationCode.REQUEST_ERP_REVERSAL_REVIEW,
         RootCauseCode.DUPLICATE_PAYMENT: RecommendationCode.REQUEST_PAYMENT_REVIEW,
         RootCauseCode.AMBIGUOUS_ASSOCIATION: RecommendationCode.REQUEST_MANUAL_REVIEW,
+        RootCauseCode.INVENTORY_VALUE_MISMATCH: RecommendationCode.REQUEST_INVENTORY_VERIFICATION,
+        RootCauseCode.INVENTORY_VALUE_CALCULATION_ERROR: RecommendationCode.REQUEST_INVENTORY_VERIFICATION,
+        RootCauseCode.INVENTORY_QUANTITY_MISMATCH: RecommendationCode.REQUEST_INVENTORY_VERIFICATION,
+        RootCauseCode.INVENTORY_RESTORED_WITHOUT_REFUND: RecommendationCode.REQUEST_PAYMENT_REVIEW,
     }
     return root_cause not in allowed or allowed[root_cause] == action
 

@@ -8,7 +8,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { Button, cn } from "@fintrace/ui";
 import { appConfig } from "../lib/data";
-import { fetchReadiness, getClientIdentity } from "../lib/api-client";
+import { fetchReadiness, getClientIdentity, getDefaultClientIdentity } from "../lib/api-client";
 
 type NavItem = { label: string; href: string; icon: LucideIcon };
 const primaryNav: NavItem[] = [{ label: "Home", href: "/", icon: Home }, { label: "Closes", href: "/investigations", icon: Rows3 }, { label: "Attention", href: "/attention", icon: ClipboardCheck }];
@@ -20,7 +20,7 @@ function Nav({ items, mobile = false }: { items: NavItem[]; mobile?: boolean }) 
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const router = useRouter(); const pathname = usePathname(); const [identity, setIdentity] = React.useState(getClientIdentity); const [apiState, setApiState] = React.useState<"checking" | "connected" | "unavailable">("checking"); const [helpOpen, setHelpOpen] = React.useState(false);
+  const router = useRouter(); const pathname = usePathname(); const [identity, setIdentity] = React.useState(getDefaultClientIdentity); const [apiState, setApiState] = React.useState<"checking" | "connected" | "unavailable">("checking"); const [helpOpen, setHelpOpen] = React.useState(false);
   React.useEffect(() => { if (!pathname.startsWith("/login") && !window.localStorage.getItem("fintrace.access_token")) { router.replace("/login"); return; } setIdentity(getClientIdentity()); fetchReadiness().then(() => setApiState("connected")).catch(() => setApiState("unavailable")); }, [pathname, router]);
   function logout() { window.localStorage.removeItem("fintrace.access_token"); window.localStorage.removeItem("fintrace.identity"); router.replace("/login"); }
   const apiLabel = apiState === "connected" ? "Connected" : apiState === "unavailable" ? "Unavailable" : "Connecting"; const apiTone = apiState === "connected" ? "bg-success" : apiState === "unavailable" ? "bg-destructive" : "bg-warning";

@@ -121,6 +121,13 @@ class StubAIClient:
                 "get_invoice_for_order",
                 "get_settlements_for_order",
             ]
+        elif exception.type.value in {
+            "INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH",
+            "INVENTORY_RESTORED_WITHOUT_REFUND",
+        }:
+            preferred = [
+                "get_order", "get_refunds_for_order", "get_inventory_movements",
+            ]
         else:
             preferred = [
                 "get_order",
@@ -159,6 +166,15 @@ class StubAIClient:
                 "get_inventory_movements",
                 "get_employee_action_logs",
             ]
+        if exception.type.value in {
+            "INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH",
+            "INVENTORY_RESTORED_WITHOUT_REFUND",
+        }:
+            return [
+                *common,
+                "get_refunds_for_order",
+                "get_inventory_movements",
+            ]
         return [
             *common,
             "get_settlements_for_order",
@@ -183,6 +199,39 @@ class StubAIClient:
                 ],
                 "contradictory_evidence": [],
                 "missing_evidence": ["Physical goods receipt confirmation unavailable"],
+                "recommended_action_code": "REQUEST_INVENTORY_VERIFICATION",
+                "requires_human_review": True,
+            }
+        if exception.type.value == "INVENTORY_RESTORED_WITHOUT_REFUND":
+            return {
+                "status": "SUPPORTED",
+                "root_cause_code": "INVENTORY_RESTORED_WITHOUT_REFUND",
+                "summary": "Inventory was restored for the order, but no customer refund was recorded.",
+                "supporting_evidence": [item.model_dump(mode="json") for item in evidence],
+                "contradictory_evidence": [],
+                "missing_evidence": [],
+                "recommended_action_code": "REQUEST_PAYMENT_REVIEW",
+                "requires_human_review": True,
+            }
+        if exception.type.value == "INVENTORY_QUANTITY_MISMATCH":
+            return {
+                "status": "SUPPORTED",
+                "root_cause_code": "INVENTORY_QUANTITY_MISMATCH",
+                "summary": "The returned inventory quantity does not match the quantity sold for the order.",
+                "supporting_evidence": [item.model_dump(mode="json") for item in evidence],
+                "contradictory_evidence": [],
+                "missing_evidence": [],
+                "recommended_action_code": "REQUEST_INVENTORY_VERIFICATION",
+                "requires_human_review": True,
+            }
+        if exception.type.value == "INVENTORY_VALUE_MISMATCH":
+            return {
+                "status": "SUPPORTED",
+                "root_cause_code": "INVENTORY_VALUE_MISMATCH",
+                "summary": "The inventory cost value does not reconcile between the sale and return movements.",
+                "supporting_evidence": [item.model_dump(mode="json") for item in evidence],
+                "contradictory_evidence": [],
+                "missing_evidence": [],
                 "recommended_action_code": "REQUEST_INVENTORY_VERIFICATION",
                 "requires_human_review": True,
             }
@@ -463,12 +512,28 @@ class OpenAICompatibleAIClient:
                 "INCOMPLETE_REFUND_WORKFLOW", "INVENTORY_REVERSAL_MISSING"
             ],
             "AMBIGUOUS_ASSOCIATION": ["AMBIGUOUS_ASSOCIATION"],
+            "INVENTORY_VALUE_MISMATCH": [
+                "INVENTORY_VALUE_MISMATCH", "INVENTORY_VALUE_CALCULATION_ERROR"
+            ],
+            "INVENTORY_QUANTITY_MISMATCH": ["INVENTORY_QUANTITY_MISMATCH"],
+            "INVENTORY_RESTORED_WITHOUT_REFUND": ["INVENTORY_RESTORED_WITHOUT_REFUND"],
         }.get(exception.type.value)
         if applicable_roots:
             instruction += (
                 " The exact applicable root_cause_code values for this exception are: "
                 + ", ".join(applicable_roots)
                 + ". Do not invent or alter these enum values."
+            )
+        if exception.type.value in {
+            "INVENTORY_VALUE_MISMATCH", "INVENTORY_QUANTITY_MISMATCH",
+            "INVENTORY_RESTORED_WITHOUT_REFUND",
+        }:
+            instruction += (
+                " For inventory conclusions, cite the order and the relevant inventory SALE and RETURN records. "
+                "For INVENTORY_RESTORED_WITHOUT_REFUND, also cite the explicit missing refund evidence. "
+                "Use the deterministic finding values as supplied; do not perform new monetary calculations. "
+                "Use INVENTORY_VALUE_CALCULATION_ERROR only when that exact deterministic finding is present; "
+                "otherwise use INVENTORY_VALUE_MISMATCH for a sale-versus-return cost difference."
             )
         if exception.type.value == "AMBIGUOUS_ASSOCIATION":
             instruction += (
