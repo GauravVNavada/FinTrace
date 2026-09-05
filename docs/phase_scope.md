@@ -1,5 +1,11 @@
 # FinTrace Phase Scope
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+The ambiguity investigation improvement is within the existing close experience: mandatory scoped retrieval, case-specific live assessment, cited evidence display and explicit refresh of old zero-lookup results. No data regeneration, accounting-rule changes or navigation redesign are included.
+
 Status: P0 buildathon implementation · Sprints 0–7 foundation plus Track 4 reliability/UX hardening complete/validated conditionally on live-provider availability · 2026-09-03
 
 ## Product evolution scope

@@ -1,5 +1,11 @@
 # FinTrace Architecture
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+InvestigationService collects five mandatory scoped lookups for ambiguous associations before provider synthesis. Baseline ToolCall metadata identifies deterministic-evidence-collection / none; the response retains the actual AI provider/model. Only unused tools remain selectable. The verifier rejects missing order/candidate/settlement field citations. Free-text hypotheses are advisory; field verification is not proof of narrative causation.
+
 Status: accepted local product architecture; Sprints 0–7 plus Track 4 reliability/UX hardening implemented · 2026-09-03
 
 ## Decision summary

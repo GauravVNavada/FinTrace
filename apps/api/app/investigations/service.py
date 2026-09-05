@@ -180,6 +180,28 @@ class InvestigationService:
         candidate: InvestigationCandidate | None = None
         next_step = getattr(self._provider, "next_step", None)
         if callable(next_step):
+            # Ambiguity requires comparison, even when a provider thinks the
+            # exception label alone is enough to answer. Collect the bounded
+            # baseline through the same scoped, audited tools before synthesis.
+            if exception.type == ExceptionType.AMBIGUOUS_ASSOCIATION:
+                for name in self._fallback_tools(exception):
+                    try:
+                        result = self._tools.invoke(name, organization_id, lifecycle, exception.id)
+                    except ValueError as error:
+                        return _with_metadata(
+                            self._unresolved_response(exception, tool_calls, evidence, str(error)),
+                            started_at, self._provider,
+                        )
+                    call = result.call.model_copy(update={
+                        "sequence_no": len(tool_calls) + 1,
+                        "provider": "deterministic-evidence-collection",
+                        "model": "none",
+                    })
+                    tool_calls.append(call)
+                    evidence.extend(call.evidence)
+                    self._repository.record_audit_event(
+                        organization_id, "INVESTIGATION_TOOL_CALLED", call.name
+                    )
             for _ in range(8):
                 trace = [
                     {
@@ -200,7 +222,7 @@ class InvestigationService:
                         # Once every relevant evidence source has been inspected,
                         # require a structured final answer instead of allowing the
                         # provider to keep selecting an already-used tool.
-                        [] if len(tool_calls) >= len(available_tools) else available_tools,
+                        [name for name in available_tools if name not in {call.name for call in tool_calls}],
                     )
                 except ProviderUnavailable as error:
                     return _with_metadata(
@@ -220,6 +242,22 @@ class InvestigationService:
                             _normalize_provider_candidate(decision.candidate or {}, evidence)
                         )
                     except ValidationError as error:
+                        # Repair a malformed structured response once using the
+                        # same evidence. Do not treat schema errors as outages.
+                        try:
+                            repair = next_step(
+                                exception,
+                                [*findings, {"code": "RESPONSE_FORMAT_CORRECTION", "message":
+                                    "Return a corrected final candidate. Validation errors: " + str(error)[:1500]}],
+                                evidence, trace, [],
+                            )
+                            if repair.action == "final":
+                                candidate = InvestigationCandidate.model_validate(
+                                    _normalize_provider_candidate(repair.candidate or {}, evidence)
+                                )
+                                break
+                        except (ProviderUnavailable, ValidationError, TypeError, ValueError):
+                            pass
                         _logger.warning(
                             "investigation_candidate_invalid provider=%s model=%s errors=%s",
                             getattr(self._provider, "provider", "unknown"),
@@ -502,10 +540,18 @@ class InvestigationService:
     def _failed_response(
         exception: ExceptionSummary, tool_calls: list[ToolCall], error: ProviderUnavailable
     ) -> InvestigationResponse:
+        response_failure = error.info.category in {"invalid_response", "invalid_tool_call"} or (
+            error.info.http_status == 400 and "JSON" in str(error)
+        )
+        summary = (
+            "The AI response could not be validated. Retry the investigation; the source evidence is retained."
+            if response_failure else
+            "AI provider unavailable; deterministic evidence remains available for manual review."
+        )
         return InvestigationResponse(
             status=InvestigationStatus.FAILED,
             root_cause_code=None,
-            summary="AI provider unavailable; deterministic evidence remains available for manual review.",
+            summary=summary,
             supporting_evidence=[],
             contradictory_evidence=[],
             missing_evidence=[],
@@ -607,7 +653,7 @@ def _normalize_provider_candidate(
         result["missing_evidence"] = [
             item
             if isinstance(item, str)
-            else str(item.get("fact") or item.get("message") or json.dumps(item, sort_keys=True))
+            else str(item.get("fact") or item.get("message") or item.get("description") or json.dumps(item, sort_keys=True))
             for item in missing
         ]
     else:

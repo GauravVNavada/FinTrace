@@ -1,5 +1,11 @@
 # FinTrace Data and API Contract
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+The existing investigate POST may refresh a stored zero-tool-call assessment with a new idempotency key, preserving its investigation_id and recording the completion audit. Same-key replays remain unchanged; existing assessments with tool calls remain cached. No endpoint or JSON shape changed. Tool-call provider metadata distinguishes baseline collection from model-selected lookups. An empty invoice lookup emits an explicit missing invoice_id predicate.
+
 Status: accepted evolution contract; Sprints 1–7 plus Track 4 reliability/UX hardening implemented · 2026-09-03
 
 ## Adapter rule

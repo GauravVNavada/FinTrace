@@ -142,6 +142,12 @@ class EvidenceToolRegistry:
                 for item in values
                 for fact in _record_evidence(EvidenceSource.INVOICE, item, str(item["invoice_id"]))
             ]
+            if not values:
+                evidence.append(EvidenceItem(
+                    source=EvidenceSource.INVOICE,
+                    fact="No invoice record exists in the scoped order dataset.",
+                    field="invoice_id", operator=EvidenceOperator.MISSING,
+                ))
             target = order_id
         elif name == "get_inventory_movements":
             values = lifecycle.inventory_movements

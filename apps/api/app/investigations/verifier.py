@@ -51,6 +51,20 @@ def verify_candidate(
         }
     )
     issues.extend(_compatibility_issues(candidate, exception_type, lifecycle))
+    if exception_type == ExceptionType.AMBIGUOUS_ASSOCIATION:
+        cited = [*verified_supporting, *verified_contradictory]
+        for source, record_id in [
+            ("order", str(lifecycle.order["order_id"])),
+            *(("payment", str(row["payment_id"])) for row in lifecycle.payments),
+        ]:
+            if not any(item.source.value == source and item.record_id == record_id
+                       and item.field and item.operator for item in cited):
+                issues.append(f"Candidate comparison requires a field citation for {record_id}.")
+        if not any(item.source.value == "settlement" and (
+            (item.field == "payment_id" and item.operator == "equals")
+            or (item.record_id is None and item.field == "settlement_id" and item.operator == "missing")
+        ) for item in cited):
+            issues.append("Candidate comparison requires settlement linkage or explicit absence evidence.")
     if candidate.status == InvestigationStatus.SUPPORTED and not candidate.supporting_evidence:
         issues.append("Supported results require supporting evidence.")
 

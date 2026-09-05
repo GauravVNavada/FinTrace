@@ -114,7 +114,7 @@ const aiResult = {
   status: "UNRESOLVED",
   root_cause_code: null,
   summary: "Two candidate payments satisfy the available evidence; additional transaction reference or settlement evidence is required to resolve the ambiguous association.",
-  supporting_evidence: [],
+  supporting_evidence: [{ source: "payment", record_id: "PAY-20005-A", fact: "Payment status is CAPTURED.", field: "status", operator: "equals", expected_value: "CAPTURED", verified: true }],
   contradictory_evidence: [],
   missing_evidence: ["Transaction reference", "Settlement record"],
   recommended_action_code: "REQUEST_PAYMENT_REVIEW",
@@ -146,7 +146,8 @@ const auditEvent = {
   created_at: "2026-08-31T09:07:00Z",
 };
 
-test("Controller can complete the canonical close golden path", async ({ page }) => {
+for (const retryFailed of [false, true]) {
+test(`Controller can complete the canonical close golden path (retry=${retryFailed})`, async ({ page }) => {
   let reviewRequested = false;
 
   await page.route("http://127.0.0.1:8001/**", async route => {
@@ -164,7 +165,7 @@ test("Controller can complete the canonical close golden path", async ({ page })
     if (path.endsWith(`/financial-investigations/${investigation.id}/sources`)) return json(sources);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results`)) return json([exception, secondAmbiguous, missingSettlement]);
     if (path.endsWith(`/financial-investigations/${investigation.id}/patterns`)) return json([]);
-    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return json({}, 404);
+    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return retryFailed ? json({ ...aiResult, status: "FAILED", summary: "The AI response could not be validated.", supporting_evidence: [], verifier_passed: false }) : json({}, 404);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigate`)) return json(aiResult);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
     if (path.endsWith(`/lifecycles/${missingSettlement.order_id}`)) return json(missingLifecycle);
@@ -198,9 +199,12 @@ test("Controller can complete the canonical close golden path", async ({ page })
   await page.screenshot({ path: "test-results/redesign-results.png", fullPage: true });
   await page.getByRole("link", { name: /ORD-10005/ }).click();
   await expect(page.getByText("What happened")).toBeVisible();
-  await page.getByRole("button", { name: "Investigate evidence" }).click();
-  await expect(page.getByText("Result", { exact: true })).toBeVisible();
-  await expect(page.getByText("Verifier result: Evidence verified")).toBeVisible();
+  await page.getByRole("button", { name: retryFailed ? "Retry AI investigation" : "Investigate evidence" }).click();
+  await expect(page.getByRole("heading", { name: "Assessment · needs evidence" })).toBeVisible();
+  await expect(page.getByText("Cited fields passed verification. The cause remains unresolved.")).toBeVisible();
+  await expect(page.getByText("Payment status is CAPTURED.")).toBeVisible();
+  await expect(page.getByText("Automated test fixture · not live AI")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "What would resolve this" })).toBeVisible();
   await page.getByRole("button", { name: "Request transaction reference" }).click();
   await expect(page.getByRole("button", { name: "Reference requested" })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -221,3 +225,4 @@ test("Controller can complete the canonical close golden path", async ({ page })
   await page.getByRole("link", { name: "Audit", exact: true }).last().click();
   await expect(page.getByText("RESOLUTION_REQUESTED")).toBeVisible();
 });
+}

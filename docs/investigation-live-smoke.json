@@ -1,0 +1,177 @@
+{
+  "status": "UNRESOLVED",
+  "root_cause_code": null,
+  "summary": "Payments PAY-A and PAY-B both reference order ORD-COMPARE, have identical amount_minor (315000) and status CAPTURED, but different captured_at times (2026-02-03T10:00:00+00:00 vs 2026-02-03T10:45:00+00:00). Settlement SET-A is linked to PAY-A only. No settlement record is present for PAY-B, and no invoice or refund exists for the order. Consequently it is unclear which payment ultimately settled the order; a duplicate capture, retry, or mapping error remains unproven. Further external data is required to resolve the association.",
+  "supporting_evidence": [
+    {
+      "source": "order",
+      "record_id": "ORD-COMPARE",
+      "fact": "Order amount_minor is 315000.",
+      "field": "amount_minor",
+      "operator": "equals",
+      "expected_value": 315000,
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-A",
+      "fact": "Payment status is CAPTURED.",
+      "field": "status",
+      "operator": "equals",
+      "expected_value": "CAPTURED",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-A",
+      "fact": "Payment order_id is ORD-COMPARE.",
+      "field": "order_id",
+      "operator": "equals",
+      "expected_value": "ORD-COMPARE",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-A",
+      "fact": "Payment amount_minor is 315000.",
+      "field": "amount_minor",
+      "operator": "equals",
+      "expected_value": 315000,
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-A",
+      "fact": "Payment captured_at is 2026-02-03T10:00:00+00:00.",
+      "field": "captured_at",
+      "operator": "equals",
+      "expected_value": "2026-02-03T10:00:00+00:00",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-B",
+      "fact": "Payment status is CAPTURED.",
+      "field": "status",
+      "operator": "equals",
+      "expected_value": "CAPTURED",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-B",
+      "fact": "Payment order_id is ORD-COMPARE.",
+      "field": "order_id",
+      "operator": "equals",
+      "expected_value": "ORD-COMPARE",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-B",
+      "fact": "Payment amount_minor is 315000.",
+      "field": "amount_minor",
+      "operator": "equals",
+      "expected_value": 315000,
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "payment",
+      "record_id": "PAY-B",
+      "fact": "Payment captured_at is 2026-02-03T10:45:00+00:00.",
+      "field": "captured_at",
+      "operator": "equals",
+      "expected_value": "2026-02-03T10:45:00+00:00",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "settlement",
+      "record_id": "SET-A",
+      "fact": "Settlement status is SETTLED.",
+      "field": "status",
+      "operator": "equals",
+      "expected_value": "SETTLED",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "settlement",
+      "record_id": "SET-A",
+      "fact": "Settlement payment_id is PAY-A.",
+      "field": "payment_id",
+      "operator": "equals",
+      "expected_value": "PAY-A",
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "settlement",
+      "record_id": "SET-A",
+      "fact": "Settlement gross_minor is 315000.",
+      "field": "gross_minor",
+      "operator": "equals",
+      "expected_value": 315000,
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "invoice",
+      "record_id": null,
+      "fact": "No invoice record exists in the scoped order dataset.",
+      "field": "invoice_id",
+      "operator": "missing",
+      "expected_value": null,
+      "verified": true,
+      "verification_issue": null
+    },
+    {
+      "source": "refund",
+      "record_id": null,
+      "fact": "No refund record exists for the scoped order.",
+      "field": "refund_id",
+      "operator": "missing",
+      "expected_value": null,
+      "verified": true,
+      "verification_issue": null
+    }
+  ],
+  "contradictory_evidence": [],
+  "missing_evidence": [
+    "Obtain settlement record linking payment_id PAY-B to a settlement entry",
+    "Obtain payment gateway transaction logs for PAY-A and PAY-B to confirm which capture was settled"
+  ],
+  "recommended_action_code": null,
+  "requires_human_review": true,
+  "investigation_id": "INV-0A468DDB09B4",
+  "exception_id": "EXC-COMPARE",
+  "evidence_score": 35,
+  "created_at": "2026-09-05T09:04:38.598066Z",
+  "provider": "groq",
+  "model": "openai/gpt-oss-120b",
+  "prompt_version": "p0-iterative-v1",
+  "started_at": "2026-09-05T09:04:30.459979Z",
+  "completed_at": "2026-09-05T09:04:38.598066Z",
+  "latency_ms": 8138,
+  "verifier_passed": true,
+  "verifier_issues": [],
+  "rejected_evidence": [],
+  "provider_error_category": null,
+  "provider_retryable": null,
+  "failure_stage": null,
+  "failure_iteration": null,
+  "failure_detail": null,
+  "originally_requested_provider": "groq",
+  "actual_provider_used": "groq",
+  "model_used": "openai/gpt-oss-120b",
+  "fallback_used": false,
+  "fallback_reason": null
+}

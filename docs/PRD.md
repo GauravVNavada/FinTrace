@@ -1,5 +1,11 @@
 # Product Requirements Document — FinTrace
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+Ambiguous-payment investigations collect scoped order, candidate payment, invoice, settlement and refund facts before live-provider synthesis. The assessment compares actual candidates and identifies specific external evidence needed to resolve them. The controller sees citations and provider/model identity. Verification of cited fields does not establish a resolved cause. Existing zero-lookup assessments can be explicitly refreshed without re-uploading.
+
 ## Controller close experience (2026-09-04)
 
 The primary controller experience is a month-end financial close. The visible flow is **Home → Closes → Overview / Data / Results / Attention**. Login has one controller-first action; high-confidence source mappings and data connections are handled automatically; `Run close` owns the existing normalization and deterministic reconciliation sequence; and the Attention queue contains only needs-evidence, needs-decision, and approval-required work. Audit and Evaluation remain secondary proof surfaces. Internal exception codes, reconciliation rules, tenant scope, RBAC, PostgreSQL persistence, bounded investigation tools, verification, approval, and audit behavior remain unchanged.

@@ -55,7 +55,14 @@ class FinancialExceptionInvestigationService:
         existing = self._repository.get_financial_exception_investigation(
             context.organization_id, investigation_id, result_id
         )
-        if existing is not None:
+        # Old zero-lookup assessments can be refreshed by an explicit new POST.
+        # Replays using the same idempotency key still return the original result.
+        refresh_legacy = existing is not None and (
+            existing.get("status") == "FAILED" or (
+                not existing.get("tool_calls") and existing.get("provider") != "stub"
+            )
+        )
+        if existing is not None and not refresh_legacy:
             response = InvestigationResponse.model_validate(existing)
             self._repository.put_idempotency(
                 context.organization_id,
@@ -134,6 +141,10 @@ class FinancialExceptionInvestigationService:
             response = self._investigator.investigate_lifecycle(
                 context.organization_id, exception, lifecycle
             )
+            if refresh_legacy and existing is not None:
+                response = response.model_copy(update={
+                    "investigation_id": existing["investigation_id"],
+                })
             body = response.model_dump(mode="json")
         except Exception:
             self._repository.release_idempotency(context.organization_id, idempotency_key)

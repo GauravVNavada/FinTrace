@@ -1,5 +1,11 @@
 # FinTrace Application Flow
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+Open a needs-evidence finding → Investigate evidence → collect scoped candidate evidence → live AI compares records → verify citations → show assessment and what would resolve it. The result shows cited records and keeps lookup details expandable. Legacy results with zero lookups offer “Refresh investigation with source evidence”; this uses a new idempotency key and preserves the investigation identity.
+
 ## Operational state semantics (2026-09-03)
 
 Control screens use four explicit states: loading, persisted result, no result yet, and failure. A `404` on a latest-run/latest-evaluation read means the workflow has not run; `403` means the actor lacks the capability; network/5xx failures are retryable service failures. The UI never labels a permission denial as an outage and never replaces an unavailable live provider with a fabricated score. Source mutations require idempotency keys and are safe to retry.

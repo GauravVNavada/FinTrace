@@ -186,6 +186,15 @@ class StubAIClient:
     def investigate(
         self, exception: ExceptionSummary, evidence: list[EvidenceItem]
     ) -> dict[str, Any]:
+        if exception.type.value == "AMBIGUOUS_ASSOCIATION":
+            return {
+                "status": "UNRESOLVED", "root_cause_code": "UNKNOWN",
+                "summary": "TEST FIXTURE: candidate payment association remains unresolved.",
+                "supporting_evidence": [item.model_dump(mode="json") for item in evidence[:30]],
+                "contradictory_evidence": [],
+                "missing_evidence": ["Obtain the gateway transaction references for the candidate payments."],
+                "recommended_action_code": "REQUEST_PAYMENT_REVIEW", "requires_human_review": True,
+            }
         if exception.type.value == "REFUND_WITHOUT_INVENTORY_RETURN":
             return {
                 "status": "SUPPORTED",
@@ -505,6 +514,10 @@ class OpenAICompatibleAIClient:
             "cause, non-empty supporting_evidence, and an allowlisted recommendation. For UNRESOLVED, "
             "set root_cause_code to null, put a human-readable unresolved reason in summary, provide "
             "at least one concrete missing_evidence item, and set requires_human_review true."
+            " Each citation must COPY a supplied evidence object with source, record_id, fact, "
+            "field, operator and expected_value intact. Do not abbreviate citations to IDs and "
+            "fields or replace expected_value with value. missing_evidence is an array of plain "
+            "human-readable strings, never objects. The entire summary must stay under 1000 characters."
         )
         applicable_roots = {
             "MISSING_SETTLEMENT": ["SETTLEMENT_MISSING"],
@@ -538,9 +551,19 @@ class OpenAICompatibleAIClient:
         if exception.type.value == "AMBIGUOUS_ASSOCIATION":
             instruction += (
                 " This exception MUST return status UNRESOLVED, root_cause_code null, and "
-                "requires_human_review true. The summary must explicitly state that two candidate "
-                "payments satisfy the available evidence and that additional transaction reference or "
-                "settlement evidence is required. Do not return SUPPORTED for an ambiguous association."
+                "requires_human_review true. Write a case-specific assessment within 1000 characters: "
+                "identify the actual candidate payment IDs; compare their supplied amounts, capture "
+                "times, statuses and gateway references; describe which settlement payment_id links "
+                "to which candidate. Explain what invoice/refund records add or fail to establish. "
+                "State what the records establish and distinguish any possible retry, duplicate "
+                "capture or mapping issue as an unproven hypothesis. Do not assume there are exactly "
+                "two candidates or that all settlements are missing. A missing record means absent "
+                "from this dataset, not proof an event never occurred. Cite field predicates from "
+                "the supplied evidence for the ORDER (mandatory even if it appears obvious), every candidate payment and relevant "
+                "settlement linkage or explicit absence. missing_evidence must give an actionable "
+                "request: which external record/payment reference payment operations should obtain "
+                "and how it would distinguish the candidates. Do not merely repeat the exception "
+                "label. Do not select a correct payment or return SUPPORTED."
             )
         tool_specs = [
             {
@@ -557,10 +580,19 @@ class OpenAICompatibleAIClient:
             }
             for name in available_tools
         ]
+        if exception.type.value == "AMBIGUOUS_ASSOCIATION" and evidence:
+            # The mandatory comparison evidence is already collected. Mixing
+            # native tool calls with final JSON here causes avoidable Groq 400s.
+            tool_specs = []
+            instruction += (
+                " Baseline evidence collection is complete. Return action=final now. "
+                "Select at most 12 relevant citations, including the order, each payment "
+                "and settlement linkage. Keep summary under 800 characters."
+            )
         raw = self._chat(
             instruction,
             payload,
-            max_tokens=900,
+            max_tokens=5000,
             tools=tool_specs,
             request_stage="investigation_decision",
             tool_loop_iteration=len(tool_trace) + 1,
@@ -755,6 +787,17 @@ class OpenAICompatibleAIClient:
                     break
                 except HTTPError as error:
                     provider_detail = _safe_http_detail(error)
+                    if error.code == 400 and "Failed to generate JSON" in (provider_detail or "") and attempt == 0:
+                        # One bounded regeneration; this is a model formatting
+                        # failure, not a connectivity failure or a reason to
+                        # rotate credentials.
+                        body_payload["messages"][0]["content"] += (
+                            " Your previous generation was invalid JSON. Return a compact valid "
+                            "JSON object only, with no markdown. Limit summary to 800 characters "
+                            "and cite at most 12 supplied evidence objects."
+                        )
+                        body = json.dumps(body_payload).encode()
+                        continue
                     if tools and allow_invalid_tool_correction and error.code == 400 and (
                         "not in request.tools" in (provider_detail or "")
                         or "Failed to parse tool call arguments as JSON" in (provider_detail or "")

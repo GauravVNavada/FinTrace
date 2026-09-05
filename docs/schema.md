@@ -1,5 +1,9 @@
 # FinTrace Schema
 
+## Investigation evidence improvement (2026-09-05)
+
+No schema migration is required. Existing ToolCall provider/model fields identify mandatory collection as deterministic-evidence-collection / none. Response provider/model identify live synthesis. Legacy zero-lookup refreshes retain the persisted investigation ID so evidence-call foreign keys remain valid.
+
 Status: accepted evolution schema; migrations 001–013 applied locally, migration 014 defined for tenant-integrity/replay hardening · 2026-09-03
 
 ## Domain separation for the evolution program

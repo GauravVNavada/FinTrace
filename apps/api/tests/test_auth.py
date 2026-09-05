@@ -217,6 +217,26 @@ def test_provider_retries_next_key_after_rate_limit(monkeypatch: pytest.MonkeyPa
     assert calls == ["Bearer first-key", "Bearer second-key"]
 
 
+def test_provider_recovers_json_generation_failure_once(monkeypatch):
+    calls = []
+    class Response:
+        def __enter__(self): return self
+        def __exit__(self, *args): pass
+        def read(self): return b'{"choices":[{"message":{"content":"{\\"ok\\":true}"}}]}'
+    def urlopen(req, timeout):
+        calls.append(json.loads(req.data))
+        if len(calls) == 1:
+            raise HTTPError("https://provider.test", 400, "Bad Request", {}, BytesIO(
+                b'{"error":{"message":"Failed to generate JSON. Please adjust your prompt."}}'
+            ))
+        return Response()
+    monkeypatch.setattr("app.investigations.provider.request.urlopen", urlopen)
+    client = OpenAICompatibleAIClient("key", "https://provider.test/v1", "model", 1)
+    assert client._chat("Return JSON", {}) == {"ok": True}
+    assert len(calls) == 2
+    assert "previous generation was invalid JSON" in calls[1]["messages"][0]["content"]
+
+
 def test_provider_corrects_one_unallowlisted_tool_call(monkeypatch: pytest.MonkeyPatch) -> None:
     class FakeResponse:
         def __init__(self, body: bytes) -> None:

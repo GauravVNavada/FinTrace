@@ -1,5 +1,9 @@
 # FinTrace Agent Boundaries
 
+## Investigation evidence improvement (2026-09-05)
+
+Ambiguous cases require scoped baseline retrieval before synthesis. The provider compares candidate IDs, times, supplied values and settlement links, and requests distinguishing external evidence. Unknown retry/duplicate/mapping causes remain hypotheses. The verifier requires order, candidate and settlement citations; AI cannot choose an unsupported correct payment.
+
 Status: accepted safety design · 2026-08-30
 
 ## Product description

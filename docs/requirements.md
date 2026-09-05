@@ -1,5 +1,11 @@
 # FinTrace Requirements Specification
 
+## Investigation evidence improvement (2026-09-05)
+
+Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
+
+Ambiguous investigations must inspect the five baseline evidence sources before final synthesis. Verification requires field citations for the order, every candidate payment and settlement linkage or absence. UI acceptance includes the assessment, citations, actionable missing evidence, provider/model and a refresh action for legacy zero-lookup assessments. A repeated idempotency key replays its original response.
+
 **Version:** 1.0.0  
 **Status:** Active  
 **Last updated:** 2026-08-31

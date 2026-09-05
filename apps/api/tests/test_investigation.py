@@ -1,10 +1,14 @@
 import pytest
+from unittest.mock import MagicMock
 from httpx import ASGITransport, AsyncClient
 
 from app.domain.lifecycle import CanonicalLifecycle
 from app.domain.schemas import ExceptionStatus, ExceptionSummary, ExceptionType, Severity
-from app.investigations.provider import StubAIClient, UnavailableAIClient
+from app.investigations.provider import AgentDecision, StubAIClient, UnavailableAIClient
 from app.investigations.service import InvestigationService
+from app.financial_exception_investigations.service import FinancialExceptionInvestigationService
+from app.controls.schemas import ActorContext
+from app.investigations.schemas import InvestigationResponse
 from app.investigations.tools import EvidenceToolRegistry
 from app.main import app
 from app.repositories.demo import demo_repository
@@ -181,6 +185,49 @@ def test_evidence_tools_read_actual_status_and_accept_external_ids() -> None:
     assert result.call.evidence[0].fact == "Payment status is FAILED."
 
 
+@pytest.mark.parametrize("cite_candidates", [True, False])
+@pytest.mark.parametrize("malformed_first", [True, False])
+def test_early_final_provider_receives_candidate_evidence_and_cannot_pass_uncited(cite_candidates, malformed_first):
+    class EarlyFinal:
+        calls = 0
+        def next_step(self, exception, findings, evidence, trace, available_tools):
+            self.calls += 1
+            if malformed_first and self.calls == 1:
+                return AgentDecision("final", candidate={"status": "UNRESOLVED", "summary": "x" * 1001})
+            if malformed_first:
+                assert any(item["code"] == "RESPONSE_FORMAT_CORRECTION" for item in findings)
+            assert {call["name"] for call in trace} >= {
+                "get_order", "get_payments_for_order", "get_settlements_for_order",
+                "get_invoice_for_order", "get_refunds_for_order",
+            }
+            assert any(item.record_id == "SET-A" and item.expected_value == "PAY-A" for item in evidence)
+            assert any(item.source.value == "invoice" and item.operator == "missing" for item in evidence)
+            return AgentDecision("final", candidate={
+                "status": "UNRESOLVED", "root_cause_code": None,
+                "summary": "PAY-A links to SET-A. PAY-B has no settlement linkage in this dataset; the capture association remains uncertain.",
+                "supporting_evidence": [item.model_dump(mode="json") for item in evidence] if cite_candidates else [],
+                "missing_evidence": ["Request gateway references for PAY-A and PAY-B to distinguish separate captures from a retry."],
+                "requires_human_review": True,
+            })
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-A", "amount_minor": 10000},
+        payments=({"payment_id": "PAY-A", "amount_minor": 10000}, {"payment_id": "PAY-B", "amount_minor": 10000}),
+        settlements=({"settlement_id": "SET-A", "payment_id": "PAY-A"},),
+        invoices=(), refunds=(), inventory_movements=(), employee_actions=(),
+    )
+    exception = ExceptionSummary(
+        id="EXC-A", organization_id="ORG-001", order_id="ORD-A",
+        type=ExceptionType.AMBIGUOUS_ASSOCIATION, severity=Severity.HIGH,
+        status=ExceptionStatus.OPEN, financial_exposure=100, currency="INR",
+        detected_at="2026-08-31T00:00:00+00:00",
+    )
+    result = InvestigationService(demo_repository, EarlyFinal()).investigate_lifecycle("ORG-001", exception, lifecycle)
+    assert result.status == "UNRESOLVED"
+    assert result.verifier_passed is cite_candidates
+    assert len(result.tool_calls) == 5
+    assert all(call.provider == "deterministic-evidence-collection" for call in result.tool_calls)
+
+
 def test_empty_settlement_lookup_returns_verifiable_missing_evidence() -> None:
     lifecycle = CanonicalLifecycle(
         order={"order_id": "ORD-EMPTY-001", "amount_minor": 10000},
@@ -200,6 +247,43 @@ def test_empty_settlement_lookup_returns_verifiable_missing_evidence() -> None:
     assert result.call.evidence[0].record_id is None
     assert result.call.evidence[0].operator.value == "missing"
     assert result.call.evidence[0].expected_value is None
+
+
+@pytest.mark.parametrize("previous_failed", [False, True])
+def test_legacy_refresh_preserves_identity_and_same_key_replays(monkeypatch, previous_failed):
+    from app.financial_exception_investigations import service as module
+    old = InvestigationResponse(
+        investigation_id="INV-OLD", exception_id="RES-OLD", status="UNRESOLVED",
+        summary="Old assessment", missing_evidence=["reference"], evidence_score=0,
+        created_at="2026-08-31T00:00:00Z",
+    )
+    if previous_failed:
+        from app.investigations.schemas import ToolCall, InvestigationStatus
+        old = old.model_copy(update={"status": InvestigationStatus.FAILED, "tool_calls": [ToolCall(
+            name="get_order", target="ORD-OLD", status="SUCCEEDED", duration_ms=0,
+        )]})
+    repository = MagicMock()
+    repository.get_idempotency.return_value = None
+    repository.get_financial_exception_investigation.return_value = old.model_dump(mode="json")
+    repository.get_reconciliation_result.return_value = {"order_id": "ORD-OLD", "exception_type": "AMBIGUOUS_ASSOCIATION"}
+    repository.latest_reconciliation_run.return_value = {"id": "RUN-OLD", "dataset_version_id": "DS-OLD"}
+    repository.get_financial_investigation.return_value = {"base_currency": "INR"}
+    repository.list_dataset_versions.return_value = []
+    repository.reserve_idempotency.return_value = None
+    lifecycle = CanonicalLifecycle(order={"order_id": "ORD-OLD"}, payments=(), settlements=(), invoices=(), refunds=(), inventory_movements=(), employee_actions=())
+    monkeypatch.setattr(module, "construct_lifecycles", lambda *args: [lifecycle])
+    service = FinancialExceptionInvestigationService(repository, StubAIClient())
+    service._investigator = MagicMock()
+    service._investigator.investigate_lifecycle.return_value = old.model_copy(update={"investigation_id": "INV-NEW", "summary": "Refreshed"})
+    context = ActorContext(organization_id="ORG-001", actor_id="controller", role="CONTROLLER")
+    refreshed = service.investigate(context, "FIN-OLD", "RUN-OLD", "RES-OLD", "refresh-key")
+    assert refreshed.investigation_id == "INV-OLD"
+    assert refreshed.summary == "Refreshed"
+    repository.save_financial_exception_investigation_with_tool_calls.assert_called_once()
+    stored = repository.complete_idempotency.call_args.args
+    repository.get_idempotency.return_value = {"request_hash": repository.reserve_idempotency.call_args.args[3], "response_status": 200, "response_body": stored[3]}
+    assert service.investigate(context, "FIN-OLD", "RUN-OLD", "RES-OLD", "refresh-key") == refreshed
+    service._investigator.investigate_lifecycle.assert_called_once()
 
 
 def test_inventory_tool_returns_sale_and_return_valuation_evidence():
