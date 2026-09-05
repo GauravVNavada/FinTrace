@@ -330,14 +330,14 @@ export interface ApiSourceFile {
   deduplicated?: boolean;
 }
 
-export interface DemoDataRequest {
+export interface SampleDataRequest {
   orders: number;
   seed: number;
   anomaly_rate: number;
   scenario_types?: string[];
 }
 
-export interface ApiDemoDataResponse {
+export interface ApiSampleDataResponse {
   financial_investigation_id: string;
   orders: number;
   seed: number;

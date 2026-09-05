@@ -28,7 +28,7 @@ class ReconciliationService:
         self._repository = repository
 
     def lifecycle(self, organization_id: str, investigation_id: str, run_id: str, result_id: str):
-        """Read immutable uploaded evidence, never the seeded demo lifecycle."""
+        """Read immutable uploaded evidence, never the seeded sample lifecycle."""
         result = self._repository.get_reconciliation_result(organization_id, investigation_id, run_id, result_id)
         run = self._repository.latest_reconciliation_run(organization_id, investigation_id)
         if result is None or run is None or run["id"] != run_id:

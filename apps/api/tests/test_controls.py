@@ -10,7 +10,7 @@ from app.controls.schemas import ActionCode, ActorContext, Role
 from app.controls.service import ControlsService, ControlStateError
 from app.domain.schemas import ExceptionStatus, ExceptionSummary, ExceptionType, Severity
 from app.main import app
-from app.repositories.demo import demo_repository
+from app.repositories.sample import sample_repository
 
 
 @pytest.fixture
@@ -154,7 +154,7 @@ async def test_rejection_is_simulated_and_does_not_change_exception_state(
     assert rejection.status_code == 200
     assert rejection.json()["request_status"] == "REJECTED"
     assert after_rejection.status_code == 409
-    assert demo_repository.get_exception("ORG-001", "EXC-1042").status == ExceptionStatus.OPEN
+    assert sample_repository.get_exception("ORG-001", "EXC-1042").status == ExceptionStatus.OPEN
 
 
 @pytest.mark.asyncio
@@ -196,7 +196,7 @@ def test_policy_requires_secondary_controller_for_high_value_exception() -> None
 
 
 def test_concurrent_duplicate_approval_cannot_apply_twice() -> None:
-    service = ControlsService(demo_repository)
+    service = ControlsService(sample_repository)
     analyst = ActorContext(
         organization_id="ORG-001", actor_id="concurrent-requester", role=Role.ANALYST
     )

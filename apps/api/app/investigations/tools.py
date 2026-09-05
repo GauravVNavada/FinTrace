@@ -8,7 +8,7 @@ from app.investigations.schemas import EvidenceItem, EvidenceOperator, EvidenceS
 from app.repositories.contracts import LifecycleRepository
 
 # IDs are external identifiers from uploaded systems.  They may be lowercase,
-# digit-leading, or shorter than the demo's ORD-/PAY- convention, but must stay
+# digit-leading, or shorter than the sample's ORD-/PAY- convention, but must stay
 # bounded and single-token so they are safe to cite and verify.
 _ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$")
 

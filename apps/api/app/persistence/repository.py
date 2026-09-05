@@ -896,6 +896,15 @@ class PostgresRepository:
             or {}
         )
 
+    def latest_workspace_run(self, organization_id: str) -> dict[str, Any] | None:
+        with connection(self._database_url) as conn:
+            org_uuid = self._organization_uuid(conn, organization_id)
+            row = conn.execute(
+                "SELECT fi.source_investigation_id FROM financial_reconciliation_runs rr JOIN financial_investigations fi ON fi.id = rr.financial_investigation_id AND fi.organization_id = rr.organization_id WHERE rr.organization_id = %s AND rr.is_stale = false ORDER BY rr.started_at DESC, rr.id DESC LIMIT 1",
+                (org_uuid,),
+            ).fetchone()
+        return self.latest_reconciliation_run(organization_id, str(row["source_investigation_id"])) if row else None
+
     def latest_reconciliation_run(
         self, organization_id: str, investigation_id: str
     ) -> dict[str, Any] | None:

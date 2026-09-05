@@ -1,5 +1,11 @@
 # FinTrace Agent Boundaries
 
+## Latest-run and portable-input contract
+
+Home reads tenant-scoped `GET /api/v1/dashboard/latest-run` (`ReconciliationRunResponse | null`), selecting the most recently started non-stale run across closes. A newer empty close cannot replace results; failed runs remain visible. Refresh occurs on focus and every 30 seconds. No-run state is explicit. No financial schema change is introduced.
+
+Monthly inputs live in `systhantic data/<Month>_2026/`; all eight periods are tested through intake without hidden labels or personal filesystem dependencies. Local-only role login uses `/api/v1/auth/local-login`. Automatic high-confidence intake and financial/AI authority boundaries are unchanged. See [release cleanup](release-cleanup.md) for compatibility and verification.
+
 ## Final intake and evidence corrections — 2026-09-05
 
 See [final-validation.md](final-validation.md) for the current implementation and acceptance record. This correction supersedes older references to a hardwired August close, ID-prefix ambiguity, seed lifecycle detail, and automatic “Explained” labels for open exceptions.
@@ -8,7 +14,7 @@ Routine CSV/XLSX mapping is deterministic and source-scoped, with complete speci
 
 The read-only GET `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle` returns the existing LifecycleResponse shape from the run’s normalized dataset, scoped to the authenticated tenant and latest run. No database migration. Missing evidence is displayed as missing, never substituted with exposure or seed data.
 
-Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local demo is not a production banking integration.
+Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local sample is not a production banking integration.
 
 ## Investigation evidence improvement (2026-09-05)
 

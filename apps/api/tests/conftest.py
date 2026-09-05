@@ -12,5 +12,5 @@ if _test_database_url:
     os.environ.setdefault("DATABASE_URL", _test_database_url)
 else:
     # Unit/API tests use the isolated deterministic repository even when the
-    # developer's local demo .env is configured for durable PostgreSQL.
-    os.environ["STORAGE_BACKEND"] = "demo"
+    # developer's local sample .env is configured for durable PostgreSQL.
+    os.environ["STORAGE_BACKEND"] = "sample"

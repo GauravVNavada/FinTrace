@@ -1,4 +1,4 @@
-import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiDemoDataResponse, ApiEvaluation, ApiExceptionSummary, ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiLifecycleGraph, ApiLifecycleResponse, ApiNormalizedRecord, ApiPattern, ApiReconciliationResult, ApiReconciliationRun, ApiRelationshipProposal, ApiResolutionRequest, ApiSourceAnalysis, ApiSourceFile, ApiSourceMapping, DemoDataRequest, EvaluationRunRequest, ResolutionActionCode, SourceType } from "./types";
+import type { ApiAuditEvent, ApiDashboardSummary, ApiDatasetVersion, ApiSampleDataResponse, ApiEvaluation, ApiExceptionSummary, ApiFinancialInvestigation, ApiFinancialInvestigationPattern, ApiLifecycleGraph, ApiLifecycleResponse, ApiNormalizedRecord, ApiPattern, ApiReconciliationResult, ApiReconciliationRun, ApiRelationshipProposal, ApiResolutionRequest, ApiSourceAnalysis, ApiSourceFile, ApiSourceMapping, SampleDataRequest, EvaluationRunRequest, ResolutionActionCode, SourceType } from "./types";
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://127.0.0.1:8001";
 const organizationId = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "ORG-001";
@@ -121,8 +121,8 @@ export function fetchReadiness() {
   return get<{ status: string; storage_backend: string }>("/ready");
 }
 
-export function demoLogin(role: "ANALYST" | "FINANCE_MANAGER" | "CONTROLLER") {
-  return post<{ access_token: string; token_type: string; expires_in: number; organization_id: string; actor_id: string; role: string; display_name: string }>("/api/v1/auth/demo-login", { role }, requestId());
+export function sampleLogin(role: "ANALYST" | "FINANCE_MANAGER" | "CONTROLLER") {
+  return post<{ access_token: string; token_type: string; expires_in: number; organization_id: string; actor_id: string; role: string; display_name: string }>("/api/v1/auth/local-login", { role }, requestId());
 }
 
 export function fetchProviderHealth() {
@@ -213,12 +213,12 @@ export function uploadSourceFile(investigationId: string, file: File, idempotenc
   return postForm<ApiSourceFile>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sources`, form, idempotencyKey);
 }
 
-export function generateDemoData(investigationId: string, payload: DemoDataRequest, idempotencyKey: string) {
-  return post<ApiDemoDataResponse>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/demo-data`, payload, idempotencyKey);
+export function generateSampleData(investigationId: string, payload: SampleDataRequest, idempotencyKey: string) {
+  return post<ApiSampleDataResponse>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/sample-data`, payload, idempotencyKey);
 }
 
-export function launchFlagshipDemo(idempotencyKey: string) {
-  return post<ApiFinancialInvestigation>("/api/v1/financial-investigations/flagship-demo", {}, idempotencyKey);
+export function launchFlagshipSample(idempotencyKey: string) {
+  return post<ApiFinancialInvestigation>("/api/v1/financial-investigations/flagship-sample", {}, idempotencyKey);
 }
 
 export async function deleteSourceFile(investigationId: string, sourceFileId: string, idempotencyKey = requestId()) {
@@ -286,6 +286,10 @@ export function fetchLatestReconciliation(investigationId: string) {
 
 export function fetchReconciliationResults(investigationId: string, runId: string) {
   return get<ApiReconciliationResult[]>(`/api/v1/financial-investigations/${encodeURIComponent(investigationId)}/reconciliation-runs/${encodeURIComponent(runId)}/results?limit=10000`);
+}
+
+export function fetchLatestWorkspaceRun() {
+  return get<ApiReconciliationRun | null>("/api/v1/dashboard/latest-run");
 }
 
 export function fetchFinancialInvestigationPatterns(investigationId: string) {

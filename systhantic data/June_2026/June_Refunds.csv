@@ -1,0 +1,2 @@
+RefundID,PaymentID,SaleID,RefundGross,RefundTime,CCY,Reason
+JUN-REF-0005,JUN-PAY-0005,JUN-ORD-0005,4600,2026-06-12T15:38:00.000Z,INR,customer-return

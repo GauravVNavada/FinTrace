@@ -19,7 +19,7 @@ test("March exports: real upload, normalization, reconciliation and live AI", as
   const dataUrl = page.url();
   console.log("Validated close:", dataUrl);
   await page.screenshot({ path: "test-results/march-01-created.png", fullPage: true });
-  const folder = "C:/Users/USER/Desktop/FinTrace_Synthetic_Data/March_2026";
+  const folder = path.resolve("systhantic data/March_2026");
   const files = readdirSync(folder).filter(f => /\.(xlsx|csv)$/.test(f)).map(f => path.join(folder, f));
   expect(files).toHaveLength(7);
   await page.locator('input[type="file"]').setInputFiles(files);
@@ -68,5 +68,10 @@ test("March exports: real upload, normalization, reconciliation and live AI", as
   await expect(page.getByText("Evidence confidence", { exact: true })).toBeVisible();
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({ path: "test-results/march-06-quantity-ai.png", fullPage: true });
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "March 2026 Final Validation", exact: true })).toBeVisible();
+  await expect(page.getByText("515 / 515 records accounted for")).toBeVisible();
+  await expect(page.getByText("Needs attention", { exact: true })).toBeVisible();
+  await page.screenshot({ path: "test-results/march-07-home-latest.png", fullPage: true });
   expect(errors).toEqual([]);
 });

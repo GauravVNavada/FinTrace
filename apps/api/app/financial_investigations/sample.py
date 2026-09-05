@@ -6,7 +6,7 @@ from collections.abc import Iterable
 from decimal import Decimal
 from typing import Any
 
-from app.financial_investigations.schemas import DemoDataRequest
+from app.financial_investigations.schemas import SampleDataRequest
 from app.simulator.generator import GeneratorConfig, generate_dataset
 
 _MONEY_FIELDS = {
@@ -52,7 +52,7 @@ _SOURCE_HEADERS: dict[str, tuple[str, ...]] = {
 
 
 def build_source_files(
-    payload: DemoDataRequest,
+    payload: SampleDataRequest,
     organization_id: str,
     scenarios: Iterable[str],
 ) -> list[tuple[str, bytes]]:

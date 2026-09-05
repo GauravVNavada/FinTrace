@@ -12,6 +12,20 @@ def migration_files(migrations_dir: Path) -> list[Path]:
     return sorted(path for path in migrations_dir.glob("[0-9][0-9][0-9]_*.sql") if path.is_file())
 
 
+def renamed_migration_version(applied: dict[str, str], name: str, checksum: str) -> str | None:
+    """Adopt the exact, terminology-only revision of migration 012; never rerun it."""
+    if name != "012_input_accounting_contract.sql":
+        return None
+    previous = [version for version in applied if version.startswith("012_") and version != name]
+    if not previous:
+        return None
+    if (len(previous) != 1 or name in applied
+        or applied[previous[0]] != "33f81dd434dd685544f6b87dc8c2bb1f3b7c53e48f2a09a859ec861620fad05b"
+        or checksum != "2e67bcc6d398fe482be327d45dc42ff5950d9e8817d370358d9f628d53f5f8d7"):
+        raise MigrationError("Unrecognized migration 012 revision; manual migration review required")
+    return previous[0]
+
+
 def apply_migrations(database_url: str, migrations_dir: Path) -> list[str]:
     files = migration_files(migrations_dir)
     if not files:
@@ -36,6 +50,10 @@ def apply_migrations(database_url: str, migrations_dir: Path) -> list[str]:
         executed: list[str] = []
         for path in files:
             checksum = hashlib.sha256(path.read_bytes()).hexdigest()
+            previous = renamed_migration_version(applied, path.name, checksum)
+            if previous:
+                conn.execute("UPDATE schema_migrations SET version = %s, checksum = %s WHERE version = %s", (path.name, checksum, previous))
+                continue
             if path.name in applied:
                 if applied[path.name] and str(applied[path.name]) != checksum:
                     raise MigrationError(f"Migration checksum mismatch for {path.name}")

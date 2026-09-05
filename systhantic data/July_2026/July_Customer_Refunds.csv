@@ -1,0 +1,4 @@
+RefundNumber,AcquirerTransaction,RetailOrder,RefundGross,RefundPostedAt,Currency,RefundReason
+JUL-REF-0064,JUL-PAY-0064,JUL-ORD-0064,10800,2026-07-24T14:29:00.000Z,INR,customer-return
+JUL-REF-0071,JUL-PAY-0071,JUL-ORD-0071,7640,2026-07-27T17:00:00.000Z,INR,customer-return
+JUL-REF-0025,JUL-PAY-0025,JUL-ORD-0025,6480,2026-07-07T13:02:00.000Z,INR,customer-return-exception

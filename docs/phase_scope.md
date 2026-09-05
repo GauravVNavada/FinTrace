@@ -1,5 +1,11 @@
 # FinTrace Phase Scope
 
+## Latest-run and portable-input contract
+
+Home reads tenant-scoped `GET /api/v1/dashboard/latest-run` (`ReconciliationRunResponse | null`), selecting the most recently started non-stale run across closes. A newer empty close cannot replace results; failed runs remain visible. Refresh occurs on focus and every 30 seconds. No-run state is explicit. No financial schema change is introduced.
+
+Monthly inputs live in `systhantic data/<Month>_2026/`; all eight periods are tested through intake without hidden labels or personal filesystem dependencies. Local-only role login uses `/api/v1/auth/local-login`. Automatic high-confidence intake and financial/AI authority boundaries are unchanged. See [release cleanup](release-cleanup.md) for compatibility and verification.
+
 ## Final intake and evidence corrections — 2026-09-05
 
 See [final-validation.md](final-validation.md) for the current implementation and acceptance record. This correction supersedes older references to a hardwired August close, ID-prefix ambiguity, seed lifecycle detail, and automatic “Explained” labels for open exceptions.
@@ -8,7 +14,7 @@ Routine CSV/XLSX mapping is deterministic and source-scoped, with complete speci
 
 The read-only GET `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle` returns the existing LifecycleResponse shape from the run’s normalized dataset, scoped to the authenticated tenant and latest run. No database migration. Missing evidence is displayed as missing, never substituted with exposure or seed data.
 
-Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local demo is not a production banking integration.
+Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local sample is not a production banking integration.
 
 ## Investigation evidence improvement (2026-09-05)
 
@@ -16,11 +22,11 @@ Provider recovery: malformed final candidates receive one bounded schema-correct
 
 The ambiguity investigation improvement is within the existing close experience: mandatory scoped retrieval, case-specific live assessment, cited evidence display and explicit refresh of old zero-lookup results. No data regeneration, accounting-rule changes or navigation redesign are included.
 
-Status: P0 buildathon implementation · Sprints 0–7 foundation plus Track 4 reliability/UX hardening complete/validated conditionally on live-provider availability · 2026-09-03
+Status: P0 release implementation · Sprints 0–7 foundation plus Track 4 reliability/UX hardening complete/validated conditionally on live-provider availability · 2026-09-03
 
 ## Product evolution scope
 
-The sections below describe the validated seeded-MVP baseline and the P0 buildathon product. Production hardening and deployment-grade provider operations remain outside this sprint.
+The sections below describe the validated seeded-MVP baseline and the P0 release product. Production hardening and deployment-grade provider operations remain outside this sprint.
 
 ### Domain vocabulary
 
@@ -42,7 +48,7 @@ P0 release contract: reconciliation consumes every normalized record in the immu
 | 4 | Investigation-scoped lifecycle construction, reconciliation, persisted metrics, and dynamic dashboard | Complete: persisted idempotent run/results, deterministic normalized-record adapter, currency-aware metrics, investigation-scoped dashboard controls, and truthful loading/empty/unavailable states are implemented. The legacy seeded exception resource remains separate by design. |
 | 5 | Real bounded AI exception investigation, visible tool trace, verification, and ambiguity refusal | Complete for the local/provider-adapter path: the configured provider selects only validated/capped read-only evidence tools; uploaded reconciliation results persist `SUPPORTED`/`UNRESOLVED`/`FAILED` through migration 010, support an opt-in OpenAI-compatible adapter, expose scoped retrieval and a controlled human-review/approval route, and show evidence/tool traces. Provider outage is an explicit unavailable state and ambiguity remains `UNRESOLVED`. The default local provider is explicitly deterministic/offline. |
 | 6 | Derived patterns, exposure analytics, populated audit, and AI evaluation metrics | Complete for deterministic patterns, potential-exposure roll-up, audit population, and measured synthetic evaluation. Uploaded-dataset AI scoring is intentionally not enabled without a ground-truth label contract. |
-| 7 | Explicit demo mode, fresh synthetic investigations, and final UX polish | Complete: fresh bounded synthetic generation, source/intake/relationship/reconciliation/investigation screens, honest demo copy, and browser-verified walkthrough are implemented. |
+| 7 | Explicit sample mode, fresh synthetic investigations, and final UX polish | Complete: fresh bounded synthetic generation, source/intake/relationship/reconciliation/investigation screens, honest sample copy, and browser-verified walkthrough are implemented. |
 
 Post-P0 hardening is included in the active product: organization-aware persistence constraints, bounded direct lookups, replay leases, complete source-mutation idempotency, security headers, accessible skip navigation, and explicit empty/forbidden/unavailable states for control screens. These changes do not expand Track 4 into autonomous payment execution or real-money movement.
 
@@ -54,7 +60,7 @@ The historical phase checklists below are the completion record for the seeded M
 
 - [x] Turbo workspace with `apps/web` and `packages/ui`.
 - [x] Next.js App Router shell with responsive serious-operations-console UX.
-- [x] Typed domain adapter with reproducible benchmark-shaped demo data.
+- [x] Typed domain adapter with reproducible benchmark-shaped sample data.
 - [x] Dashboard, queue, detail, patterns, runs, evaluation, audit, and settings surfaces.
 - [x] Reusable shadcn-style primitives: Button, Card, Badge, Progress.
 - [x] Documentation set and decision log.
@@ -71,13 +77,13 @@ The historical phase checklists below are the completion record for the seeded M
 - [x] Replace overview, exception queue/detail, patterns, evaluations, and audit reads with typed `/api/v1` clients where the corresponding API contract exists.
 - [x] Persist investigations, evaluations, approvals, idempotency responses, and audit events in PostgreSQL.
 
-Persistence increment status: migrations 001–010, the organization-scoped repository, explicit migration runner, deterministic seed command, readiness check, and local Compose database are implemented and exercised against Docker PostgreSQL on host port 55432. Investigation, source metadata, source analyses, mappings, relationship proposals, dataset versions, normalized records, reconciliation runs/results, uploaded exception investigations, evaluation, approval, idempotency, and audit records are durable in PostgreSQL mode; the demo repository implements the same contract in process for isolated tests.
+Persistence increment status: migrations 001–010, the organization-scoped repository, explicit migration runner, deterministic seed command, readiness check, and local Compose database are implemented and exercised against Docker PostgreSQL on host port 55432. Investigation, source metadata, source analyses, mappings, relationship proposals, dataset versions, normalized records, reconciliation runs/results, uploaded exception investigations, evaluation, approval, idempotency, and audit records are durable in PostgreSQL mode; the sample repository implements the same contract in process for isolated tests.
 
 Definition of done: clean checkout can seed, reconcile, expose the dashboard, inspect an exception, investigate one case, escalate an ambiguous case, and emit benchmark metrics.
 
 Sprint 1 gate status: financial investigation create/list/get, safe CSV/XLSX inspection, generated storage references, source metadata persistence, tenant isolation, idempotent upload replay, successful-source repeat-upload protection, same-name replacement of non-ready sources, source deletion, audit events, API contract tests, and live Uvicorn HTTP smoke test are complete.
 
-Active evolution gate status: bounded CSV/XLSX analysis, inferred types, deterministic/offline classification, runtime-configured provider abstraction, provider-specific Gemini/Groq credentials, separate primary/fallback health reporting, conservative transient-only failover with persisted provider metadata, mapping proposals, tenant-scoped edits, explicit confirmation, provider-failure handling, relationship proposals/decisions, immutable normalization with lineage, deterministic lifecycle construction, persisted idempotent reconciliation, durable uploaded-result investigation with dynamic validated tool plans, scoped retrieval, controlled review/approval, advisory patterns, exposure roll-up, audit, fresh source generation, and connected UI are implemented and tested. The default demo model is Gemini `gemini-2.5-flash-lite`; optional fallback is Groq `openai/gpt-oss-120b`. The legacy seeded exception queue is intentionally not a projection of uploaded investigations. Uploaded-dataset evaluation remains disabled until labels can be supplied through a reviewed contract; the synthetic benchmark remains the only public evaluation source.
+Active evolution gate status: bounded CSV/XLSX analysis, inferred types, deterministic/offline classification, runtime-configured provider abstraction, provider-specific Gemini/Groq credentials, separate primary/fallback health reporting, conservative transient-only failover with persisted provider metadata, mapping proposals, tenant-scoped edits, explicit confirmation, provider-failure handling, relationship proposals/decisions, immutable normalization with lineage, deterministic lifecycle construction, persisted idempotent reconciliation, durable uploaded-result investigation with dynamic validated tool plans, scoped retrieval, controlled review/approval, advisory patterns, exposure roll-up, audit, fresh source generation, and connected UI are implemented and tested. The default sample model is Gemini `gemini-2.5-flash-lite`; optional fallback is Groq `openai/gpt-oss-120b`. The legacy seeded exception queue is intentionally not a projection of uploaded investigations. Uploaded-dataset evaluation remains disabled until labels can be supplied through a reviewed contract; the synthetic benchmark remains the only public evaluation source.
 
 MVP baseline Sprint 2 gate status: deterministic reconciliation, scenario coverage, hidden-ground-truth evaluation, metric output, Ruff/mypy checks, and live API smoke tests are complete. This historical baseline gate is separate from active evolution Sprint 2 (source analysis and mapping).
 
@@ -98,7 +104,7 @@ Sprint 4 gate status: capability-level authorization, signed identity-claim veri
 - [x] Derived lifecycle graph from canonical lifecycle records, including explicit missing-step nodes.
 - [x] Recurring pattern detector with deterministic grouping, exposure roll-up, and prevention recommendations.
 - [x] API-backed audit/tool-call activity surface with durable PostgreSQL audit records.
-- [x] Evaluation report API and reproducible PowerShell demo script.
+- [x] Evaluation report API and reproducible PowerShell sample script.
 
 ## Explicitly deferred
 
@@ -160,17 +166,17 @@ Acceptance criteria:
 - [x] INR approval policy applies low-value, high-value, secondary-approval, ambiguous, and duplicate-payment rules server-side.
 - [x] Resolution requests, approvals, and rejections require idempotency keys and reject key reuse with a different request.
 - [x] Concurrent approvals cannot create duplicate decisions by the same actor.
-- [x] Important control events are recorded in the append-only demo audit adapter.
+- [x] Important control events are recorded in the append-only sample audit adapter.
 - [x] PostgreSQL migration defines membership, idempotency, approval-request, and approval-decision tables with organization-scoped constraints.
 - [x] No control endpoint performs real financial or source-system mutation.
 
-Exit gate: no unauthorized or duplicate consequential operation can succeed in the tested demo boundary. Durable PostgreSQL writes and verified claim verification have been exercised locally; managed identity and operational hardening remain deployment responsibilities.
+Exit gate: no unauthorized or duplicate consequential operation can succeed in the tested sample boundary. Durable PostgreSQL writes and verified claim verification have been exercised locally; managed identity and operational hardening remain deployment responsibilities.
 
 ### Historical MVP Sprint 5 — Differentiation and release evidence
 
-Derived graph, pattern grouping, prevention recommendations, evaluation report, demo script, browser smoke evidence, and known limitations.
+Derived graph, pattern grouping, prevention recommendations, evaluation report, sample script, browser smoke evidence, and known limitations.
 
-Sprint 5 gate status: derived graph, deterministic pattern grouping, API evaluation report, web API clients for the implemented resource surfaces, loading/error/empty states, Docker-backed API smoke tests, and the documented demo script are complete. Production operational hardening remains documented as deployment work rather than being represented as an application feature.
+Sprint 5 gate status: derived graph, deterministic pattern grouping, API evaluation report, web API clients for the implemented resource surfaces, loading/error/empty states, Docker-backed API smoke tests, and the documented sample script are complete. Production operational hardening remains documented as deployment work rather than being represented as an application feature.
 
 Sprint 5 acceptance criteria:
 
@@ -181,9 +187,9 @@ Sprint 5 acceptance criteria:
 - [x] Pattern and graph endpoints reject missing or unauthorized organization context and do not leak cross-tenant resources.
 - [x] `POST /api/v1/evaluation/run` accepts bounded dataset parameters, requires an idempotency key, and does not return hidden ground truth.
 - [x] Patterns, Evaluations, and Audit screens consume typed API clients and expose loading, failure, empty, and populated states appropriate to each resource.
-- [x] `scripts/demo.ps1` reproduces generation and benchmark evaluation with a documented seed, output path, and expected result shape.
+- [x] `scripts/sample.ps1` reproduces generation and benchmark evaluation with a documented seed, output path, and expected result shape.
 - [x] Automated API tests, static checks, production build, live API smoke tests, and browser route smoke tests pass.
-- [x] Known limitations and the distinction between demo/in-process behavior and production requirements are recorded in the PRD, architecture, API, testing, and demo documents.
+- [x] Known limitations and the distinction between sample/in-process behavior and production requirements are recorded in the PRD, architecture, API, testing, and sample documents.
 - [x] Visible export and run controls have a verified outcome or an explicit honest unavailable state; they are not inert placeholder buttons.
 
 ## Review gates

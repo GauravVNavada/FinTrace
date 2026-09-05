@@ -72,7 +72,7 @@ async def request_context_middleware(request: Request, call_next):
 @app.middleware("http")
 async def write_rate_limit_middleware(request: Request, call_next):
     # Distributed deployments should enforce the same limit at the gateway; this
-    # protects the single-process demo/API server from accidental write floods.
+    # protects the single-process sample/API server from accidental write floods.
     if request.url.path.startswith(settings.api_prefix) and request.method in {
         "POST",
         "PATCH",

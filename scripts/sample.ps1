@@ -9,7 +9,7 @@ $apiRoot = Join-Path $repoRoot "apps\api"
 $python = Join-Path $apiRoot ".venv\Scripts\python.exe"
 $generator = Join-Path $apiRoot ".venv\Scripts\fintrace-generate.exe"
 $evaluator = Join-Path $apiRoot ".venv\Scripts\fintrace-evaluate.exe"
-$output = Join-Path $apiRoot "data\generated\demo"
+$output = Join-Path $apiRoot "data\generated\sample"
 
 if (-not (Test-Path -LiteralPath $python) -or -not (Test-Path -LiteralPath $generator) -or -not (Test-Path -LiteralPath $evaluator)) {
   throw "API virtual environment not found. Run: cd apps/api; pip install -e .[dev]"

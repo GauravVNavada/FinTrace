@@ -7,7 +7,7 @@ from app.simulator.generator import GeneratorConfig
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Seed FinTrace PostgreSQL with deterministic demo data"
+        description="Seed FinTrace PostgreSQL with deterministic sample data"
     )
     parser.add_argument("--orders", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=42)

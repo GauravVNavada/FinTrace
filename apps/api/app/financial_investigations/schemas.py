@@ -35,7 +35,7 @@ class SourceType(StrEnum):
     UNKNOWN = "UNKNOWN"
 
 
-class DemoDataRequest(BaseModel):
+class SampleDataRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     orders: int = Field(default=25, ge=1, le=2_000)
@@ -106,7 +106,7 @@ class SourceFileResponse(BaseModel):
     deduplicated: bool = False
 
 
-class DemoDataResponse(BaseModel):
+class SampleDataResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     financial_investigation_id: str

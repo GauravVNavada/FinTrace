@@ -30,7 +30,7 @@ def seed_database(database_url: str, config: GeneratorConfig) -> SeedResult:
             ON CONFLICT (external_id) DO UPDATE SET name = EXCLUDED.name
             RETURNING id
             """,
-            (config.organization_id, f"FinTrace Demo {config.organization_id}"),
+            (config.organization_id, f"FinTrace Sample {config.organization_id}"),
         ).fetchone()
         organization_uuid = organization["id"]
         existing_run = conn.execute(

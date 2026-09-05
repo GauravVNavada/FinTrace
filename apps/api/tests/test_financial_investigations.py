@@ -5,7 +5,7 @@ from httpx import ASGITransport, AsyncClient
 from openpyxl import Workbook
 
 from app.main import app
-from app.repositories.factory import get_demo_repository
+from app.repositories.factory import get_sample_repository
 
 
 def _headers(role: str = "CONTROLLER", key: str = "test-financial-investigation") -> dict[str, str]:
@@ -72,7 +72,7 @@ async def test_financial_investigation_upload_persists_metadata_and_audit() -> N
         assert replacement_id != source_id
         assert replacement.json()["deduplicated"] is False
 
-        get_demo_repository()._source_files[("ORG-001", replacement_id)]["status"] = "READY"
+        get_sample_repository()._source_files[("ORG-001", replacement_id)]["status"] = "READY"
         reupload = await client.post(
             f"/api/v1/financial-investigations/{investigation_id}/sources",
             headers=_headers(key="upload-sprint1-csv-ready-new-key"),
@@ -195,13 +195,13 @@ async def test_financial_investigation_is_tenant_scoped_and_cors_enabled() -> No
 
 
 @pytest.mark.asyncio
-async def test_demo_data_generation_uses_upload_pipeline_and_is_idempotent() -> None:
+async def test_sample_data_generation_uses_upload_pipeline_and_is_idempotent() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         created = await client.post(
             "/api/v1/financial-investigations",
-            headers=_headers(key="demo-data-create"),
+            headers=_headers(key="sample-data-create"),
             json={
-                "name": "Fresh synthetic demo review",
+                "name": "Fresh synthetic sample review",
                 "period_start": "2026-08-01",
                 "period_end": "2026-08-31",
                 "base_currency": "INR",
@@ -216,9 +216,9 @@ async def test_demo_data_generation_uses_upload_pipeline_and_is_idempotent() -> 
             "anomaly_rate": 0,
             "scenario_types": ["MISSING_SETTLEMENT"],
         }
-        generation_headers = _headers(key="demo-data-generate")
+        generation_headers = _headers(key="sample-data-generate")
         generated = await client.post(
-            f"/api/v1/financial-investigations/{investigation_id}/demo-data",
+            f"/api/v1/financial-investigations/{investigation_id}/sample-data",
             headers=generation_headers,
             json=request,
         )
@@ -235,7 +235,7 @@ async def test_demo_data_generation_uses_upload_pipeline_and_is_idempotent() -> 
         }
 
         replay = await client.post(
-            f"/api/v1/financial-investigations/{investigation_id}/demo-data",
+            f"/api/v1/financial-investigations/{investigation_id}/sample-data",
             headers=generation_headers,
             json=request,
         )
@@ -243,7 +243,7 @@ async def test_demo_data_generation_uses_upload_pipeline_and_is_idempotent() -> 
         assert replay.json() == generated.json()
 
         conflict = await client.post(
-            f"/api/v1/financial-investigations/{investigation_id}/demo-data",
+            f"/api/v1/financial-investigations/{investigation_id}/sample-data",
             headers=generation_headers,
             json={**request, "seed": 8},
         )
@@ -259,4 +259,4 @@ async def test_demo_data_generation_uses_upload_pipeline_and_is_idempotent() -> 
             "/api/v1/audit-events",
             headers={"X-Organization-Id": "ORG-001", "X-Actor-Role": "CONTROLLER"},
         )
-        assert "DEMO_DATA_GENERATED" in {event["action"] for event in audit.json()}
+        assert "SAMPLE_DATA_GENERATED" in {event["action"] for event in audit.json()}

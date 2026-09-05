@@ -20,7 +20,7 @@ The inventory mismatch showed the expected cost-basis evidence: sale and return 
 
 | Step | Action and observed result | Screenshot |
 |---|---|---|
-| 1 | Opened the login page and continued as the demo controller. | ![Login](e2e-screenshots/07-login-rebuilt.png) |
+| 1 | Opened the login page and continued as the sample controller. | ![Login](e2e-screenshots/07-login-rebuilt.png) |
 | 2 | Confirmed the home dashboard loaded the prepared August close and its status metrics. | ![Home](e2e-screenshots/08-home-rebuilt.png) |
 | 3 | Opened the new investigation form. | ![New workspace](e2e-screenshots/28-new-workspace-form.png) |
 | 4 | Created the January E2E workspace and opened source intake. The browser automation bridge did not retain native date-input keystrokes, so the already-verified API create contract seeded this test workspace; the browser continued from the real source-intake route. | ![Source intake](e2e-screenshots/09-data-upload-stage.png) |

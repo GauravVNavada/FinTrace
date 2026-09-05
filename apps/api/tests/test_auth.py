@@ -101,13 +101,13 @@ async def test_bearer_tenant_cannot_be_overridden_by_header() -> None:
 
 
 @pytest.mark.asyncio
-async def test_demo_login_preserves_role_capabilities_and_exception_detail_access() -> None:
+async def test_sample_login_preserves_role_capabilities_and_exception_detail_access() -> None:
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         analyst_login = await client.post(
-            "/api/v1/auth/demo-login", json={"role": "ANALYST"}
+            "/api/v1/auth/local-login", json={"role": "ANALYST"}
         )
         controller_login = await client.post(
-            "/api/v1/auth/demo-login", json={"role": "CONTROLLER"}
+            "/api/v1/auth/local-login", json={"role": "CONTROLLER"}
         )
 
         analyst_headers = {"Authorization": f"Bearer {analyst_login.json()['access_token']}"}

@@ -17,7 +17,7 @@ from app.financial_exception_investigations.service import (
 )
 from app.financial_investigation_patterns.schemas import FinancialInvestigationPatternResponse
 from app.financial_investigation_patterns.service import FinancialInvestigationPatternService
-from app.financial_investigations.demo_service import DemoDataService
+from app.financial_investigations.sample_service import SampleDataService
 from app.financial_investigations.files import (
     UploadValidationError,
     inspect_upload,
@@ -25,8 +25,8 @@ from app.financial_investigations.files import (
     store_upload,
 )
 from app.financial_investigations.schemas import (
-    DemoDataRequest,
-    DemoDataResponse,
+    SampleDataRequest,
+    SampleDataResponse,
     FinancialInvestigationCreate,
     FinancialInvestigationResponse,
     SourceFileResponse,
@@ -96,7 +96,7 @@ financial_exception_service = FinancialExceptionInvestigationService(
     get_configured_ai_client(_settings),
 )
 pattern_service = FinancialInvestigationPatternService(cast(WorkflowRepository, get_repository()))
-demo_data_service = DemoDataService(cast(WorkflowRepository, get_repository()))
+sample_data_service = SampleDataService(cast(WorkflowRepository, get_repository()))
 
 
 @router.post("", response_model=FinancialInvestigationResponse, status_code=status.HTTP_201_CREATED)
@@ -132,12 +132,12 @@ def list_investigations(
     return service.list_all(context.organization_id, limit)
 
 
-@router.post("/flagship-demo", response_model=FinancialInvestigationResponse)
-def launch_flagship_demo(
+@router.post("/flagship-sample", response_model=FinancialInvestigationResponse)
+def launch_flagship_sample(
     context: Annotated[ActorContext, Depends(get_actor_context)],
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
 ) -> FinancialInvestigationResponse:
-    """Create or resume the prepared synthetic workflow used by the local demo."""
+    """Create or resume the prepared synthetic workflow used by the local sample."""
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
     if idempotency_key is None:
         raise HTTPException(
@@ -145,7 +145,7 @@ def launch_flagship_demo(
             detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
         )
     try:
-        return _prepare_flagship_demo(context, idempotency_key)
+        return _prepare_flagship_sample(context, idempotency_key)
     except (
         FinancialInvestigationConflict,
         MappingConflict,
@@ -156,14 +156,14 @@ def launch_flagship_demo(
     ) as error:
         raise HTTPException(
             status_code=409,
-            detail={"code": "FLAGSHIP_DEMO_NOT_READY", "message": str(error)},
+            detail={"code": "FLAGSHIP_SAMPLE_NOT_READY", "message": str(error)},
         ) from error
 
 
-def _prepare_flagship_demo(
+def _prepare_flagship_sample(
     context: ActorContext, idempotency_key: str
 ) -> FinancialInvestigationResponse:
-    name = "FinTrace Flagship Demo"
+    name = "FinTrace Flagship Sample"
     existing = next(
         (item for item in service.list_all(context.organization_id, 100) if item.name == name),
         None,
@@ -185,10 +185,10 @@ def _prepare_flagship_demo(
 
     sources = service.list_sources(context.organization_id, existing.id)
     if not sources:
-        demo_data_service.generate(
+        sample_data_service.generate(
             context,
             existing.id,
-            DemoDataRequest(
+            SampleDataRequest(
                 orders=50,
                 seed=42,
                 anomaly_rate=0.08,
@@ -365,16 +365,16 @@ def list_sources(
 
 
 @router.post(
-    "/{investigation_id}/demo-data",
-    response_model=DemoDataResponse,
+    "/{investigation_id}/sample-data",
+    response_model=SampleDataResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def generate_demo_data(
+def generate_sample_data(
     investigation_id: str,
-    payload: DemoDataRequest,
+    payload: SampleDataRequest,
     context: Annotated[ActorContext, Depends(get_actor_context)],
     idempotency_key: Annotated[str | None, Header(alias="Idempotency-Key")] = None,
-) -> DemoDataResponse:
+) -> SampleDataResponse:
     _require(context, Capability.FINANCIAL_INVESTIGATION_WRITE)
     if idempotency_key is None:
         raise HTTPException(
@@ -382,7 +382,7 @@ def generate_demo_data(
             detail={"code": "INVALID_REQUEST", "message": "Idempotency-Key is required"},
         )
     try:
-        return demo_data_service.generate(context, investigation_id, payload, idempotency_key)
+        return sample_data_service.generate(context, investigation_id, payload, idempotency_key)
     except FinancialInvestigationConflict as error:
         raise HTTPException(
             status_code=409, detail={"code": "IDEMPOTENCY_CONFLICT", "message": str(error)}

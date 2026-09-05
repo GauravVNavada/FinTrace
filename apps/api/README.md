@@ -7,8 +7,8 @@ FastAPI service boundary for FinTrace. Deterministic financial rules remain in a
 | Method | Route | Behavior |
 | --- | --- | --- |
 | GET | `/health` | Process health only |
-| GET | `/api/v1/dashboard/summary` | Demo aggregate, requires organization context |
-| GET | `/api/v1/exceptions` | Demo exception list with enum filters |
+| GET | `/api/v1/dashboard/summary` | Sample aggregate, requires organization context |
+| GET | `/api/v1/exceptions` | Sample exception list with enum filters |
 | GET | `/api/v1/lifecycles/{order_id}` | Organization-scoped canonical lifecycle |
 | POST | `/api/v1/exceptions/{exception_id}/investigations` | Bounded evidence investigation; requires tenant context and idempotency key |
 | GET | `/api/v1/investigations/{investigation_id}` | Retrieve an investigation result |
@@ -44,13 +44,13 @@ POST  /api/v1/financial-investigations/{id}/sources/{source_id}/mappings/confirm
 PATCH /api/v1/financial-investigations/{id}/sources/{source_id}/classification
 ```
 
-The local demo uses Groq with model `openai/gpt-oss-120b` when `AI_PROVIDER=groq` and `GROQ_API_KEY` are configured. Gemini and other OpenAI-compatible providers remain supported by explicit configuration. A configured provider receives bounded metadata and samples only, selects from the server allowlist of read-only tools, and has its output validated; it cannot normalize records or mutate financial state. `GeminiProvider` reads `GEMINI_API_KEY` and `GroqProvider` reads `GROQ_API_KEY`; legacy numbered slots remain supported for existing local deployments. The runtime model and endpoint are configurable. Authentication, authorization, unsupported-model, and malformed-output failures are surfaced immediately; only bounded transient failures can trigger explicit fallback. Automated tests force the deterministic stub and do not consume live quota.
+The local sample uses Groq with model `openai/gpt-oss-120b` when `AI_PROVIDER=groq` and `GROQ_API_KEY` are configured. Gemini and other OpenAI-compatible providers remain supported by explicit configuration. A configured provider receives bounded metadata and samples only, selects from the server allowlist of read-only tools, and has its output validated; it cannot normalize records or mutate financial state. `GeminiProvider` reads `GEMINI_API_KEY` and `GroqProvider` reads `GROQ_API_KEY`; legacy numbered slots remain supported for existing local deployments. The runtime model and endpoint are configurable. Authentication, authorization, unsupported-model, and malformed-output failures are surfaced immediately; only bounded transient failures can trigger explicit fallback. Automated tests force the deterministic stub and do not consume live quota.
 
 ## Run
 
 ## P0 live-provider contract
 
-Set `AI_PROVIDER=groq`, `AI_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY` for the local live-demo path. Check `/api/v1/ai/provider-health` before starting a demo; it reports primary and fallback separately and caches the result briefly. Source analysis sends only the filename, headers, inferred types, row count, bounded sample rows, and basic statistics. Exception investigation receives deterministic findings and returned evidence, then chooses one allowlisted read-only tool per turn up to eight calls. Outputs are schema-validated and fact-verified. A provider outage returns an explicit `UNAVAILABLE` health result and persisted `FAILED` investigation with provider, model, error category, retryability, request stage, iteration, and latency; it never silently becomes stub output or `UNRESOLVED`, while deterministic reconciliation remains available. Live requests require explicit use of the live configuration; the AI benchmark is exposed separately at `/api/v1/evaluation/ai/run` and `/api/v1/evaluation/ai/latest`.
+Set `AI_PROVIDER=groq`, `AI_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY` for the local live-sample path. Check `/api/v1/ai/provider-health` before starting a sample; it reports primary and fallback separately and caches the result briefly. Source analysis sends only the filename, headers, inferred types, row count, bounded sample rows, and basic statistics. Exception investigation receives deterministic findings and returned evidence, then chooses one allowlisted read-only tool per turn up to eight calls. Outputs are schema-validated and fact-verified. A provider outage returns an explicit `UNAVAILABLE` health result and persisted `FAILED` investigation with provider, model, error category, retryability, request stage, iteration, and latency; it never silently becomes stub output or `UNRESOLVED`, while deterministic reconciliation remains available. Live requests require explicit use of the live configuration; the AI benchmark is exposed separately at `/api/v1/evaluation/ai/run` and `/api/v1/evaluation/ai/latest`.
 
 The explicit live smoke is `RUN_LIVE_AI_TESTS=1 python scripts/live_ai_smoke.py` from the repository root (on Windows, set `$env:RUN_LIVE_AI_TESTS="1"` first). It performs provider health, one source analysis, and one complete investigation; it never prints credentials. Normal pytest/CI paths force the stub and do not call live APIs.
 
@@ -68,6 +68,6 @@ Development requests may use `X-Organization-Id`, `X-Actor-Id`, and `X-Actor-Rol
 
 - Routes depend on typed schemas and application repositories.
 - Repositories require organization scope.
-- Demo repository is deterministic and process-local; PostgreSQL is the durable runtime.
+- Sample repository is deterministic and process-local; PostgreSQL is the durable runtime.
 - No route accepts organization scope from a request body.
 - Migrations 004–013 persist investigation/evaluation/control workflow snapshots, idempotency responses, ordered tool calls, FinancialInvestigation workspaces, source metadata, source analyses, mapping proposals, immutable normalized datasets, reconciliation runs/results, uploaded investigations, approval requests, and live-provider diagnostics. Audit events remain append-only. The default stub provider is safe for local development and does not call an external service.

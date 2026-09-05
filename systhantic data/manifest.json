@@ -1,0 +1,282 @@
+[
+  {
+    "path": "January_2026/ERP_Invoices_January.csv",
+    "sha256": "cb176c16f98309c53ca5440f8b5053a0450145be37c4401f3cf3d7deb7a528a0",
+    "bytes": 6898
+  },
+  {
+    "path": "January_2026/Gateway_January.csv",
+    "sha256": "fe9c2ed21f5ce7b5837d80ad6a2cf47233457db5eb05bc5e1c0132b90d562c83",
+    "bytes": 5609
+  },
+  {
+    "path": "January_2026/Ops_Actions_Jan.csv",
+    "sha256": "208dfb5f6cf16f19188df68404f27cd2b30b08cc7f7b9895f7400c0fa0aed3fe",
+    "bytes": 7040
+  },
+  {
+    "path": "January_2026/POS_Jan_2026.xlsx",
+    "sha256": "ec7b7d1848bce435ed490830de74d18a133a6388256e37b17e5a6957b68da9cf",
+    "bytes": 6810
+  },
+  {
+    "path": "January_2026/Refund_Register_Jan.xlsx",
+    "sha256": "1eab75562d727dcd21f68fe1fc58a7dddd50b99ab532ada189e1f9852110728f",
+    "bytes": 3941
+  },
+  {
+    "path": "January_2026/Settlement_Jan.xlsx",
+    "sha256": "4877015bd9d3ee6f421e20db70df879219e8f01760502e3696130eb39abe2a23",
+    "bytes": 8048
+  },
+  {
+    "path": "January_2026/Stock_Movements_January.csv",
+    "sha256": "450f8aaf4813d13ddd45a3d75219c44aa99dac1f0f391495ffb78cecb48f03ed",
+    "bytes": 7241
+  },
+  {
+    "path": "February_2026/BankCredits_Feb.csv",
+    "sha256": "78998e975fdc6e40febdd40b4f9a3462e76f822ddeae534e721702d464868bf6",
+    "bytes": 7190
+  },
+  {
+    "path": "February_2026/Billing_February.xlsx",
+    "sha256": "e78c274c2db3e958b3429de1d7febd1cc43ca110e7fb1c6163fab6c0a65f925b",
+    "bytes": 7162
+  },
+  {
+    "path": "February_2026/Branch_Activity_Feb.csv",
+    "sha256": "5bb016771d983625e7ed7dd0449adc80abf85669becf10d50f2367fe753cfd37",
+    "bytes": 8735
+  },
+  {
+    "path": "February_2026/Feb_Order_Export.csv",
+    "sha256": "e13e3723462b77fa5ea1fed2de6bbb625ad960f9b6da962a998951f232f1eba6",
+    "bytes": 6059
+  },
+  {
+    "path": "February_2026/PaymentGateway_Feb.xlsx",
+    "sha256": "13a718133162546b1d33ab412e9509781cb87d987bff870931a048e4ca1f21a5",
+    "bytes": 7975
+  },
+  {
+    "path": "February_2026/Refunds_Feb.csv",
+    "sha256": "3be2fdef2455b34999460339c108fe6a4916e58d77a9317d84e142dc3b52f08e",
+    "bytes": 70
+  },
+  {
+    "path": "February_2026/Warehouse_February.xlsx",
+    "sha256": "6736c996325321047c68b6e1de8518cf52ff9e71f33f7c562bb0c63c3a199d81",
+    "bytes": 8491
+  },
+  {
+    "path": "March_2026/ERP_Billing_March.csv",
+    "sha256": "2b5b90e1118268c888ecf5711862150746cee859395476b980bbc59861f604a4",
+    "bytes": 6483
+  },
+  {
+    "path": "March_2026/March_Inventory_Ledger.csv",
+    "sha256": "d91497252877f87fd1f370f9963bcc12fe0f048c1cee6f7805535ef5ecf07681",
+    "bytes": 8360
+  },
+  {
+    "path": "March_2026/March_Returns.xlsx",
+    "sha256": "f6e171606d96541fa99af647c81e81bc89b4430fbe000810b9b8c505d087f42b",
+    "bytes": 4314
+  },
+  {
+    "path": "March_2026/March_Sales_Register.xlsx",
+    "sha256": "42eff9b90b2f29164dba71d787f96c0d5724fe14dac00125a30331f5f9de38f5",
+    "bytes": 7032
+  },
+  {
+    "path": "March_2026/March_Settlement_Book.xlsx",
+    "sha256": "c50e5e0d6805dfac2c8420a45870c120c0a3d73847076e3262e63e07255c2f8d",
+    "bytes": 8476
+  },
+  {
+    "path": "March_2026/PG_Transactions_Mar.csv",
+    "sha256": "4dff5e0c027f5c9ef551abaad101946312e464280ca8036c626f1f52c95bd4e5",
+    "bytes": 6766
+  },
+  {
+    "path": "March_2026/Store_Operations_Mar.xlsx",
+    "sha256": "3fc003db407e94d2aaf3a8704a5acb71894a9901939777ae7a079f3f94fdb217",
+    "bytes": 7928
+  },
+  {
+    "path": "April_2026/Acquiring_April.xlsx",
+    "sha256": "685f3d1e10be574ee6b606ca8589abd20f57a3f3522e50ac8fa5bdb7876daa30",
+    "bytes": 8389
+  },
+  {
+    "path": "April_2026/Apr_Net_Settlement.csv",
+    "sha256": "1c88378338142e4257bec5f78e9f95e1266fb469de37d943c9f949f0abe5e489",
+    "bytes": 7947
+  },
+  {
+    "path": "April_2026/Apr_Outlet_Sales.csv",
+    "sha256": "10c086347d76d80b905400a04c2d9891ec658182c9e5292c8fd9132fe136ff6f",
+    "bytes": 6810
+  },
+  {
+    "path": "April_2026/Customer_Credits_Apr.csv",
+    "sha256": "ff643ebc8690985a4da38ee129a633df85287c156f2c94054eabf6345e700be4",
+    "bytes": 175
+  },
+  {
+    "path": "April_2026/Invoice_Extract_April.xlsx",
+    "sha256": "fa48ae089d731e4bed117575569e353db53fba3ef20d0515524dbe6d2f88d5f7",
+    "bytes": 7698
+  },
+  {
+    "path": "April_2026/Operator_Log_Apr.csv",
+    "sha256": "82c96ddc630c5cbd26b7f4a471cb8d086daddcbf663e0909b564a7639f0571c3",
+    "bytes": 7998
+  },
+  {
+    "path": "April_2026/Outlet_Stock_April.xlsx",
+    "sha256": "4329f3670d042aba73334ae91ff433c28d2342cdc2d1895056f4fc06a5a849b4",
+    "bytes": 8966
+  },
+  {
+    "path": "May_2026/May_ERP_Documents.csv",
+    "sha256": "35e13dbdd2ee23eb3b818edc79544868acc0958773da2dbc6f8428b9a32d6948",
+    "bytes": 5755
+  },
+  {
+    "path": "May_2026/May_Gateway_Captures.csv",
+    "sha256": "f3939595b73b34830d6ceaf8a59025daad687637752d15ad1b4fc85c6225a1b2",
+    "bytes": 5659
+  },
+  {
+    "path": "May_2026/May_POS_Orders.xlsx",
+    "sha256": "69c9114582cc8bb4f135fb73ca544c778d34b8d3093181d6eaeda654627f4443",
+    "bytes": 6723
+  },
+  {
+    "path": "May_2026/May_Refund_Advice.xlsx",
+    "sha256": "3a31f12e43e3d24a622dc6ca7bc0926858985fe980f5a02afa2b917a08b7eaa7",
+    "bytes": 4166
+  },
+  {
+    "path": "May_2026/May_Returns_And_Sales.csv",
+    "sha256": "418f9bd2dcac36f3cfb9d0249f60138ba87706180ddb2c45cc6662411d6c1d0e",
+    "bytes": 7667
+  },
+  {
+    "path": "May_2026/May_Store_User_Actions.xlsx",
+    "sha256": "fee61e99133773e8a4dff427e312cc6cb3cea709e52a4fe19186a60c69abe552",
+    "bytes": 7467
+  },
+  {
+    "path": "May_2026/Treasury_Settlements_May.xlsx",
+    "sha256": "437d461dda2ec0676717b0758d68f203a3d30bc7309b0326d0b5ac974f943713",
+    "bytes": 8033
+  },
+  {
+    "path": "June_2026/June_Bank_Settlement.csv",
+    "sha256": "91c260d0176d060d0d66133066b6eb2f3d04c6697dfc313df285b61772fb73f1",
+    "bytes": 7328
+  },
+  {
+    "path": "June_2026/June_Employee_Actions.csv",
+    "sha256": "62decdb56e119bcdc61dd9b717034134f787c16510053f333cda12cac81c42a3",
+    "bytes": 7671
+  },
+  {
+    "path": "June_2026/June_Inventory.xlsx",
+    "sha256": "06b9c1247d20a407efaa54e26ecc0e5fea6be548d397335a0d4ccefd13599ef1",
+    "bytes": 8314
+  },
+  {
+    "path": "June_2026/June_Invoice_Register.xlsx",
+    "sha256": "f79ff66afbdd87535ba25c6014efc4ccb088c3fc25eb787f5fd51f6b814e9af2",
+    "bytes": 7303
+  },
+  {
+    "path": "June_2026/June_Payment_File.xlsx",
+    "sha256": "2fb041307860553be0d5e441c003e75ecfb87c996d67db61f502a8cc50bbd9a0",
+    "bytes": 7718
+  },
+  {
+    "path": "June_2026/June_Refunds.csv",
+    "sha256": "9e83771645948ddec5e552e7c56c318711fd0d6007c180fc63c1c8a23364fd1f",
+    "bytes": 149
+  },
+  {
+    "path": "June_2026/June_Sales.csv",
+    "sha256": "12c3307b1ee3aca9a5c541dfddad238cd75ace34887ce3f2716805e7c4e15d25",
+    "bytes": 6044
+  },
+  {
+    "path": "July_2026/Jul_Retail_Orders.csv",
+    "sha256": "6c671d6f3efc2f3fd645dcdfed0cf2db76ede1e9108406984f1d6952cacb095e",
+    "bytes": 6983
+  },
+  {
+    "path": "July_2026/Jul_Settlement_Advice.csv",
+    "sha256": "219c9df781ba228222c291a66354f777b0e2397640e2d6ee0a38816c6f692732",
+    "bytes": 6971
+  },
+  {
+    "path": "July_2026/Jul_Warehouse_Events.xlsx",
+    "sha256": "186f9b6cdb72bee10f3dc3872705dccd2845f707dc071c956eb931a3b79cb0d5",
+    "bytes": 8165
+  },
+  {
+    "path": "July_2026/July_Acquirer_Transactions.xlsx",
+    "sha256": "b5ed975346370cab05403d81f4da23b62546e42082e8a01a570edfc3391c53b8",
+    "bytes": 7558
+  },
+  {
+    "path": "July_2026/July_Customer_Refunds.csv",
+    "sha256": "e32d59055a729ac65f603532161ddd039eb690e2bc85f904c6bcc44c56602a75",
+    "bytes": 372
+  },
+  {
+    "path": "July_2026/July_ERP_Invoice_Dump.xlsx",
+    "sha256": "635e01e13462a17328afb6e73811202c4d2ac2c959d0d04cab0f70a3f605115d",
+    "bytes": 7001
+  },
+  {
+    "path": "July_2026/July_Manual_Activity.csv",
+    "sha256": "5ca3290452a34282a8a8cf78e70a211514d554d0594cfda79fce2bb3e88b6a86",
+    "bytes": 9036
+  },
+  {
+    "path": "August_2026/Aug_Bank_Payouts.xlsx",
+    "sha256": "6d89e8b312e4bbaae13da6b48403a01e27f27989800320d2d5f89e6d07b3273e",
+    "bytes": 7914
+  },
+  {
+    "path": "August_2026/Aug_Employee_Actions.xlsx",
+    "sha256": "1de46e384dae39ebcd2d2d7d5e2fe4c2657966c7e510a420c4a57c6b7cd81c0a",
+    "bytes": 7264
+  },
+  {
+    "path": "August_2026/Aug_ERP_Invoices.csv",
+    "sha256": "9cb8a2830f3e930f4f36ef97de69ebdab0da2911e49f2de6ac7ee4553b51cca1",
+    "bytes": 5475
+  },
+  {
+    "path": "August_2026/Aug_Flagship_POS.xlsx",
+    "sha256": "c14d77dd865d848c07a7367d8512475cce4cb68a3ebcd6de218f4aab4c7f01fd",
+    "bytes": 7219
+  },
+  {
+    "path": "August_2026/Aug_Inventory_Movements.csv",
+    "sha256": "b9ca17433e8dddffcca4c1fb6c7313adbdf6670eb9ff6196046b02307dafa402",
+    "bytes": 7279
+  },
+  {
+    "path": "August_2026/Aug_Payment_Gateway.csv",
+    "sha256": "cf0999beab4e11a6f90e7887e7e8f77ea7ca217de14bb86118171ca1cea8f487",
+    "bytes": 5550
+  },
+  {
+    "path": "August_2026/Aug_Refund_Register.xlsx",
+    "sha256": "11cc446c7556fdf8f40ec3a3f74aaa36e52ea98d9fdaffe580eabc5470d4e5f3",
+    "bytes": 3984
+  }
+]

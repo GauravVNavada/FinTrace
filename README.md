@@ -2,7 +2,7 @@
 
 FinTrace is a lifecycle-aware financial operations console for investigating exceptions across POS, payments, settlements, ERP, refunds, inventory, and employee activity.
 
-This repository contains the implemented FinTrace product flow: user-created financial investigations, CSV/XLSX ingestion, bounded source analysis, mapping and relationship review, canonical normalization with lineage, investigation-scoped deterministic reconciliation, exception investigation, advisory patterns, controls, audit, evaluation, and PostgreSQL persistence. The deterministic local provider is explicit and a configured OpenAI-compatible provider can be selected; no provider is silently treated as available.
+This repository contains the FinTrace close workflow: CSV/XLSX ingestion, automatic high-confidence source mapping, canonical normalization with lineage, deterministic reconciliation, evidence-backed AI investigation, human approval, audit, and PostgreSQL persistence. Groq is the local live-provider configuration; deterministic AI responses are reserved for explicitly labeled automated tests.
 
 ## Product boundary
 
@@ -12,7 +12,7 @@ FinTrace follows one core rule: code calculates; AI interprets.
 - AI is limited to evidence selection, ambiguous exception interpretation, and explanation.
 - AI investigation tools are read-only and organization-scoped.
 - Human approval is required for consequential actions.
-- Synthetic data is used in the demo. No real financial or personal information is included.
+- Synthetic data is used in the sample. No real financial or personal information is included.
 
 ## Run locally
 
@@ -23,11 +23,11 @@ pnpm install
 pnpm dev
 ```
 
-Open `http://localhost:3002` when following the demo script.
+Open `http://localhost:3002` after starting both the API and web service. Follow [`docs/local-development.md`](docs/local-development.md) for database setup and environment configuration. For the validated standalone web server, run `pnpm --filter @fintrace/web build`, then `pnpm --filter @fintrace/web exec next start --port 3002`.
 
-The local demo supports either uploaded synthetic-compatible exports or fresh generated source files. The generator is bounded, reproducible, and passes through the same upload, mapping, normalization, reconciliation, and investigation workflow. All demo records are synthetic; do not use production data in this development setup.
+The local sample supports either uploaded synthetic-compatible exports or fresh generated source files. The generator is bounded, reproducible, and passes through the same upload, mapping, normalization, reconciliation, and investigation workflow. All sample records are synthetic; do not use production data in this development setup.
 
-The default API storage backend is the deterministic in-process demo adapter. For the full local path, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. The Compose database uses host port `55432` so it does not collide with a local PostgreSQL service. See [`docs/local-development.md`](docs/local-development.md).
+The default API storage backend is the deterministic in-process sample adapter. For the full local path, run `docker compose up -d postgres`, apply `fintrace-migrate`, run `fintrace-seed`, and set `STORAGE_BACKEND=postgres` before starting Uvicorn. The Compose database uses host port `55432` so it does not collide with a local PostgreSQL service. See [`docs/local-development.md`](docs/local-development.md).
 
 Validation commands:
 
@@ -53,9 +53,15 @@ apps/web       Next.js application and product experience
 apps/api       FastAPI service boundary and typed API schemas
 packages/ui    Shared shadcn-style primitives
 docs           Source-of-truth product and engineering documentation
+systhantic data January–August 2026 CSV/XLSX input folders and checksums
+e2e            Browser workflow tests
+scripts        Development and validation utilities
 ```
 
 ## Documentation map
+
+- [`systhantic data/README.md`](systhantic%20data/README.md) — portable monthly inputs and upload instructions.
+- [`docs/release-cleanup.md`](docs/release-cleanup.md) — cleanup scope, compatibility, and validation results.
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements and scope source of truth.
 - [`docs/architecture.md`](docs/architecture.md) — system boundaries, data flow, and deployment shape.
@@ -75,8 +81,8 @@ docs           Source-of-truth product and engineering documentation
 - [`docs/decisions.md`](docs/decisions.md) — architecture decision records.
 - [`docs/local-development.md`](docs/local-development.md) — local setup for web and API.
 - [`docs/review_protocol.md`](docs/review_protocol.md) — read-only audit protocol for repository reviews.
-- [`docs/demo_script.md`](docs/demo_script.md) — reproducible benchmark and five-minute product walkthrough.
+- [`docs/walkthrough.md`](docs/walkthrough.md) — reproducible benchmark and five-minute product walkthrough.
 
 ## Release boundary
 
-The local product uses synthetic data, deterministic reconciliation, and simulated approvals. The default live configuration is Gemini `gemini-2.5-flash-lite` with optional Groq fallback `openai/gpt-oss-120b`; set `GEMINI_API_KEY`, `GROQ_API_KEY`, and the runtime provider/model variables in the API environment. Check `/api/v1/ai/provider-health` before a demo: it reports primary and fallback independently without exposing credentials. If unavailable, the API returns an explicit provider failure with a redacted diagnostic category and never labels offline output as AI. Configured models must support strict structured output and tool/function calling. Gemini receives only bounded headers, inferred types, row count, statistics, and representative sample rows for source analysis, and bounded deterministic findings/evidence for investigation. PostgreSQL workflow state, ordered tool traces, fact-level verifier results, provider/fallback diagnostics, and verified bearer claims are implemented. Uploaded-investigation outcomes are scoped to their financial investigation. Evaluation separates deterministic reconciliation metrics from the independently authored AI investigation benchmark. Staging and production configuration fails closed unless a non-default authentication secret and configured external AI provider are supplied; normal tests use the deterministic stub and make zero live provider requests.
+The local product uses synthetic data, deterministic reconciliation, and simulated approvals. The default live configuration is Gemini `gemini-2.5-flash-lite` with optional Groq fallback `openai/gpt-oss-120b`; set `GEMINI_API_KEY`, `GROQ_API_KEY`, and the runtime provider/model variables in the API environment. Check `/api/v1/ai/provider-health` before a sample: it reports primary and fallback independently without exposing credentials. If unavailable, the API returns an explicit provider failure with a redacted diagnostic category and never labels offline output as AI. Configured models must support strict structured output and tool/function calling. Gemini receives only bounded headers, inferred types, row count, statistics, and representative sample rows for source analysis, and bounded deterministic findings/evidence for investigation. PostgreSQL workflow state, ordered tool traces, fact-level verifier results, provider/fallback diagnostics, and verified bearer claims are implemented. Uploaded-investigation outcomes are scoped to their financial investigation. Evaluation separates deterministic reconciliation metrics from the independently authored AI investigation benchmark. Staging and production configuration fails closed unless a non-default authentication secret and configured external AI provider are supplied; normal tests use the deterministic stub and make zero live provider requests.

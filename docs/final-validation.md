@@ -1,6 +1,6 @@
 # Final March validation — 5 September 2026
 
-**Demo-ready tested close:** [March 2026 Final Validation](http://localhost:3002/investigations/FIN-5A9FFF5BD2BD/reconciliation). The local web and API servers are running.
+**Sample-ready tested close:** [March 2026 Final Validation](http://localhost:3002/investigations/FIN-5A9FFF5BD2BD/reconciliation). The local web and API servers are running.
 
 ## Recorded browser steps
 
@@ -21,7 +21,7 @@ Final browser run: **3 passed in 39.6s**, including the two offline UI regressio
 - Added tenant/run/result-scoped lifecycle retrieval from normalized uploaded records. Removed exposure-as-order/payment substitutions. Sale and return inventory show SKU, quantity, cost and value.
 - Added payment amount/status/currency and settlement gross/net controls; multiple settlements/refunds require review. Ambiguity no longer depends on `PAY-AMB` ID prefixes. Inventory missing-return exposure uses available cost, not refund sales value; unknown valuation is not invented.
 - Open deterministic exceptions now appear as Needs decision, not automatically Explained. Home and global Attention no longer hardwire an August close.
-- Corrected evaluation scenario-name comparisons and employee-action joins. Fixed auditor demo login.
+- Corrected evaluation scenario-name comparisons and employee-action joins. Fixed auditor sample login.
 - Inventory AI now retrieves order, refund, inventory and invoice evidence before synthesis. One bounded correction turn may repair rejected citations; the same verifier remains mandatory. A failed verification can be explicitly retried. No fixture is represented as live AI.
 
 ## Verification
@@ -33,7 +33,7 @@ Final browser run: **3 passed in 39.6s**, including the two offline UI regressio
 - A real Chromium browser test uses the running PostgreSQL API and live Groq: login → create March close → upload all seven exports → repeat upload with no duplicate sources → Run close → inspect results → investigate ambiguity → investigate missing return → investigate quantity mismatch. Screenshots accompany each major step. A headed Chromium launch was unavailable (`spawn UNKNOWN`); real headless Chromium completed the browser workflow.
 - Evaluation on the deterministic 500-order/seed-42 benchmark reports 100% match precision and exception precision/recall after label/join/rounding corrections. This is synthetic benchmark coverage, **not measured production accuracy**. Financial resolution safety was not measured by this benchmark.
 
-## March demo facts
+## March sample facts
 
 The March exports contain **515 records, 80 lifecycles: 77 reconciled, 2 needing a decision, 1 needing evidence**.
 
@@ -47,10 +47,10 @@ Confidence is the existing deterministic **evidence coverage score**, not the pr
 
 ## Scope and remaining audit limitations
 
-This pass fixes the reproduced intake, misleading evidence display, demonstrated reconciliation gaps and local demo blockers. It is **not a claim that every item in the supplied adversarial audit is closed**.
+This pass fixes the reproduced intake, misleading evidence display, observed reconciliation gaps and local sample blockers. It is **not a claim that every item in the supplied adversarial audit is closed**.
 
 - Arbitrary unknown/malformed/ambiguous exports may still require review. Silently accepting them would be unsafe.
-- Development authentication/demo roles are for a trusted local machine. Production requires required-mode signed identity, non-default secret, deployment security review and real identity provisioning.
+- Development authentication/sample roles are for a trusted local machine. Production requires required-mode signed identity, non-default secret, deployment security review and real identity provisioning.
 - Large-dataset performance, background AI jobs, complete pagination above the current bounded 10,000-result fetch, stale-run invalidation and orphan-record quarantine remain production work. Incomplete lifecycle construction fails closed instead of declaring a clean close.
 - Multi-SKU/partial-return allocation, full settlement/refund allocation and production accounting policies need broader contracts and benchmark coverage; multiple settlements/refunds are flagged for review.
 - Approval requests are local workflow records, not real payment execution. No production bank/ERP writeback or multi-person approval deployment was exercised.

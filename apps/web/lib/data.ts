@@ -4,7 +4,7 @@ const actorRoleLabel = configuredRole.replaceAll("_", " ").toLowerCase().replace
 export const appConfig = {
   productName: "FinTrace",
   workspaceName: "Northstar Retail Group",
-  workspaceEnvironment: "Local demo",
+  workspaceEnvironment: "Local sample",
   currency: "INR" as const,
   benchmark: { orders: 1000, seed: 42, anomalyRate: 0.30 },
   actor: { name: "Aarav Mehta", firstName: "Aarav", initials: "AM", role: actorRoleLabel }

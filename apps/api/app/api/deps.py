@@ -66,7 +66,7 @@ def _verified_claims(authorization: str | None) -> dict[str, Any] | None:
 
 
 def create_signed_token(*, organization_id: str, actor_id: str, role: str, expires_in: int = 3600) -> str:
-    """Create a short-lived development token for the local judge entry screen."""
+    """Create a short-lived development token for the local reviewer entry screen."""
     settings = get_settings()
     now = int(time.time())
 

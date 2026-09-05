@@ -6,11 +6,11 @@ from hashlib import sha256
 from uuid import uuid4
 
 from app.controls.schemas import ActorContext
-from app.financial_investigations.demo import build_source_files
+from app.financial_investigations.sample import build_source_files
 from app.financial_investigations.files import inspect_upload, remove_upload, store_upload
 from app.financial_investigations.schemas import (
-    DemoDataRequest,
-    DemoDataResponse,
+    SampleDataRequest,
+    SampleDataResponse,
     SourceFileResponse,
 )
 from app.financial_investigations.service import (
@@ -21,7 +21,7 @@ from app.repositories.contracts import WorkflowRepository
 from app.simulator.generator import FLAGSHIP_FINANCE_REVIEW, SCENARIOS
 
 
-class DemoDataService:
+class SampleDataService:
     def __init__(self, repository: WorkflowRepository) -> None:
         self._repository = repository
         self._investigations = FinancialInvestigationService(repository)
@@ -30,9 +30,9 @@ class DemoDataService:
         self,
         context: ActorContext,
         investigation_id: str,
-        payload: DemoDataRequest,
+        payload: SampleDataRequest,
         idempotency_key: str,
-    ) -> DemoDataResponse:
+    ) -> SampleDataResponse:
         self._investigations.get(context.organization_id, investigation_id)
         if not idempotency_key or len(idempotency_key) > 128:
             raise ValueError("Idempotency-Key must be between 1 and 128 characters")
@@ -42,10 +42,10 @@ class DemoDataService:
             else SCENARIOS[1:]
         )
         if payload.preset not in (None, FLAGSHIP_FINANCE_REVIEW):
-            raise ValueError(f"Unsupported demo preset: {payload.preset}")
+            raise ValueError(f"Unsupported sample preset: {payload.preset}")
         invalid = sorted(set(scenarios) - set(SCENARIOS[1:]))
         if invalid:
-            raise ValueError("Unsupported demo scenario type(s): " + ", ".join(invalid))
+            raise ValueError("Unsupported sample scenario type(s): " + ", ".join(invalid))
         request_hash = sha256(
             json.dumps(
                 {**payload.model_dump(mode="json"), "investigation_id": investigation_id},
@@ -60,9 +60,9 @@ class DemoDataService:
                 )
             if int(existing.get("response_status", 425)) == 425:
                 raise FinancialInvestigationConflict(
-                    "An identical demo generation request is already in progress"
+                    "An identical sample generation request is already in progress"
                 )
-            return DemoDataResponse.model_validate(existing["response_body"])
+            return SampleDataResponse.model_validate(existing["response_body"])
         if self._repository.list_source_files(context.organization_id, investigation_id):
             raise FinancialInvestigationConflict(
                 "Remove the existing source files before generating a fresh synthetic set"
@@ -77,9 +77,9 @@ class DemoDataService:
                 )
             if int(reserved.get("response_status", 425)) == 425:
                 raise FinancialInvestigationConflict(
-                    "An identical demo generation request is already in progress"
+                    "An identical sample generation request is already in progress"
                 )
-            return DemoDataResponse.model_validate(reserved["response_body"])
+            return SampleDataResponse.model_validate(reserved["response_body"])
 
         stored: list[str] = []
         sources: list[SourceFileResponse] = []
@@ -114,7 +114,7 @@ class DemoDataService:
             self._repository.release_idempotency(context.organization_id, idempotency_key)
             raise
 
-        response = DemoDataResponse(
+        response = SampleDataResponse(
             financial_investigation_id=investigation_id,
             orders=payload.orders,
             seed=payload.seed,
@@ -126,6 +126,6 @@ class DemoDataService:
             context.organization_id, idempotency_key, 201, response.model_dump(mode="json")
         )
         self._repository.record_audit_event(
-            context.organization_id, "DEMO_DATA_GENERATED", investigation_id, context.actor_id
+            context.organization_id, "SAMPLE_DATA_GENERATED", investigation_id, context.actor_id
         )
         return response

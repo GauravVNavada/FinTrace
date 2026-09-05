@@ -19,10 +19,10 @@ async def test_health(client: AsyncClient) -> None:
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
-async def test_readiness_reports_demo_backend(client: AsyncClient) -> None:
+async def test_readiness_reports_sample_backend(client: AsyncClient) -> None:
     response = await client.get("/ready")
     assert response.status_code == 200
-    assert response.json() == {"status": "ready", "storage_backend": "demo"}
+    assert response.json() == {"status": "ready", "storage_backend": "sample"}
 
 
 async def test_dashboard_requires_tenant_context(client: AsyncClient) -> None:
@@ -38,7 +38,7 @@ async def test_dashboard_is_organization_scoped(client: AsyncClient) -> None:
     assert response.json()["organization_id"] == "ORG-001"
 
 
-async def test_demo_adapter_does_not_project_flagship_data_into_other_tenant(
+async def test_sample_adapter_does_not_project_flagship_data_into_other_tenant(
     client: AsyncClient,
 ) -> None:
     dashboard = await client.get(

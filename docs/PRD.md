@@ -1,5 +1,11 @@
 # Product Requirements Document — FinTrace
 
+## Latest-run and portable-input contract
+
+Home reads tenant-scoped `GET /api/v1/dashboard/latest-run` (`ReconciliationRunResponse | null`), selecting the most recently started non-stale run across closes. A newer empty close does not replace run results; failed runs remain visible. Refresh occurs on focus and every 30 seconds. No-run state is explicit. No financial schema change is introduced.
+
+Monthly inputs live in `systhantic data/<Month>_2026/`; all eight periods are tested through intake without hidden labels or personal filesystem dependencies. Local-only role login uses `/api/v1/auth/local-login`. Existing high-confidence automatic intake and financial/AI authority boundaries are unchanged. See [release cleanup](release-cleanup.md) for migration compatibility and verification.
+
 ## Final intake and evidence corrections — 2026-09-05
 
 See [final-validation.md](final-validation.md) for the current implementation and acceptance record. This correction supersedes older references to a hardwired August close, ID-prefix ambiguity, seed lifecycle detail, and automatic “Explained” labels for open exceptions.
@@ -8,7 +14,7 @@ Routine CSV/XLSX mapping is deterministic and source-scoped, with complete speci
 
 The read-only GET `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle` returns the existing LifecycleResponse shape from the run’s normalized dataset, scoped to the authenticated tenant and latest run. No database migration. Missing evidence is displayed as missing, never substituted with exposure or seed data.
 
-Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local demo is not a production banking integration.
+Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local sample is not a production banking integration.
 
 ## Investigation evidence improvement (2026-09-05)
 
@@ -22,24 +28,24 @@ Ambiguous-payment investigations collect scoped order, candidate payment, invoic
 
 The primary controller experience is a month-end financial close. The visible flow is **Home → Closes → Overview / Data / Results / Attention**. Login has one controller-first action; high-confidence source mappings and data connections are handled automatically; `Run close` owns the existing normalization and deterministic reconciliation sequence; and the Attention queue contains only needs-evidence, needs-decision, and approval-required work. Audit and Evaluation remain secondary proof surfaces. Internal exception codes, reconciliation rules, tenant scope, RBAC, PostgreSQL persistence, bounded investigation tools, verification, approval, and audit behavior remain unchanged.
 
-Session expiry is fail-closed in the browser: an authenticated API response with HTTP 401 clears the stored bearer session and redirects the user to the login page. The local controller demo identity is displayed as “Gaurav.”
+Session expiry is fail-closed in the browser: an authenticated API response with HTTP 401 clears the stored bearer session and redirects the user to the login page. The local controller sample identity is displayed as “Gaurav.”
 
 **Product:** FinTrace  
 **Tagline:** Financial exception investigation and lifecycle observability for multi-system business operations  
-**Buildathon Track:** Razorpay AI Buildathon — Track 04: AI Finance Controller  
+**Product area:** AI-assisted financial close control
 **Document Version:** 2.0
 **Target:** Data-driven investigation platform evolution
 **Primary objective:** Build an engineering-complete, measurable AI finance-operations system that reconciles synthetic multi-system transaction lifecycles, investigates unresolved exceptions using evidence-backed AI reasoning, recommends controlled remediation, detects recurring failure patterns, and maintains a complete audit trail.
 
-**Hardening update (2026-09-03):** The active browser workflow now exposes reconciliation and investigation actions end to end; approval, tenant scope, provider-health access, durable writes, evidence truthfulness, identifier handling, and evaluation reporting have been hardened. Source intake also recognizes the supported January 2026 synthetic export vocabulary deterministically, converts common XLSX date encodings safely, and auto-confirms complete high-confidence mappings while preserving review for ambiguity. Standard ERP refund pairs with one active and explicit reversed invoice, including refund-referenced employee actions, are retained and reconciled without dropping records. The product remains demo-oriented and requires the documented PostgreSQL and browser smoke checks before a production deployment claim.
+**Hardening update (2026-09-03):** The active browser workflow now exposes reconciliation and investigation actions end to end; approval, tenant scope, provider-health access, durable writes, evidence truthfulness, identifier handling, and evaluation reporting have been hardened. Source intake also recognizes the supported January 2026 synthetic export vocabulary deterministically, converts common XLSX date encodings safely, and auto-confirms complete high-confidence mappings while preserving review for ambiguity. Standard ERP refund pairs with one active and explicit reversed invoice, including refund-referenced employee actions, are retained and reconciled without dropping records. The product remains sample-oriented and requires the documented PostgreSQL and browser smoke checks before a production deployment claim.
 
-**Implementation status:** The P0 buildathon path is implemented for the local synthetic product flow. Reconciliation consumes and accounts for every normalized record in the immutable dataset version; canonical fee fields are mapped; stale pre-P0 runs are annotated and excluded from active state; relationship proposals include deterministic overlap/cardinality/type/temporal/amount evidence; the default live demo configuration is Gemini `gemini-2.5-flash-lite` with optional Groq `openai/gpt-oss-120b` fallback; source analysis and iterative investigation use bounded provider calls when configured; structured factual evidence is field-verified; exposure categories distinguish potential exposure from data quality and timing; and deterministic and AI evaluations are separate persisted reports. Provider health and fallback state are explicit, provider-specific credentials are isolated, and a provider outage remains visible without silently falling back to stub output. The local `Launch Flagship Demo` prepares the same API-backed synthetic/uploaded workflow in PostgreSQL, and `Judge Demo · Controller` exposes a signed local Controller identity while preserving API RBAC. The legacy `/exceptions` resource remains compatibility-only. No product behavior is represented as complete unless it is persisted where required, API-backed, tested, and documented.
+**Implementation status:** The P0 release path is implemented for the local synthetic product flow. Reconciliation consumes and accounts for every normalized record in the immutable dataset version; canonical fee fields are mapped; stale pre-P0 runs are annotated and excluded from active state; relationship proposals include deterministic overlap/cardinality/type/temporal/amount evidence; the default live sample configuration is Gemini `gemini-2.5-flash-lite` with optional Groq `openai/gpt-oss-120b` fallback; source analysis and iterative investigation use bounded provider calls when configured; structured factual evidence is field-verified; exposure categories distinguish potential exposure from data quality and timing; and deterministic and AI evaluations are separate persisted reports. Provider health and fallback state are explicit, provider-specific credentials are isolated, and a provider outage remains visible without silently falling back to stub output. The local `Launch Flagship Sample` prepares the same API-backed synthetic/uploaded workflow in PostgreSQL, and `Reviewer Sample · Controller` exposes a signed local Controller identity while preserving API RBAC. The legacy `/exceptions` resource remains compatibility-only. No product behavior is represented as complete unless it is persisted where required, API-backed, tested, and documented.
 
 ## Active product evolution directive
 
 Current evolution status: the web source-intake route supports fresh synthetic generation or bounded CSV/XLSX upload, source analysis, classification review, mapping edits, explicit mapping confirmation, deterministic relationship review, immutable normalization, reconciliation, result investigation, advisory patterns, and audit inspection. Successful source slots are protected from repeat attachment by content/name identity, while non-ready or failed same-name sources are replaced by a corrected upload so stale review rows do not accumulate. Uploaded-run exceptions enter the bounded evidence-tool/verifier path, use the configured provider adapter when available, return a durable `SUPPORTED`, `UNRESOLVED`, or `FAILED` investigation, and are retrieved with their evidence trace. Dashboard, source, relationship, reconciliation, evaluation, and audit screens consume live API data. The legacy seeded exception queue is kept as a separate compatibility workflow and is removed from primary navigation. The AI evaluation set is independently authored and reports provider performance separately from reconciliation labels.
 
-FinTrace is evolving from a seeded finance exception demo into an AI-assisted financial lifecycle investigation platform:
+FinTrace is evolving from a seeded finance exception sample into an AI-assisted financial lifecycle investigation platform:
 
 > A business uploads financial and operational records for a time period. FinTrace classifies and maps those sources, reconstructs transaction lifecycles, deterministically reconciles what it can prove, then uses bounded AI to investigate unresolved lifecycle breaks and surface evidence-backed root causes, potential exposure, recurring control gaps, and safe next actions.
 
@@ -123,9 +129,9 @@ AI is reserved for tasks where reasoning over heterogeneous evidence is useful:
 - recommending next actions
 - identifying similarities between past incidents
 
-The project is designed to meet Razorpay's Track 04 requirement to close a finance-operations loop across a synthetic batch, report match rate, demonstrate throughput and accuracy, and honestly surface unresolved exceptions. Razorpay explicitly requires more than a cherry-picked example and lists multi-source reconciliation as one possible direction.
+The product closes a finance-operations loop across a synthetic batch, reports match rate, throughput and accuracy, and honestly surfaces unresolved exceptions. Validation covers complete multi-source datasets rather than cherry-picked examples.
 
-FinTrace deliberately goes beyond generic transaction matching because reconciliation products already exist at Razorpay and across the financial software industry. Razorpay Recon matches financial records and surfaces discrepancies, while platforms such as BlackLine automate high-volume transaction matching and exception workflows.
+FinTrace deliberately goes beyond generic transaction matching because reconciliation products already exist at Payment platform and across the financial software industry. Payment platform Recon matches financial records and surfaces discrepancies, while platforms such as BlackLine automate high-volume transaction matching and exception workflows.
 
 The project's differentiation is therefore:
 
@@ -221,7 +227,7 @@ Microsoft's current account-reconciliation workflow also provides AI-supported s
 
 Therefore FinTrace must **not claim novelty in transaction reconciliation itself**.
 
-Its prototype value comes from demonstrating an integrated architecture where reconciliation feeds a transparent investigation system spanning both financial and operational evidence.
+Its prototype value comes from showing an integrated architecture where reconciliation feeds a transparent investigation system spanning both financial and operational evidence.
 
 ---
 
@@ -241,9 +247,9 @@ Its prototype value comes from demonstrating an integrated architecture where re
 
 ---
 
-# 5. Buildathon Alignment
+# 5. Release Alignment
 
-Razorpay Track 04 asks builders to:
+The product acceptance criteria require it to:
 
 - build an agent closing one finance-operations loop;
 - operate over at least 50 synthetic records;
@@ -253,9 +259,9 @@ Razorpay Track 04 asks builders to:
 - show measured accuracy;
 - avoid relying on one cherry-picked match.
 
-FinTrace will explicitly demonstrate:
+FinTrace will explicitly show:
 
-| Razorpay requirement | FinTrace implementation |
+| Product requirement | FinTrace implementation |
 |---|---|
 | 50+ records | 500–1,000 generated transaction lifecycles |
 | Finance-ops loop | ingestion → reconciliation → investigation → review/resolution |
@@ -346,7 +352,7 @@ FinTrace must:
 For MVP, FinTrace will **not**:
 
 - process real customer banking information;
-- connect to real production Razorpay accounts;
+- connect to real production Payment platform accounts;
 - move real money;
 - execute real refunds;
 - modify actual ERP systems;
@@ -1371,7 +1377,7 @@ over:
 
 > hallucinated certainty.
 
-This directly supports Razorpay's requirement for an honest exception list.
+This directly supports the requirement for an honest exception list.
 
 ---
 
@@ -2060,7 +2066,7 @@ fintrace/
 │   ├── architecture.md
 │   ├── evaluation.md
 │   ├── data-model.md
-│   └── demo-script.md
+│   └── sample-script.md
 │
 ├── backend/
 │   ├── app/
@@ -2364,7 +2370,7 @@ Must have no effect.
 
 # 64. Security Requirements
 
-MVP should demonstrate:
+MVP should show:
 
 - authentication;
 - authorization;
@@ -2386,7 +2392,7 @@ All data is synthetic.
 
 README must explicitly state:
 
-> No real financial or personal information is included in the demonstration dataset.
+> No real financial or personal information is included in the sample dataset.
 
 ---
 
@@ -2422,7 +2428,7 @@ README must explicitly state:
 
 Evaluation is a mandatory product feature.
 
-Razorpay explicitly asks Track 04 candidates for throughput, measured accuracy, and an honest unresolved-exception list.
+Acceptance reporting includes throughput, measured accuracy, and an honest unresolved-exception list.
 
 The evaluation suite should run automatically.
 
@@ -2477,7 +2483,7 @@ Auto reconciled lifecycles
 Total lifecycles
 ```
 
-Report this because Razorpay explicitly requests match rate.
+Report this because Payment platform explicitly requests match rate.
 
 ---
 
@@ -2614,7 +2620,7 @@ Expected behavior:
 UNRESOLVED
 ```
 
-A good system must demonstrate failure handling.
+A good system must show failure handling.
 
 ---
 
@@ -2718,9 +2724,9 @@ Do not log secrets.
 
 ---
 
-# 86. Demo Mode
+# 86. Sample Mode
 
-Create a deterministic demo dataset.
+Create a deterministic sample dataset.
 
 Example:
 
@@ -2730,11 +2736,11 @@ seed = 42
 
 This ensures the pitch video produces stable results.
 
-Demo database should include at least one especially clear high-severity exception.
+Sample database should include at least one especially clear high-severity exception.
 
 ---
 
-# 87. Flagship Demo Scenario
+# 87. Flagship Sample Scenario
 
 Use:
 
@@ -2820,7 +2826,7 @@ Required.
 
 ---
 
-# 89. Recurrence Demo
+# 89. Recurrence Sample
 
 Show:
 
@@ -2845,9 +2851,9 @@ Require inventory disposition before physical-goods refund workflow reaches COMP
 
 ---
 
-# 90. Demo Narrative
+# 90. Sample Narrative
 
-Five-minute demo should approximately follow:
+Five-minute sample should approximately follow:
 
 ## 0:00–0:30 — Problem
 
@@ -3009,7 +3015,7 @@ The coding agent must avoid introducing:
 - Kafka;
 - Kubernetes;
 - graph database;
-- vector database unless demonstrated need exists;
+- vector database unless observed need exists;
 - custom ML training;
 - LangChain unless necessary;
 - elaborate agent frameworks;
@@ -3297,7 +3303,7 @@ Only AI investigation should be unavailable.
 
 The project must make no false novelty claim.
 
-Razorpay already offers Razorpay Recon, an AI-powered reconciliation system intended to manage discrepancies across financial records.
+Payment platform already offers Payment platform Recon, an AI-powered reconciliation system intended to manage discrepancies across financial records.
 
 BlackLine provides mature automated transaction matching, including complex matching and exception management.
 
@@ -3410,7 +3416,7 @@ The project is successful when:
 
 ### Presentation
 
-- one compelling demo case;
+- one compelling sample case;
 - one failure/ambiguity case;
 - architecture diagram;
 - public repository;
@@ -3418,7 +3424,7 @@ The project is successful when:
 
 ---
 
-# 107. Minimum Submission Evidence
+# 107. Minimum Release Evidence
 
 Repository should include:
 
@@ -3444,7 +3450,7 @@ security design
 
 ## What it does
 ## Why this problem matters
-## Demo
+## Sample
 ## Architecture
 ## Financial lifecycle model
 ## Why deterministic reconciliation first
@@ -3495,7 +3501,7 @@ Financial calculations and exact relationships should remain deterministic for r
 
 ### Why synthetic data?
 
-The buildathon explicitly permits/requires synthetic batch evaluation, and real financial data introduces privacy and access issues.
+The release explicitly permits/requires synthetic batch evaluation, and real financial data introduces privacy and access issues.
 
 ### Why PostgreSQL instead of graph DB?
 
@@ -3558,7 +3564,7 @@ This improves:
 
 Possible later capabilities:
 
-- real Razorpay test-mode integration;
+- real Payment platform test-mode integration;
 - ERP connectors;
 - bank statement ingestion;
 - event streaming;
@@ -3580,7 +3586,7 @@ These are future directions, not MVP obligations.
 
 Mitigation:
 
-Focus demo/pitch on lifecycle investigation and prevention.
+Focus sample/pitch on lifecycle investigation and prevention.
 
 ---
 
@@ -3590,7 +3596,7 @@ Mitigation:
 
 Use AI only for ambiguous evidence reasoning.
 
-Demonstrate deterministic-only cases separately.
+Show deterministic-only cases separately.
 
 ---
 
@@ -3693,9 +3699,9 @@ The core design principle is:
 
 > **Use deterministic software to establish financial truth. Use AI to investigate what deterministic systems cannot confidently explain.**
 
-The product should demonstrate not merely that an LLM can talk about finance, but that AI can operate as a controlled component inside a reliable financial software architecture.
+The product should show not merely that an LLM can talk about finance, but that AI can operate as a controlled component inside a reliable financial software architecture.
 
-That is the engineering standard FinTrace should aim to demonstrate.
+That is the engineering standard FinTrace should aim to show.
 
 # 116. Track 4 implementation hardening (2026-09-03)
 

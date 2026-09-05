@@ -15,10 +15,10 @@ from app.domain.schemas import (
 )
 from app.simulator.generator import GeneratorConfig, generate_dataset
 
-DEMO_ORGANIZATION_ID = "ORG-001"
+SAMPLE_ORGANIZATION_ID = "ORG-001"
 
 
-class DemoRepository:
+class SampleRepository:
     """Temporary read-only adapter used until the PostgreSQL repository is wired.
 
     The production repository must take organization scope as an explicit argument
@@ -125,7 +125,7 @@ class DemoRepository:
         )
 
     def dashboard_summary(self, organization_id: str) -> DashboardSummary:
-        if organization_id != DEMO_ORGANIZATION_ID:
+        if organization_id != SAMPLE_ORGANIZATION_ID:
             return DashboardSummary(
                 organization_id=organization_id,
                 reconciliation_run_id="",
@@ -148,7 +148,7 @@ class DemoRepository:
         )
 
     def list_exceptions(self, organization_id: str, limit: int = 100) -> list[ExceptionSummary]:
-        if organization_id != DEMO_ORGANIZATION_ID:
+        if organization_id != SAMPLE_ORGANIZATION_ID:
             return []
         return [
             ExceptionSummary(
@@ -177,7 +177,7 @@ class DemoRepository:
         return self._dataset.lifecycle_store().get_by_order(organization_id, order_id)
 
     def list_lifecycles(self, organization_id: str, limit: int = 1000) -> list[CanonicalLifecycle]:
-        if organization_id != DEMO_ORGANIZATION_ID:
+        if organization_id != SAMPLE_ORGANIZATION_ID:
             return []
         lifecycles: list[CanonicalLifecycle] = []
         for order in self._dataset.records["orders"][:limit]:
@@ -191,7 +191,7 @@ class DemoRepository:
         return lifecycles
 
     def get_exception(self, organization_id: str, exception_id: str) -> ExceptionSummary | None:
-        if organization_id != DEMO_ORGANIZATION_ID or exception_id != "EXC-1042":
+        if organization_id != SAMPLE_ORGANIZATION_ID or exception_id != "EXC-1042":
             return None
         return self.list_exceptions(organization_id)[0]
 
@@ -567,6 +567,11 @@ class DemoRepository:
         self._reconciliation_results[str(run["id"])] = [dict(item) for item in results]
         return dict(run)
 
+    def latest_workspace_run(self, organization_id: str) -> dict[str, object] | None:
+        runs = [run for (org, _), rows in self._reconciliation_runs.items()
+                if org == organization_id for run in rows if not run.get("is_stale", False)]
+        return dict(max(runs, key=lambda run: (str(run["started_at"]), str(run["id"])))) if runs else None
+
     def latest_reconciliation_run(
         self, organization_id: str, investigation_id: str
     ) -> dict[str, object] | None:
@@ -852,7 +857,7 @@ class DemoRepository:
         }
 
 
-demo_repository = DemoRepository()
+sample_repository = SampleRepository()
 
 
 def _public_source_file(record: dict[str, object]) -> dict[str, object]:

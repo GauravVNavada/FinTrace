@@ -1,5 +1,11 @@
 # FinTrace Architecture
 
+## Latest-run and portable-input contract
+
+Home reads tenant-scoped `GET /api/v1/dashboard/latest-run` (`ReconciliationRunResponse | null`), selecting the most recently started non-stale run across closes. A newer empty close cannot replace results; failed runs remain visible. Refresh occurs on focus and every 30 seconds. No-run state is explicit. No financial schema change is introduced.
+
+Monthly inputs live in `systhantic data/<Month>_2026/`; all eight periods are tested through intake without hidden labels or personal filesystem dependencies. Local-only role login uses `/api/v1/auth/local-login`. Automatic high-confidence intake and financial/AI authority boundaries are unchanged. See [release cleanup](release-cleanup.md) for compatibility and verification.
+
 ## Final intake and evidence corrections — 2026-09-05
 
 See [final-validation.md](final-validation.md) for the current implementation and acceptance record. This correction supersedes older references to a hardwired August close, ID-prefix ambiguity, seed lifecycle detail, and automatic “Explained” labels for open exceptions.
@@ -8,7 +14,7 @@ Routine CSV/XLSX mapping is deterministic and source-scoped, with complete speci
 
 The read-only GET `/api/v1/financial-investigations/{id}/reconciliation-runs/{run_id}/results/{result_id}/lifecycle` returns the existing LifecycleResponse shape from the run’s normalized dataset, scoped to the authenticated tenant and latest run. No database migration. Missing evidence is displayed as missing, never substituted with exposure or seed data.
 
-Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local demo is not a production banking integration.
+Deterministic controls check currency/status, payment amount, settlement gross/net arithmetic, and multiple settlement/refund review. Duplicate-payment conclusions require settlement coverage or distinct processor references, never an ID prefix. Open exceptions require a decision; ambiguous associations require evidence. Live AI remains read-only, provider-labeled and citation-verified; no change to financial authorization or automatic financial writes. The local sample is not a production banking integration.
 
 ## Investigation evidence improvement (2026-09-05)
 
@@ -90,7 +96,7 @@ Each app's `app/globals.css` must contain exactly one import of the UI package s
 
 ### Reliability boundary update
 
-Consequential source workflow mutations reserve an idempotency lease before expensive work, persist or replay only a request-hash-compatible response, and release the lease on failure. PostgreSQL leases reclaim expired pending work. Tenant integrity is enforced both in repository predicates and in composite organization-aware foreign keys added by migration 014. Evaluation and audit screens treat empty, forbidden, and unavailable states as different domain outcomes. The local demo remains explicitly process-local; PostgreSQL is required for restart durability.
+Consequential source workflow mutations reserve an idempotency lease before expensive work, persist or replay only a request-hash-compatible response, and release the lease on failure. PostgreSQL leases reclaim expired pending work. Tenant integrity is enforced both in repository predicates and in composite organization-aware foreign keys added by migration 014. Evaluation and audit screens treat empty, forbidden, and unavailable states as different domain outcomes. The local sample remains explicitly process-local; PostgreSQL is required for restart durability.
 
 ## Runtime and deployment
 
@@ -106,14 +112,14 @@ The web app is a Next.js App Router application and can be deployed as a Node pr
 
 ## Consequence
 
-This architecture makes AI failure non-fatal. If an AI provider is unavailable, `/api/v1/ai/provider-health` exposes the configured state before a demo starts, and investigation responses persist `FAILED` with a redacted error category, retryability, stage, iteration, and latency. Reconciliation, exception evidence, exposure, timeline, manual review, and audit remain available.
+This architecture makes AI failure non-fatal. If an AI provider is unavailable, `/api/v1/ai/provider-health` exposes the configured state before a sample starts, and investigation responses persist `FAILED` with a redacted error category, retryability, stage, iteration, and latency. Reconciliation, exception evidence, exposure, timeline, manual review, and audit remain available.
 
 ## Stack matrix
 
 | Component | Language/runtime | Framework | Database/storage | Important configuration |
 | --- | --- | --- | --- | --- |
 | `apps/web` | TypeScript, Node 24+ | Next.js App Router, React, Tailwind | Typed API responses with deterministic fallback for isolated development | `NEXT_PUBLIC_API_BASE_URL`, organization/actor dev context |
-| `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ for the buildathon/demo runtime; demo adapter remains available for tests/offline fixtures | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
+| `apps/api` | Python 3.12+ | FastAPI, Pydantic, psycopg 3 | PostgreSQL 16+ for the release/sample runtime; sample adapter remains available for tests/offline fixtures | `DATABASE_URL`, `STORAGE_BACKEND`, `ALLOWED_ORIGINS`, `API_PREFIX` |
 | `packages/ui` | TypeScript, React | Tailwind + shadcn-style primitives | None | Shared by web apps only |
 | Evaluation runner | Python 3.12+ | Plain Python modules | Synthetic CSV/JSON and hidden ground truth | deterministic seed and output path |
 | AI provider adapter | Python | `AIProvider` with `GeminiProvider`, `GroqProvider`, and test-only `StubAIClient` | No prompt/result persistence outside API model; provider/model selected at runtime | timeout, retry, model, redaction settings |
@@ -152,7 +158,7 @@ packages/
         └── index.ts         # public exports only
 ```
 
-The API exposes `/health`, `/ready`, demo-login, dashboard/exception/lifecycle reads, financial-investigation source/generation/normalization/reconciliation routes, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for the buildathon/demo runtime; `STORAGE_BACKEND=demo` keeps the deterministic in-process adapter available for tests and offline fixtures. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
+The API exposes `/health`, `/ready`, local-login, dashboard/exception/lifecycle reads, financial-investigation source/generation/normalization/reconciliation routes, investigation routes, controls/audit routes, and graph/pattern/evaluation routes. `STORAGE_BACKEND=postgres` selects the organization-scoped PostgreSQL repository for the release/sample runtime; `STORAGE_BACKEND=sample` keeps the deterministic in-process adapter available for tests and offline fixtures. The graph and pattern services are derived application views over canonical lifecycle data; they do not introduce a graph database. Bearer claim verification is enabled per `AUTH_MODE`.
 
 ## Request-to-data path
 
@@ -176,7 +182,7 @@ Database, provider, and external source calls require explicit timeouts. Retries
 
 | Stage | Web | API | Storage | Evidence required |
 | --- | --- | --- | --- | --- |
-| Local foundation | Next dev server | optional FastAPI scaffold | in-memory demo adapter | browser smoke check |
+| Local foundation | Next dev server | optional FastAPI scaffold | in-memory sample adapter | browser smoke check |
 | Local P0 | Next dev server | Uvicorn | local PostgreSQL | `fintrace-migrate`, `fintrace-seed`, lifecycle/investigation/control/evaluation/audit smoke |
 | Staging | Node deployment | containerized API | managed PostgreSQL | migration and security checks |
 | Production candidate | immutable build | separately deployable API | encrypted PostgreSQL + backups | load, auth, tenant, recovery tests |

@@ -1,0 +1,2 @@
+CreditRef,AcquirerRef,OrderNumber,CreditValue,CreditCreated,CurrencyCode,CreditReason
+APR-REF-0026,APR-PAY-0026,APR-ORD-0026,3975,2026-05-03T14:32:00.000Z,INR,customer-return

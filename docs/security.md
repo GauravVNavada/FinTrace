@@ -2,7 +2,7 @@
 
 ## Final local validation — 2026-09-05
 
-See [final-validation.md](final-validation.md) for tested behavior and explicit remaining production limitations. Inventory investigations precollect bounded read-only evidence and allow one verification-correction turn, never bypassing the verifier. Failed verification remains unresolved and can be retried with a new idempotency key. Uploaded lifecycle reads are authenticated tenant/run/result scoped. Development authentication remains local-demo-only; no financial execution integration is implied.
+See [final-validation.md](final-validation.md) for tested behavior and explicit remaining production limitations. Inventory investigations precollect bounded read-only evidence and allow one verification-correction turn, never bypassing the verifier. Failed verification remains unresolved and can be retried with a new idempotency key. Uploaded lifecycle reads are authenticated tenant/run/result scoped. Development authentication remains local-sample-only; no financial execution integration is implied.
 
 **Status:** MVP security baseline plus tenant-integrity and replay hardening · 2026-09-03
 
@@ -79,10 +79,10 @@ All current records are synthetic. A production implementation must classify PII
 ## 4. Security verification checklist
 
 - [x] Authenticated request claims are verified when bearer authentication is used; required mode rejects header-only context.
-- [x] Object-level tenant filter is present on every repository query; the demo adapter also returns no seeded data for unknown tenants.
+- [x] Object-level tenant filter is present on every repository query; the sample adapter also returns no seeded data for unknown tenants.
 - [x] Approval thresholds are tested server-side.
 - [x] Replay with the same idempotency key is harmless.
-- [x] Pending idempotency work has a bounded recovery lease in demo and PostgreSQL adapters.
+- [x] Pending idempotency work has a bounded recovery lease in sample and PostgreSQL adapters.
 - [x] Parent/child financial records enforce organization-consistent foreign keys in migration 014.
 - [x] Security response headers are emitted by the API middleware.
 - [x] Prompt-injection fixture has no effect.

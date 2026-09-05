@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_env: str = "development"
     api_prefix: str = "/api/v1"
     database_url: str = "postgresql://fintrace:fintrace@localhost:55432/fintrace"
-    storage_backend: str = "demo"
+    storage_backend: str = "sample"
     migrations_dir: str = "migrations"
     allowed_origins: list[str] = [
         "http://localhost:3000",

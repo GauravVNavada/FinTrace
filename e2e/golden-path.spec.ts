@@ -9,17 +9,17 @@ const investigation = {
   period_end: "2026-08-31",
   base_currency: "INR",
   status: "RECONCILED",
-  created_by: "judge-controller",
+  created_by: "reviewer-controller",
   created_at: "2026-08-31T09:00:00Z",
   updated_at: "2026-08-31T09:05:00Z",
   source_file_count: 7,
 };
 
 const run = {
-  id: "RR-DEMO-001",
+  id: "RR-SAMPLE-001",
   organization_id: "ORG-001",
   financial_investigation_id: investigation.id,
-  dataset_version_id: "DS-DEMO-001",
+  dataset_version_id: "DS-SAMPLE-001",
   status: "COMPLETED",
   records_expected: 544,
   records_loaded: 544,
@@ -37,7 +37,7 @@ const run = {
 };
 
 const exception = {
-  id: "RRES-DEMO-001",
+  id: "RRES-SAMPLE-001",
   run_id: run.id,
   order_id: "ORD-10005",
   status: "AMBIGUOUS",
@@ -49,7 +49,7 @@ const exception = {
 };
 
 const secondAmbiguous = {
-  id: "RRES-DEMO-003",
+  id: "RRES-SAMPLE-003",
   run_id: run.id,
   order_id: "ORD-10088",
   status: "AMBIGUOUS",
@@ -61,7 +61,7 @@ const secondAmbiguous = {
 };
 
 const missingSettlement = {
-  id: "RRES-DEMO-002",
+  id: "RRES-SAMPLE-002",
   run_id: run.id,
   order_id: "ORD-10006",
   status: "EXCEPTION",
@@ -73,7 +73,7 @@ const missingSettlement = {
 };
 
 const sources = Array.from({ length: 7 }, (_, index) => ({
-  id: `SRC-DEMO-${index + 1}`,
+  id: `SRC-SAMPLE-${index + 1}`,
   organization_id: "ORG-001",
   financial_investigation_id: investigation.id,
   original_filename: ["August_Orders.xlsx", "Gateway_Payments.csv", "Bank_Settlement_Report.xlsx", "ERP_Invoice_Register.csv", "Refund_Report.xlsx", "Inventory_Movements.csv", "Employee_Actions.csv"][index],
@@ -109,7 +109,7 @@ const missingLifecycle = {
 };
 
 const aiResult = {
-  investigation_id: "INV-DEMO-001",
+  investigation_id: "INV-SAMPLE-001",
   exception_id: exception.id,
   status: "UNRESOLVED",
   root_cause_code: null,
@@ -141,12 +141,12 @@ const aiResult = {
 };
 
 const auditEvent = {
-  event_id: "AUD-DEMO-001",
+  event_id: "AUD-SAMPLE-001",
   organization_id: "ORG-001",
   action: "RESOLUTION_REQUESTED",
   resource_id: exception.id,
-  actor_id: "judge-controller",
-  correlation_id: "e2e-demo",
+  actor_id: "reviewer-controller",
+  correlation_id: "e2e-sample",
   created_at: "2026-08-31T09:07:00Z",
 };
 
@@ -161,9 +161,10 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
     const json = async (body: unknown, status = 200) => route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
 
     if (path.endsWith("/ready")) return json({ status: "ready", storage_backend: "postgres" });
-    if (path.endsWith("/auth/demo-login")) return json({ access_token: "e2e-controller-token", token_type: "bearer", expires_in: 3600, organization_id: "ORG-001", actor_id: "judge-controller", role: "CONTROLLER", display_name: "Judge Controller" });
-    if (path.endsWith("/financial-investigations") && request.method() === "GET") return json([investigation]);
-    if (path.endsWith("/financial-investigations/flagship-demo")) return json(investigation);
+    if (path.endsWith("/dashboard/latest-run")) return json(run);
+    if (path.endsWith("/auth/local-login")) return json({ access_token: "e2e-controller-token", token_type: "bearer", expires_in: 3600, organization_id: "ORG-001", actor_id: "reviewer-controller", role: "CONTROLLER", display_name: "Reviewer Controller" });
+    if (path.endsWith("/financial-investigations") && request.method() === "GET") return json([{ ...investigation, id: "FIN-EMPTY", name: "New empty close", source_file_count: 0 }, investigation]);
+    if (path.endsWith("/financial-investigations/flagship-sample")) return json(investigation);
     if (path.endsWith(`/financial-investigations/${investigation.id}`)) return json(investigation);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/latest`)) return json(run);
     if (path.endsWith(`/financial-investigations/${investigation.id}/sources`)) return json(sources);
@@ -171,7 +172,7 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
     if (path.endsWith(`/financial-investigations/${investigation.id}/patterns`)) return json([]);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigation`) && request.method() === "GET") return retryFailed ? json({ ...aiResult, status: "FAILED", summary: "The AI response could not be validated.", supporting_evidence: [], verifier_passed: false }) : json({}, 404);
     if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/investigate`)) return json(aiResult);
-    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-DEMO-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "judge-controller", created_at: "2026-08-31T09:07:00Z" }); }
+    if (path.endsWith(`/financial-investigations/${investigation.id}/reconciliation-runs/${run.id}/results/${exception.id}/resolution-request`)) { reviewRequested = true; return json({ request_id: "REQ-SAMPLE-001", exception_id: exception.id, action_code: "REQUEST_PAYMENT_REVIEW", status: "PENDING_APPROVAL", financial_exposure: 18740, currency: "INR", required_capability: "CONTROLLER", required_approvals: 1, approvals_received: 0, requester_id: "reviewer-controller", created_at: "2026-08-31T09:07:00Z" }); }
     if (path.endsWith(`/results/${missingSettlement.id}/lifecycle`)) return json(missingLifecycle);
     if (path.endsWith(`/results/${exception.id}/lifecycle`)) return json(lifecycle);
     if (path.endsWith("/ai/provider-health")) return json({ status: "CONNECTED", provider: "stub", model: "test-fixture", configured: true, latency_ms: 0, error_category: null, retryable: null, detail: "TEST FIXTURE / NON-LIVE", overall_status: "AVAILABLE", active_provider: "stub", providers: [] });

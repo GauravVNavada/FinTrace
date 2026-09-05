@@ -1,4 +1,4 @@
-"""Acceptance test against the exported demo files, never hidden truth labels."""
+"""Acceptance test against the exported sample files, never hidden truth labels."""
 import calendar
 from pathlib import Path
 from uuid import uuid4
@@ -8,15 +8,14 @@ from httpx import ASGITransport, AsyncClient
 
 from app.main import app
 
-PACK = Path.home() / "Desktop" / "FinTrace_Synthetic_Data"
+PACK = Path(__file__).resolve().parents[3] / "systhantic data"
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("month", range(1, 9))
 async def test_month_upload_to_reconciliation(month):
     folder = PACK / f"{calendar.month_name[month]}_2026"
-    if not folder.exists():
-        pytest.skip("External synthetic export pack unavailable")
+    assert folder.exists(), "Repository synthetic export pack is required"
     def headers():
         return {"X-Organization-Id": f"ORG-MONTH-TEST-{month}", "X-Actor-Id": "acceptance",
                 "X-Actor-Role": "CONTROLLER", "Idempotency-Key": uuid4().hex}

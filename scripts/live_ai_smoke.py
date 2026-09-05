@@ -1,4 +1,4 @@
-"""Explicit live-provider smoke test for the FinTrace demo configuration.
+"""Explicit live-provider smoke test for the FinTrace sample configuration.
 
 This script is intentionally opt-in and never prints credentials or provider payloads.
 It performs one health probe per configured provider, one source-analysis request, and
@@ -24,7 +24,7 @@ from app.investigations.provider import (
     provider_health_report,
 )
 from app.investigations.service import InvestigationService
-from app.repositories.demo import demo_repository
+from app.repositories.sample import sample_repository
 from app.source_analysis.analyzer import analyze_content
 from app.source_analysis.provider import OfflineSourceAnalysisProvider
 
@@ -73,12 +73,12 @@ def main() -> int:
         "mode=deterministic_ingestion_prep"
     )
 
-    exception = demo_repository.get_exception("ORG-001", "EXC-1042")
+    exception = sample_repository.get_exception("ORG-001", "EXC-1042")
     if exception is None:
-        print("Flagship exception was not found in the deterministic demo repository.")
+        print("Flagship exception was not found in the deterministic sample repository.")
         return 1
-    lifecycle = demo_repository.lifecycle("ORG-001", exception.order_id)
-    investigator = InvestigationService(demo_repository, client)
+    lifecycle = sample_repository.lifecycle("ORG-001", exception.order_id)
+    investigator = InvestigationService(sample_repository, client)
     result = investigator.investigate_lifecycle("ORG-001", exception, lifecycle)
     print(
         f"investigation status={result.status} provider={result.actual_provider_used} "

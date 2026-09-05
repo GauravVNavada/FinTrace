@@ -1,4 +1,4 @@
--- P0 buildathon contract: complete input accounting, exposure categories,
+-- P0 release contract: complete input accounting, exposure categories,
 -- provider metadata, and first-class uploaded investigation traces.
 
 ALTER TABLE financial_reconciliation_runs
@@ -45,12 +45,12 @@ ALTER TABLE financial_exception_investigations
   ADD COLUMN IF NOT EXISTS verifier_passed BOOLEAN NOT NULL DEFAULT false,
   ADD COLUMN IF NOT EXISTS verifier_issues JSONB NOT NULL DEFAULT '[]'::jsonb;
 
--- Preserve old financial rows, but keep them out of the active demo state until rerun
+-- Preserve old financial rows, but keep them out of the active sample state until rerun
 -- through complete input accounting. This annotates history; it does not rewrite results.
 UPDATE financial_reconciliation_runs rr
    SET is_stale = true,
        stale_reason = COALESCE(rr.stale_reason,
-         'Legacy run predates complete input accounting; rerun this investigation before using it as demo state.')
+         'Legacy run predates complete input accounting; rerun this investigation before using it as sample state.')
  WHERE rr.status = 'COMPLETED'
    AND rr.records_expected = 0;
 

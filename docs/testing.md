@@ -119,7 +119,7 @@ $env:DATABASE_URL = "postgresql://fintrace:fintrace@127.0.0.1:55432/fintrace"
 
 The Python runtime is installed locally. API/simulator tests run with `apps/api/.venv`; Docker PostgreSQL migrations 001–010 and seed-42 data are the local persistence verification path.
 
-The current local API contract test run is `85 passed, 3 skipped` (2026-09-03). It includes demo-login role enforcement, required idempotency headers for every source mutation, request-hash replay/conflict behavior, independent-approver enforcement, organization-scoped reads, and the Track 4 workflow. The PostgreSQL path must apply migration 014 before release verification; the demo adapter is process-local and is not restart durability.
+The current local API contract test run is `85 passed, 3 skipped` (2026-09-03). It includes local-login role enforcement, required idempotency headers for every source mutation, request-hash replay/conflict behavior, independent-approver enforcement, organization-scoped reads, and the Track 4 workflow. The PostgreSQL path must apply migration 014 before release verification; the sample adapter is process-local and is not restart durability.
 
 ## Verified local release evidence
 
@@ -130,7 +130,7 @@ On 2026-08-31 the repository was verified with:
 - Web: lint clean, typecheck clean, UI architecture checks passed, and production build generated all 15 routes.
 - Browser: the mocked-AI golden path passes Controller login, flagship launch, investigation overview, reconciliation, exception investigation, human review, and audit; the clean production server also passes primary-route smoke checks.
 
-The browser walkthrough used the in-process demo backend; PostgreSQL persistence was separately exercised by the integration suite. The default AI provider was the explicitly labelled deterministic local provider, so no live external AI call is claimed.
+The browser walkthrough used the in-process sample backend; PostgreSQL persistence was separately exercised by the integration suite. The default AI provider was the explicitly labelled deterministic local provider, so no live external AI call is claimed.
 
 The persistence increment adds `fintrace-migrate`, `fintrace-seed`, the `/ready` dependency check, and a PostgreSQL repository path selected by `STORAGE_BACKEND=postgres`. The live database gate covers migration/seed, lifecycle and exception reads, financial-investigation source upload/delete, source-analysis/mapping persistence, investigation replay, evaluation replay, approval, and audit paths.
 

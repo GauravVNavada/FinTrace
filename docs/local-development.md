@@ -43,7 +43,7 @@ Open the web app at `http://localhost:3000`, `http://127.0.0.1:3000`, `http://lo
 - Keep client-exposed variables limited to public configuration.
 - Do not put service-role credentials in `apps/web`.
 - Use separate development/test databases.
-- Copy or edit `apps/api/.env` for local API settings. The default demo configuration is `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, `GEMINI_API_KEY`, `AI_FALLBACK_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY`. Provider-specific keys are preferred; numbered legacy slots remain supported. Only bounded transient failures can use the explicitly configured fallback, while authentication, unsupported-model, and malformed-output failures surface immediately. The test suite forces the deterministic stub so it never consumes live quota.
+- Copy or edit `apps/api/.env` for local API settings. The default sample configuration is `AI_PROVIDER=gemini`, `AI_MODEL=gemini-2.5-flash-lite`, `GEMINI_API_KEY`, `AI_FALLBACK_PROVIDER=groq`, `GROQ_MODEL=openai/gpt-oss-120b`, and `GROQ_API_KEY`. Provider-specific keys are preferred; numbered legacy slots remain supported. Only bounded transient failures can use the explicitly configured fallback, while authentication, unsupported-model, and malformed-output failures surface immediately. The test suite forces the deterministic stub so it never consumes live quota.
 - Gemini uses `https://generativelanguage.googleapis.com/v1beta/openai`; Groq uses `https://api.groq.com/openai/v1`. The model IDs are runtime configurable, but each configured model must support strict structured output and tool/function calling.
 
 ## Database phase
@@ -57,4 +57,4 @@ The repository includes `compose.yaml` for a local PostgreSQL 16 instance. The D
 - If Next build output is stale, stop the dev server and rerun the build; do not delete source files.
 - Do not run `pnpm dev` and `pnpm build` concurrently for `apps/web`; both use `.next`, and the production build can replace the dev stylesheet manifest. If the UI appears as unstyled HTML after a build, stop and restart the web dev server.
 - If API imports fail, activate the `apps/api/.venv` environment and install the editable package.
-- If `STORAGE_BACKEND=demo`, isolated local screens use deterministic demo data by design. For the full local path, run PostgreSQL and point `NEXT_PUBLIC_API_BASE_URL` at the API port.
+- If `STORAGE_BACKEND=sample`, isolated local screens use deterministic sample data by design. For the full local path, run PostgreSQL and point `NEXT_PUBLIC_API_BASE_URL` at the API port.

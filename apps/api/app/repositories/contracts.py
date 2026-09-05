@@ -5,7 +5,7 @@ from app.domain.schemas import DashboardSummary, ExceptionSummary
 
 
 class LifecycleRepository(Protocol):
-    """Repository contract shared by demo and PostgreSQL implementations."""
+    """Repository contract shared by sample and PostgreSQL implementations."""
 
     def dashboard_summary(self, organization_id: str) -> DashboardSummary: ...
 
@@ -40,7 +40,7 @@ class LifecycleRepository(Protocol):
 
 
 class WorkflowRepository(LifecycleRepository, Protocol):
-    """Durable workflow contract shared by the demo and PostgreSQL stores."""
+    """Durable workflow contract shared by the sample and PostgreSQL stores."""
 
     supports_workflow_persistence: bool
 
@@ -160,6 +160,8 @@ class WorkflowRepository(LifecycleRepository, Protocol):
     def latest_reconciliation_run(
         self, organization_id: str, investigation_id: str
     ) -> dict[str, Any] | None: ...
+
+    def latest_workspace_run(self, organization_id: str) -> dict[str, Any] | None: ...
 
     def list_reconciliation_results(
         self, organization_id: str, investigation_id: str, run_id: str, limit: int = 1000

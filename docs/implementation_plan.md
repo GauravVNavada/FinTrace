@@ -4,7 +4,7 @@
 
 ## Objective
 
-Evolve FinTrace from a seeded exception demo into a data-driven financial lifecycle investigation platform without replacing the existing deterministic reconciliation and evidence-verification foundations.
+Evolve FinTrace from a seeded exception sample into a data-driven financial lifecycle investigation platform without replacing the existing deterministic reconciliation and evidence-verification foundations.
 
 ## Delivery sequence
 
@@ -17,7 +17,7 @@ Evolve FinTrace from a seeded exception demo into a data-driven financial lifecy
 | 4 | Investigation-scoped lifecycle construction and reconciliation | Complete: persisted idempotent run/results, deterministic lifecycle construction, currency-aware metrics, and connected investigation-scoped overview controls are covered. The seeded compatibility queue remains separate by design. |
 | 5 | Real bounded AI exception investigation | Complete for the local/provider-adapter path: the configured provider selects only validated allowlisted tools, uploaded results produce validated evidence-backed responses or explicit `UNRESOLVED`, provider outages produce explicit `FAILED`/unavailable responses, outcomes persist, scoped retrieval and read-only traces are exposed, and unresolved uploaded results can enter the controlled review/approval route. The default provider is explicitly offline; live provider use is opt-in configuration. |
 | 6 | Derived patterns, exposure analytics, audit population, and AI evaluation | Complete for deterministic advisory patterns, exposure roll-up, populated audit, and measured synthetic evaluation. Uploaded-dataset scoring is not enabled without a reviewed label contract. |
-| 7 | Explicit demo mode and UX polish | Complete: fresh bounded synthetic generation, connected source-to-investigation routes, honest states, and browser walkthrough verification are implemented. |
+| 7 | Explicit sample mode and UX polish | Complete: fresh bounded synthetic generation, connected source-to-investigation routes, honest states, and browser walkthrough verification are implemented. |
 
 ## Per-sprint protocol
 

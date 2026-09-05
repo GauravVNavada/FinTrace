@@ -3,7 +3,7 @@ from httpx import ASGITransport, AsyncClient
 
 from app.evaluation.ai_service import AIEvaluationService
 from app.main import app
-from app.repositories.demo import DemoRepository
+from app.repositories.sample import SampleRepository
 
 
 @pytest.fixture
@@ -93,7 +93,7 @@ async def test_evaluation_report_is_idempotent_and_hidden_labels_stay_internal(
 
 
 def test_ai_evaluation_round_trip_returns_latest_stored_record() -> None:
-    service = AIEvaluationService(DemoRepository())
+    service = AIEvaluationService(SampleRepository())
 
     created = service.run("ORG-001", "sprint5-ai-evaluation-round-trip")
     latest = service.latest("ORG-001")

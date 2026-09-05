@@ -11,7 +11,7 @@ from app.controls.schemas import ActorContext
 from app.investigations.schemas import InvestigationResponse
 from app.investigations.tools import EvidenceToolRegistry
 from app.main import app
-from app.repositories.demo import demo_repository
+from app.repositories.sample import sample_repository
 
 
 @pytest.fixture
@@ -40,7 +40,7 @@ async def test_flagship_investigation_is_cited_and_idempotent(client: AsyncClien
     }
     assert len(payload["tool_calls"]) == 6
     assert {
-        event["event_type"] for event in demo_repository.audit_events("ORG-001", "EXC-1042")
+        event["event_type"] for event in sample_repository.audit_events("ORG-001", "EXC-1042")
     } >= {
         "INVESTIGATION_STARTED",
     }
@@ -95,7 +95,7 @@ async def test_provider_health_requires_authentication(client: AsyncClient) -> N
 
 
 def test_provider_failure_is_safe() -> None:
-    service = InvestigationService(demo_repository, UnavailableAIClient())
+    service = InvestigationService(sample_repository, UnavailableAIClient())
     result = service.start("ORG-001", "EXC-1042", "sprint3-provider-failure-001")
 
     assert result.status == "FAILED"
@@ -118,7 +118,7 @@ class InvalidProvider:
 
 def test_invalid_provider_result_becomes_unresolved() -> None:
     provider = InvalidProvider()
-    service = InvestigationService(demo_repository, provider)
+    service = InvestigationService(sample_repository, provider)
     result = service.start("ORG-001", "EXC-1042", "sprint3-invalid-provider-001")
 
     assert result.status == "UNRESOLVED"
@@ -151,7 +151,7 @@ def test_ambiguous_payment_relationship_is_unresolved_not_provider_failure() -> 
         inventory_movements=(),
         employee_actions=(),
     )
-    result = InvestigationService(demo_repository, StubAIClient()).investigate_lifecycle(
+    result = InvestigationService(sample_repository, StubAIClient()).investigate_lifecycle(
         "ORG-001", exception, lifecycle
     )
 
@@ -179,7 +179,7 @@ def test_evidence_tools_read_actual_status_and_accept_external_ids() -> None:
         employee_actions=(),
     )
 
-    result = EvidenceToolRegistry(demo_repository).invoke("get_payment", "org-1", lifecycle)
+    result = EvidenceToolRegistry(sample_repository).invoke("get_payment", "org-1", lifecycle)
 
     assert result.call.evidence[0].expected_value == "FAILED"
     assert result.call.evidence[0].fact == "Payment status is FAILED."
@@ -221,7 +221,7 @@ def test_early_final_provider_receives_candidate_evidence_and_cannot_pass_uncite
         status=ExceptionStatus.OPEN, financial_exposure=100, currency="INR",
         detected_at="2026-08-31T00:00:00+00:00",
     )
-    result = InvestigationService(demo_repository, EarlyFinal()).investigate_lifecycle("ORG-001", exception, lifecycle)
+    result = InvestigationService(sample_repository, EarlyFinal()).investigate_lifecycle("ORG-001", exception, lifecycle)
     assert result.status == "UNRESOLVED"
     assert result.verifier_passed is cite_candidates
     assert len(result.tool_calls) == 5
@@ -239,7 +239,7 @@ def test_empty_settlement_lookup_returns_verifiable_missing_evidence() -> None:
         employee_actions=(),
     )
 
-    result = EvidenceToolRegistry(demo_repository).invoke(
+    result = EvidenceToolRegistry(sample_repository).invoke(
         "get_settlements_for_payment", "org-1", lifecycle
     )
 
@@ -296,7 +296,7 @@ def test_inventory_tool_returns_sale_and_return_valuation_evidence():
         ),
         employee_actions=(),
     )
-    result = EvidenceToolRegistry(demo_repository).invoke(
+    result = EvidenceToolRegistry(sample_repository).invoke(
         "get_inventory_movements", "org-1", lifecycle
     )
     fields = {item.field for item in result.call.evidence}

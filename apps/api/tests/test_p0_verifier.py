@@ -6,7 +6,7 @@ from app.investigations.schemas import (
     InvestigationStatus,
 )
 from app.investigations.verifier import verify_candidate
-from app.repositories.demo import demo_repository
+from app.repositories.sample import sample_repository
 
 
 def _candidate(item: EvidenceItem) -> InvestigationCandidate:
@@ -21,7 +21,7 @@ def _candidate(item: EvidenceItem) -> InvestigationCandidate:
 
 
 def test_fact_verifier_rejects_existing_record_with_wrong_status() -> None:
-    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = sample_repository.lifecycle("ORG-001", "ORD-2041")
     result = verify_candidate(
         _candidate(
             EvidenceItem(
@@ -42,7 +42,7 @@ def test_fact_verifier_rejects_existing_record_with_wrong_status() -> None:
 
 
 def test_fact_verifier_rejects_nonexistent_record() -> None:
-    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = sample_repository.lifecycle("ORG-001", "ORD-2041")
     result = verify_candidate(
         _candidate(
             EvidenceItem(
@@ -61,7 +61,7 @@ def test_fact_verifier_rejects_nonexistent_record() -> None:
 
 
 def test_fact_verifier_accepts_backend_provenance_for_missing_settlement() -> None:
-    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = sample_repository.lifecycle("ORG-001", "ORD-2041")
     lifecycle = lifecycle.__class__(
         order=lifecycle.order,
         payments=lifecycle.payments,
@@ -91,7 +91,7 @@ def test_fact_verifier_accepts_backend_provenance_for_missing_settlement() -> No
 
 
 def test_fact_verifier_accepts_cited_inventory_value_mismatch():
-    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = sample_repository.lifecycle("ORG-001", "ORD-2041")
     lifecycle = lifecycle.__class__(
         order=lifecycle.order,
         payments=lifecycle.payments,
@@ -124,7 +124,7 @@ def test_fact_verifier_accepts_cited_inventory_value_mismatch():
 
 
 def test_fact_verifier_rejects_inventory_value_claim_without_sale_or_return_evidence():
-    lifecycle = demo_repository.lifecycle("ORG-001", "ORD-2041")
+    lifecycle = sample_repository.lifecycle("ORG-001", "ORD-2041")
     candidate = InvestigationCandidate(
         status=InvestigationStatus.SUPPORTED,
         root_cause_code="INVENTORY_VALUE_MISMATCH",

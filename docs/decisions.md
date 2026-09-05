@@ -22,7 +22,7 @@
 
 **Why:** These decisions need reproducibility, explainability, and safe failure. AI is reserved for interpreting heterogeneous evidence after a deterministic exception exists.
 
-## ADR-004 — Typed demo adapter before persistence
+## ADR-004 — Typed sample adapter before persistence
 
 **Decision:** The initial UI uses a typed in-memory adapter while the API and database are being established.
 
@@ -32,7 +32,7 @@
 
 **Context:** Investigations, evaluation reports, approval controls, and idempotency responses must survive API process restarts and remain organization-scoped.
 
-**Decision:** Extend the repository boundary with durable workflow operations. PostgreSQL stores validated response snapshots in JSONB alongside normalized foreign keys and ordered tool calls; the demo repository implements the same contract in process for unit/API tests. A request hash is checked before replaying any stored idempotent response.
+**Decision:** Extend the repository boundary with durable workflow operations. PostgreSQL stores validated response snapshots in JSONB alongside normalized foreign keys and ordered tool calls; the sample repository implements the same contract in process for unit/API tests. A request hash is checked before replaying any stored idempotent response.
 
 **Consequences:** Services remain independent of SQL and financial calculations remain deterministic. JSONB is a response projection, not a replacement for canonical financial tables. Cross-process approval safety is enforced with organization-scoped foreign keys, row locks, and unique actor/request constraints.
 
@@ -44,7 +44,7 @@
 
 **Decision:** Verify HS256 bearer claims in the API when present and require them when `AUTH_MODE=required`. Header context is available only in explicit development mode. Claims must include subject, organization, role, issuer, audience, issued-at, and expiry.
 
-**Consequences:** The local demo remains easy to run, while deployment has an explicit fail-closed switch. Production still needs managed key rotation, revocation, rate limiting, and an identity provider integration.
+**Consequences:** The local sample remains easy to run, while deployment has an explicit fail-closed switch. Production still needs managed key rotation, revocation, rate limiting, and an identity provider integration.
 
 **Why:** This keeps the product flow reviewable and the frontend contracts concrete without pretending persistence or provider integration exists. The adapter is replaceable through the API contract.
 
@@ -72,6 +72,6 @@ Components consume semantic Tailwind utilities backed by CSS variables. Literal 
 
 **Decision:** Add a top-level `FinancialInvestigation` resource and an explicit source-analysis/normalization pipeline around the existing canonical entities and deterministic reconciliation engine. Keep `ExceptionInvestigation` as the child workflow for one exception. Uploaded files, mappings, relationships, dataset versions, and runs are organization-scoped and persisted through the repository boundary.
 
-**Why:** The product must move from a pre-seeded exception demo to an evidence-driven workflow while retaining deterministic financial truth, existing safety controls, and the current reconciliation implementation.
+**Why:** The product must move from a pre-seeded exception sample to an evidence-driven workflow while retaining deterministic financial truth, existing safety controls, and the current reconciliation implementation.
 
-**Consequences:** New migrations and APIs are required. The demo adapter may support isolated tests, but production-looking metrics must come from an investigation dataset. Real AI is optional only when explicitly configured; unavailable providers must be visible rather than silently represented as real analysis.
+**Consequences:** New migrations and APIs are required. The sample adapter may support isolated tests, but production-looking metrics must come from an investigation dataset. Real AI is optional only when explicitly configured; unavailable providers must be visible rather than silently represented as real analysis.
