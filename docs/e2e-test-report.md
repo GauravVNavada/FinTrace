@@ -44,7 +44,7 @@ The generator validation confirmed exactly three intended anomalous lifecycles i
 | Month | Lifecycles | Records | Intended anomalies |
 |---|---:|---:|---:|
 | January | 72 | 440 | Inventory value, missing settlement, ambiguous payment |
-| February | 76 | 457 | Duplicate payment, restored without refund, missing invoice |
+| February | 76 | 458 | Duplicate payment, restored without refund, missing invoice + ambiguous payment |
 | March | 80 | 514 | Refund without return, quantity mismatch, ERP reversal missing |
 | April | 84 | 509 | Inventory calculation, settlement timing, ambiguous payment |
 | May | 72 | 457 | Partial refund, inventory value, duplicate payment |
@@ -56,7 +56,7 @@ All ordinary lifecycles remained healthy in the generator ground-truth audit, an
 
 ## Automated verification
 
-- API tests from `apps/api`: `110 passed, 3 skipped`.
+- API tests from `apps/api`: `117 passed, 3 skipped`.
 - Web typecheck: passed.
 - Web production build: passed; all application routes generated.
 - Web regression test: `1 passed`.
@@ -123,3 +123,23 @@ A live Groq investigation was also run against the inventory-restoration finding
 |---|---|
 | Corrected source intake | ![February corrected data](e2e-screenshots/50-feb-normalization-fixed-data.png) |
 | Corrected reconciliation | ![February corrected results](e2e-screenshots/51-feb-results-fixed.png) |
+
+## February needs-evidence benchmark correction
+
+Date: 2026-09-05
+
+The reported February result had two defects: the fixture used a deterministic `MISSING_INVOICE` exception as the only third anomaly, so the close had no intentional `NEEDS EVIDENCE` lifecycle, and the reconciliation rule emitted that missing-invoice finding with `₹0` exposure. The engine now carries the completed order amount as potential exposure. The reusable generator now co-locates an ambiguous payment association with the missing-invoice lifecycle, preserving both scenarios without increasing the three-anomalous-lifecycle limit. The same ambiguity coverage is now present in every generated month while retaining the broader anomaly catalog.
+
+The final generated February pack was uploaded into a new immutable close (`FIN-8A28642C60A7`) and verified through the browser:
+
+- `7 files · Everything understood`; all required mappings accepted automatically.
+- `458 / 458` records accounted for; `73` reconciled, `0` expected variance, `2` explained, and `1` needs evidence.
+- `FEB-ORD-0013` is shown as `NEEDS EVIDENCE` with ₹3,150 exposure, not ₹0.
+- The finding detail explains that two captured payments satisfy the available evidence, no unique reference safely identifies the valid payment, and additional settlement/reference evidence is required.
+- The live investigation response was marked `Verifier: Passed` and reported `groq · openai/gpt-oss-120b` in Technical details. It remained safely unresolved instead of guessing which payment was valid.
+
+| Area | Screenshot |
+|---|---|
+| Final source intake | ![Final February source intake](e2e-screenshots/57-feb-final-data-understood.png) |
+| Final results | ![Final February needs evidence results](e2e-screenshots/56-feb-final-needs-evidence-results.png) |
+| Final Groq investigation | ![Final February Groq investigation](e2e-screenshots/55-feb-final-groq-ai-detail.png) |

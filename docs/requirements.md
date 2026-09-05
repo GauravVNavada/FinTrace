@@ -130,6 +130,7 @@ Current evidence for UI-001 through UI-006 is maintained in [`ui_component_inven
 
 9. Monthly synthetic packs contain one to three distinct anomalous lifecycles, including cost-basis inventory mismatches that are detectable from uploaded source records.
 10. Inventory valuation uses integer minor units for `unit_cost_minor` and `inventory_value_minor`; absent valuation columns remain explicit rather than being guessed.
+11. A completed order without an ERP invoice retains the order amount as deterministic potential exposure; it must never render as a zero-value finding.
 11. Inventory return quantity/value mismatches and inventory restoration without refund produce distinct deterministic findings and bounded review actions.
 
 ## 6. Traceability

@@ -165,7 +165,12 @@ def reconcile_lifecycle(lifecycle: CanonicalLifecycle) -> ReconciliationResult:
 
     if not lifecycle.invoices:
         findings.append(
-            RuleFinding("ERP_INVOICE_MISSING", "Completed order has no ERP invoice.", 0)
+            RuleFinding(
+                "ERP_INVOICE_MISSING",
+                "Completed order has no ERP invoice.",
+                amount_minor,
+                "POTENTIAL_EXPOSURE",
+            )
         )
     elif int(lifecycle.invoices[0]["gross_minor"]) != amount_minor:
         findings.append(

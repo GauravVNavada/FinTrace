@@ -162,7 +162,7 @@ When persistence is introduced, create an explicit migration for each schema cha
 ### `GET /api/v1/exceptions/{id}`
 
 **Auth:** `exception.read`  
-**Response:** exception metadata, exposure, and deterministic rule findings. The web detail view then retrieves the canonical lifecycle, derived graph, and resource-scoped audit events through their separate APIs; it does not use a client-side detail fixture.
+**Response:** exception metadata, exposure, and deterministic rule findings. Missing ERP invoice findings use the completed order amount as potential exposure rather than zero. The web detail view then retrieves the canonical lifecycle, derived graph, and resource-scoped audit events through their separate APIs; it does not use a client-side detail fixture.
 **Authorization:** object-level organization ownership is checked before lookup result is returned. A cross-tenant ID returns the same not-found shape as an unknown ID.
 
 ### `GET /api/v1/lifecycles/{order_id}`

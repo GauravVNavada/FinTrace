@@ -67,6 +67,37 @@ def test_missing_uploaded_gateway_fee_is_a_controlled_result() -> None:
     assert result.exception_type == "PAYMENT_FEE_MISSING"
 
 
+def test_missing_erp_invoice_carries_order_exposure() -> None:
+    lifecycle = CanonicalLifecycle(
+        order={"order_id": "ORD-MISSING-INVOICE", "amount_minor": 12500},
+        payments=(
+            {
+                "payment_id": "PAY-MISSING-INVOICE",
+                "amount_minor": 12500,
+                "gateway_fee_minor": 225,
+                "captured_at": "2026-08-01T00:00:00+00:00",
+            },
+        ),
+        settlements=(
+            {
+                "settlement_id": "SET-MISSING-INVOICE",
+                "fees_minor": 225,
+                "settled_at": "2026-08-02T00:00:00+00:00",
+            },
+        ),
+        invoices=(),
+        refunds=(),
+        inventory_movements=(),
+        employee_actions=(),
+    )
+
+    result = reconcile_lifecycle(lifecycle)
+
+    assert result.exception_type == "ERP_INVOICE_MISSING"
+    assert result.exposure_minor == 12500
+    assert result.findings[0].exposure_minor == 12500
+
+
 def test_reconcile_lifecycle_accepts_timezone_aware_datetime_timestamps() -> None:
     lifecycle = CanonicalLifecycle(
         order={"order_id": "ORD-DATETIME", "amount_minor": 10000},
