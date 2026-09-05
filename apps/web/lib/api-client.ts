@@ -23,6 +23,13 @@ const baseHeaders = {
   "X-Organization-Id": organizationId,
 };
 
+function handleExpiredSession() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem("fintrace.access_token");
+  window.localStorage.removeItem("fintrace.identity");
+  window.location.replace("/login");
+}
+
 export type ClientIdentity = { actor_id: string; role: string; display_name: string; organization_id: string };
 
 export function getDefaultClientIdentity(): ClientIdentity {
@@ -57,6 +64,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     response = await fetch(`${apiBaseUrl}${path}`, { ...init, headers, cache: "no-store" });
   } catch {
     throw new ApiClientError(0, "The FinTrace API could not be reached. Check that the API is running and try again.", "NETWORK_ERROR");
+  }
+  if (response.status === 401 && typeof window !== "undefined" && window.localStorage.getItem("fintrace.access_token")) {
+    handleExpiredSession();
   }
   if (!response.ok) {
     const fallback = `API request failed with status ${response.status}`;

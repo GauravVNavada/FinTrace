@@ -1,6 +1,10 @@
 # FinTrace Requirements Specification
 
+The web client must clear its stored session and redirect to `/login` when an authenticated API request receives HTTP 401, including access-token expiry. The local controller demo identity is displayed as “Gaurav.”
+
 ## Investigation evidence improvement (2026-09-05)
+
+The investigation panel displays the existing deterministic evidence_score as “Evidence confidence / 100,” explicitly not an AI correctness probability. Ambiguous cases compare cited payment records and settlement links, format money using close currency and timestamps in UTC, and group source fields by record in expandable evidence details. Full provider narrative and lookup trace remain available. No financial rules or score calculations change.
 
 Provider recovery: malformed final candidates receive one bounded schema-correction turn; Groq JSON-generation failures receive one compact regeneration. Ambiguous synthesis uses JSON output after mandatory retrieval with up to 12 citations and a 5,000-token response budget. Formatting failures are distinguished from outages. Any FAILED persisted assessment can be retried with a new idempotency key, preserving its identity; same-key replays remain unchanged. The UI exposes retry even after evidence lookups completed.
 

@@ -114,7 +114,11 @@ const aiResult = {
   status: "UNRESOLVED",
   root_cause_code: null,
   summary: "Two candidate payments satisfy the available evidence; additional transaction reference or settlement evidence is required to resolve the ambiguous association.",
-  supporting_evidence: [{ source: "payment", record_id: "PAY-20005-A", fact: "Payment status is CAPTURED.", field: "status", operator: "equals", expected_value: "CAPTURED", verified: true }],
+  supporting_evidence: lifecycle.payments.flatMap(payment => [
+    { source: "payment", record_id: payment.payment_id, fact: "Payment status is CAPTURED.", field: "status", operator: "equals", expected_value: payment.status, verified: true },
+    { source: "payment", record_id: payment.payment_id, fact: "Payment amount.", field: "amount_minor", operator: "equals", expected_value: payment.amount_minor, verified: true },
+    { source: "payment", record_id: payment.payment_id, fact: "Capture time.", field: "captured_at", operator: "equals", expected_value: payment.captured_at, verified: true },
+  ]),
   contradictory_evidence: [],
   missing_evidence: ["Transaction reference", "Settlement record"],
   recommended_action_code: "REQUEST_PAYMENT_REVIEW",
@@ -202,7 +206,11 @@ test(`Controller can complete the canonical close golden path (retry=${retryFail
   await page.getByRole("button", { name: retryFailed ? "Retry AI investigation" : "Investigate evidence" }).click();
   await expect(page.getByRole("heading", { name: "Assessment · needs evidence" })).toBeVisible();
   await expect(page.getByText("Cited fields passed verification. The cause remains unresolved.")).toBeVisible();
-  await expect(page.getByText("Payment status is CAPTURED.")).toBeVisible();
+  await expect(page.getByText("Evidence confidence", { exact: true })).toBeVisible();
+  await expect(page.getByText("Partial evidence", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Compare the payments" })).toBeVisible();
+  await page.getByText("Evidence cited in this assessment · 2 records", { exact: true }).click();
+  await expect(page.getByText("CAPTURED", { exact: true }).last()).toBeVisible();
   await expect(page.getByText("Automated test fixture · not live AI")).toBeVisible();
   await expect(page.getByRole("heading", { name: "What would resolve this" })).toBeVisible();
   await page.getByRole("button", { name: "Request transaction reference" }).click();

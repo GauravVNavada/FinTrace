@@ -29,7 +29,7 @@ class DemoLoginResponse(BaseModel):
 _IDENTITIES = {
     Role.ANALYST: ("demo-analyst", "Anika Rao"),
     Role.FINANCE_MANAGER: ("demo-finance-manager", "Rohan Shah"),
-    Role.CONTROLLER: ("demo-controller", "Priya Menon"),
+    Role.CONTROLLER: ("demo-controller", "Gaurav"),
 }
 
 
